@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Oregon Big Game Draw Planner • Buck Deer</title>
+  <!-- SheetJS library so we can read the .xlsx file directly -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; }
+    h1 { color: #1a3c34; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    .planner { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 30px; }
+    table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+    th { background: #1a3c34; color: white; cursor: pointer; }
+    tr:hover { background: #f1f8f5; }
+    input, button, select { padding: 10px; margin: 5px; font-size: 16px; }
+    button { background: #1a3c34; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #2a5c4c; }
+    .loading { color: #1a3c34; font-style: italic; }
+    .disclaimer { background: #fff3cd; padding: 15px; border-radius: 6px; font-size: 14px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🇺🇸 Oregon Big Game Draw Planner</h1>
+    <p style="color:#555;">Buck Deer (100 series) — Loads the official ODFW Excel directly</p>
+
+    <div class="planner">
+      <h2>My Draw Plan</h2>
+      <label>Preference Points I have: 
+        <input type="number" id="myPoints" value="4" min="0" style="width:80px;">
+      </label>
+      <button onclick="generatePlan()">Show My Best Hunt Choices</button>
+      <div id="planResults" class="results"></div>
+    </div>
+
+    <div id="status" class="loading">Loading ODFW Excel file… (this only happens once per year)</div>
+
+    <h2>All Buck Deer Hunts</h2>
+    <input type="text" id="searchBox" placeholder="Search by hunt number or name..." onkeyup="filterTable()" style="width:300px;">
+    <table id="huntTable">
+      <thead>
+        <tr>
+          <th onclick="sortTable(0)">Hunt #</th>
+          <th onclick="sortTable(1)">Hunt Name</th>
+          <th onclick="sortTable(2)">Tags</th>
+          <th onclick="sortTable(3)">Points Needed (last year)</th>
+          <th onclick="sortTable(4)">Total Applicants</th>
+          <th>Est. Odds with your points</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="disclaimer">
+      <strong>DISCLAIMER:</strong> Unofficial fan-made tool. Data is pulled directly from ODFW’s public Excel files. 
+      Always verify at <a href="https://myodfw.com" target="_blank">myodfw.com</a>. Points can change yearly.
+    </div>
+
+    <p style="font-size:12px;color:#777;">Upload new Excel to data/buck_deer_points.xlsx each year</p>
+  </div>
+
+  <script>
+    let allHunts = [];
+
+    async function loadExcelData() {
+      const status = document.getElementById('status');
+      try {
+        const response = await fetch('data/buck_deer_points.xlsx');
+        if (!response.ok) throw new Error('Excel file not found');
+        
+        const arrayBuffer = await response.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 }); // array of rows
+
+        const headers = jsonData[0];
+        console.log('%c✅ Excel headers found:', 'color:green;font-weight:bold', headers);
+        // ↑ Open browser console (F12) to see exact column names if you need to tweak below
+
+        // === EDIT THESE IF ODFW CHANGES COLUMN NAMES ===
+        const huntCol     = headers.indexOf('Hunt No.') !== -1 ? headers.indexOf('Hunt No.') : headers.indexOf('Hunt');
+        const nameCol     = headers.indexOf('Hunt Name') !== -1 ? headers.indexOf('Hunt Name') : headers.indexOf('Name');
+        const tagsCol     = headers.indexOf('Tags');
+        const applicantsCol = headers.indexOf('Applicants') !== -1 ? headers.indexOf('Applicants') : headers.indexOf('1st Choice Applicants');
+        const pointsCol   = headers.indexOf('Points Needed') !== -1 ? headers.indexOf('Points Needed') 
+                          : headers.indexOf('Min Points') !== -1 ? headers.indexOf('Min Points')
+                          : headers.indexOf('Points Required') !== -1 ? headers.indexOf('Points Required') : -1;
+
+        allHunts = jsonData.slice(1).map(row => ({
+          hunt: String(row[huntCol] || ''),
+          name: String(row[nameCol] || ''),
+          tags: Number(row[tagsCol]) || 0,
+          applicants: Number(row[applicantsCol]) || 0,
+          pointsNeeded: pointsCol >= 0 ? Number(row[pointsCol]) || 0 : 0
+        })).filter(h => h.hunt && h.hunt !== ''); // remove empty rows
+
+        status.textContent = `Loaded ${allHunts.length} hunts from ODFW Excel`;
+        status.style.color = 'green';
+        
+        renderTable(allHunts);
+      } catch (err) {
+        status.innerHTML = `❌ Could not load Excel.<br>Make sure the file is at <strong>data/buck_deer_points.xlsx</strong>`;
+        console.error(err);
+      }
+    }
+
+    function renderTable(data) {
+      const tbody = document.querySelector('#huntTable tbody');
+      tbody.innerHTML = '';
+      data.forEach(h => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${h.hunt}</td>
+          <td>${h.name}</td>
+          <td>${h.tags}</td>
+          <td><strong>${h.pointsNeeded}</strong></td>
+          <td>${h.applicants}</td>
+          <td>${h.pointsNeeded <= 4 ? '✅ Very Good' : h.pointsNeeded <= 8 ? '👍 Good' : 'Stretch'}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    function filterTable() {
+      const term = document.getElementById('searchBox').value.toLowerCase();
+      const filtered = allHunts.filter(h => 
+        h.hunt.toLowerCase().includes(term) || h.name.toLowerCase().includes(term)
+      );
+      renderTable(filtered);
+    }
+
+    function generatePlan() {
+      const points = parseInt(document.getElementById('myPoints').value) || 0;
+      const resultsDiv = document.getElementById('planResults');
+      
+      const possible = allHunts
+        .filter(h => h.pointsNeeded <= points + 3)
+        .sort((a, b) => a.pointsNeeded - b.pointsNeeded || b.tags - a.tags)
+        .slice(0, 5);
+
+      let html = `<h3>With <strong>${points}</strong> points, here are your best choices:</h3><ol>`;
+      if (possible.length === 0) {
+        html += `<li>No low-point hunts right now — consider general season or more points.</li>`;
+      } else {
+        possible.forEach(h => {
+          html += `<li><strong>${h.hunt} ${h.name}</strong> — ${h.tags} tags, needed ${h.pointsNeeded} pts last year → <span style="color:green;">High chance</span></li>`;
+        });
+      }
+      html += `</ol><p><em>Tip: Put your top 5 in order on the ODFW application.</em></p>`;
+      resultsDiv.innerHTML = html;
+    }
+
+    function sortTable(n) {
+      allHunts.sort((a, b) => {
+        const keys = Object.keys(a);
+        const valA = a[keys[n]];
+        const valB = b[keys[n]];
+        return valA < valB ? -1 : valA > valB ? 1 : 0;
+      });
+      renderTable(allHunts);
+    }
+
+    // Start everything
+    window.onload = loadExcelData;
+  </script>
+</body>
+</html>
