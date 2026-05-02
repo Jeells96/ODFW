@@ -1,170 +1,616 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Oregon Big Game Draw Planner • Buck Deer</title>
-  <!-- SheetJS library so we can read the .xlsx file directly -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; }
-    h1 { color: #1a3c34; }
-    .container { max-width: 1100px; margin: 0 auto; }
-    .planner { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 30px; }
-    table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-    th { background: #1a3c34; color: white; cursor: pointer; }
-    tr:hover { background: #f1f8f5; }
-    input, button, select { padding: 10px; margin: 5px; font-size: 16px; }
-    button { background: #1a3c34; color: white; border: none; border-radius: 4px; cursor: pointer; }
-    button:hover { background: #2a5c4c; }
-    .loading { color: #1a3c34; font-style: italic; }
-    .disclaimer { background: #fff3cd; padding: 15px; border-radius: 6px; font-size: 14px; margin: 20px 0; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ODFW Buck Deer Point Summary</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1a0e;
+    --bg2: #162114;
+    --bg3: #1e2d1c;
+    --panel: #1a2718;
+    --border: #2e4a29;
+    --accent: #6db33f;
+    --accent2: #4a8c20;
+    --orange: #d97c2b;
+    --red: #c0392b;
+    --text: #d4e8cc;
+    --text2: #8fad80;
+    --text3: #5a7a52;
+    --white: #f0f5ee;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Source Sans 3', sans-serif; min-height: 100vh; }
+
+/* NAV */
+nav {
+background: var(–bg2);
+border-bottom: 2px solid var(–border);
+display: flex; align-items: center; justify-content: space-between;
+padding: 0 24px; height: 56px; position: sticky; top: 0; z-index: 100;
+}
+.nav-logo { font-family: ‘Oswald’, sans-serif; font-size: 20px; font-weight: 700; color: var(–accent); letter-spacing: 2px; }
+.nav-logo span { color: var(–text2); font-weight: 400; font-size: 14px; margin-left: 8px; }
+.nav-tabs { display: flex; gap: 4px; }
+.nav-tab {
+background: none; border: none; color: var(–text2); font-family: ‘Oswald’, sans-serif;
+font-size: 14px; letter-spacing: 1px; padding: 8px 16px; cursor: pointer;
+border-bottom: 3px solid transparent; transition: all .2s;
+}
+.nav-tab:hover { color: var(–text); }
+.nav-tab.active { color: var(–accent); border-bottom-color: var(–accent); }
+
+/* VIEWS */
+.view { display: none; padding: 24px; max-width: 1400px; margin: 0 auto; }
+.view.active { display: block; }
+
+/* DASHBOARD VIEW */
+.dash-header { margin-bottom: 24px; }
+.dash-header h1 { font-family: ‘Oswald’, sans-serif; font-size: 28px; font-weight: 600; color: var(–white); }
+.dash-header p { color: var(–text2); margin-top: 4px; font-size: 14px; }
+
+/* MY POINTS INPUT */
+.points-bar {
+background: var(–panel); border: 1px solid var(–border); border-radius: 8px;
+padding: 16px 24px; margin-bottom: 24px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+}
+.points-bar label { font-family: ‘Oswald’, sans-serif; font-size: 14px; color: var(–text2); letter-spacing: 1px; }
+.points-bar input[type=number] {
+background: var(–bg3); border: 1px solid var(–border); color: var(–white);
+padding: 8px 14px; border-radius: 6px; font-size: 18px; font-family: ‘Oswald’, sans-serif;
+width: 90px; outline: none;
+}
+.points-bar input[type=number]:focus { border-color: var(–accent); }
+.points-badge { background: var(–accent2); color: var(–white); padding: 6px 14px; border-radius: 20px; font-family: ‘Oswald’, sans-serif; font-size: 13px; }
+
+/* FILTER BAR */
+.filter-bar {
+display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;
+}
+.filter-bar input, .filter-bar select {
+background: var(–panel); border: 1px solid var(–border); color: var(–text);
+padding: 8px 14px; border-radius: 6px; font-size: 14px; outline: none; font-family: ‘Source Sans 3’, sans-serif;
+}
+.filter-bar input { width: 240px; }
+.filter-bar input:focus, .filter-bar select:focus { border-color: var(–accent); }
+.filter-bar label { color: var(–text2); font-size: 13px; }
+
+/* HUNT CARDS GRID */
+.hunt-grid {
+display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;
+}
+.hunt-card {
+background: var(–panel); border: 1px solid var(–border); border-radius: 10px;
+padding: 18px; cursor: pointer; transition: all .2s; position: relative; overflow: hidden;
+}
+.hunt-card:hover { border-color: var(–accent); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+.hunt-card::before { content: ‘’; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(–border); transition: background .2s; }
+.hunt-card:hover::before { background: var(–accent); }
+.hunt-card.drawable::before { background: var(–accent); }
+.hunt-card.close-drawable::before { background: var(–orange); }
+.hunt-card.not-drawable::before { background: var(–red); }
+
+.card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+.card-num { font-family: ‘Oswald’, sans-serif; font-size: 12px; color: var(–text3); letter-spacing: 1px; }
+.card-name { font-family: ‘Oswald’, sans-serif; font-size: 17px; color: var(–white); margin-top: 2px; }
+.draw-badge {
+font-size: 11px; font-family: ‘Oswald’, sans-serif; letter-spacing: 1px;
+padding: 3px 10px; border-radius: 12px; white-space: nowrap;
+}
+.draw-badge.yes { background: rgba(109,179,63,.2); color: var(–accent); border: 1px solid rgba(109,179,63,.3); }
+.draw-badge.close { background: rgba(217,124,43,.2); color: var(–orange); border: 1px solid rgba(217,124,43,.3); }
+.draw-badge.no { background: rgba(192,57,43,.15); color: #e74c3c; border: 1px solid rgba(192,57,43,.3); }
+.draw-badge.unknown { background: rgba(100,100,100,.2); color: var(–text2); border: 1px solid rgba(100,100,100,.3); }
+
+.card-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 12px; }
+.stat { text-align: center; }
+.stat-val { font-family: ‘Oswald’, sans-serif; font-size: 20px; color: var(–white); }
+.stat-val.green { color: var(–accent); }
+.stat-val.orange { color: var(–orange); }
+.stat-val.red { color: var(–red); }
+.stat-label { font-size: 10px; color: var(–text3); letter-spacing: .5px; margin-top: 2px; text-transform: uppercase; }
+
+/* DETAIL VIEW */
+.detail-back { background: none; border: none; color: var(–text2); cursor: pointer; font-size: 14px; margin-bottom: 20px; display: flex; align-items: center; gap: 6px; padding: 0; }
+.detail-back:hover { color: var(–accent); }
+.detail-header { margin-bottom: 24px; }
+.detail-header .hunt-num { font-size: 12px; color: var(–text3); font-family: ‘Oswald’, sans-serif; letter-spacing: 2px; }
+.detail-header h2 { font-family: ‘Oswald’, sans-serif; font-size: 36px; color: var(–white); margin-top: 4px; }
+
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+@media (max-width: 700px) { .detail-grid { grid-template-columns: 1fr; } }
+.detail-card { background: var(–panel); border: 1px solid var(–border); border-radius: 10px; padding: 20px; }
+.detail-card h3 { font-family: ‘Oswald’, sans-serif; font-size: 14px; color: var(–text2); letter-spacing: 1px; margin-bottom: 16px; }
+.big-stat { font-family: ‘Oswald’, sans-serif; font-size: 48px; color: var(–accent); }
+.big-stat-label { color: var(–text2); font-size: 13px; margin-top: 4px; }
+
+.stats-row { display: flex; gap: 20px; flex-wrap: wrap; }
+.mini-stat { flex: 1; min-width: 80px; }
+.mini-stat .val { font-family: ‘Oswald’, sans-serif; font-size: 26px; color: var(–white); }
+.mini-stat .lbl { font-size: 11px; color: var(–text3); text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+
+/* AI Recommendation box */
+.rec-box { background: var(–panel); border: 1px solid var(–border); border-radius: 10px; padding: 20px; margin-bottom: 24px; }
+.rec-box h3 { font-family: ‘Oswald’, sans-serif; font-size: 14px; color: var(–text2); letter-spacing: 1px; margin-bottom: 12px; }
+.rec-content { display: flex; gap: 16px; align-items: flex-start; }
+.rec-icon { font-size: 32px; flex-shrink: 0; }
+.rec-text p { color: var(–text); font-size: 15px; line-height: 1.6; }
+.rec-text strong { color: var(–accent); }
+
+/* Chart area */
+.chart-box { background: var(–panel); border: 1px solid var(–border); border-radius: 10px; padding: 20px; margin-bottom: 24px; }
+.chart-box h3 { font-family: ‘Oswald’, sans-serif; font-size: 14px; color: var(–text2); letter-spacing: 1px; margin-bottom: 16px; }
+.chart-wrap { position: relative; height: 280px; }
+
+/* Point table */
+.pt-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.pt-table th { font-family: ‘Oswald’, sans-serif; font-size: 11px; letter-spacing: 1px; color: var(–text3); text-align: left; padding: 6px 12px; border-bottom: 1px solid var(–border); }
+.pt-table td { padding: 6px 12px; border-bottom: 1px solid rgba(46,74,41,.3); }
+.pt-table tr:hover td { background: rgba(109,179,63,.05); }
+.pt-table tr.my-row td { background: rgba(109,179,63,.12); }
+.pt-table tr.my-row td:first-child { border-left: 3px solid var(–accent); }
+.odds-bar-wrap { width: 80px; height: 8px; background: var(–bg3); border-radius: 4px; display: inline-block; vertical-align: middle; }
+.odds-bar-fill { height: 100%; border-radius: 4px; background: var(–accent); }
+
+/* SETTINGS VIEW */
+.settings-panel { background: var(–panel); border: 1px solid var(–border); border-radius: 10px; padding: 28px; max-width: 640px; }
+.settings-panel h2 { font-family: ‘Oswald’, sans-serif; font-size: 22px; color: var(–white); margin-bottom: 6px; }
+.settings-panel p { color: var(–text2); font-size: 14px; margin-bottom: 24px; line-height: 1.6; }
+.settings-section { margin-bottom: 28px; }
+.settings-section h3 { font-family: ‘Oswald’, sans-serif; font-size: 13px; color: var(–text3); letter-spacing: 1.5px; margin-bottom: 14px; padding-bottom: 6px; border-bottom: 1px solid var(–border); }
+.odfw-btn {
+display: inline-flex; align-items: center; gap: 10px;
+background: var(–accent2); color: var(–white); border: none;
+font-family: ‘Oswald’, sans-serif; font-size: 15px; letter-spacing: 1px;
+padding: 12px 22px; border-radius: 8px; cursor: pointer; text-decoration: none;
+transition: background .2s;
+}
+.odfw-btn:hover { background: var(–accent); }
+.info-block { background: var(–bg3); border: 1px solid var(–border); border-radius: 8px; padding: 14px 18px; margin-top: 14px; }
+.info-block p { color: var(–text2); font-size: 13px; line-height: 1.7; margin: 0; }
+.info-block strong { color: var(–text); }
+
+.upload-area {
+border: 2px dashed var(–border); border-radius: 8px; padding: 28px;
+text-align: center; cursor: pointer; transition: border-color .2s; margin-top: 4px;
+}
+.upload-area:hover, .upload-area.drag { border-color: var(–accent); }
+.upload-area .icon { font-size: 36px; margin-bottom: 8px; }
+.upload-area p { color: var(–text2); font-size: 14px; }
+.upload-area small { color: var(–text3); font-size: 12px; }
+#file-input { display: none; }
+.upload-status { margin-top: 12px; padding: 10px 14px; border-radius: 6px; font-size: 14px; }
+.upload-status.success { background: rgba(109,179,63,.15); color: var(–accent); border: 1px solid rgba(109,179,63,.3); }
+.upload-status.error { background: rgba(192,57,43,.15); color: #e74c3c; border: 1px solid rgba(192,57,43,.3); }
+
+.year-select-row { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; }
+.year-select-row label { color: var(–text2); font-size: 14px; }
+.year-select-row select { background: var(–bg3); border: 1px solid var(–border); color: var(–white); padding: 8px 12px; border-radius: 6px; font-size: 14px; outline: none; }
+
+/* EMPTY state */
+.empty { text-align: center; padding: 60px 20px; color: var(–text3); }
+.empty .icon { font-size: 48px; margin-bottom: 12px; }
+.empty p { font-size: 16px; }
+
+/* Responsive */
+@media (max-width: 600px) {
+.hunt-grid { grid-template-columns: 1fr; }
+.card-stats { grid-template-columns: 1fr 1fr 1fr; }
+nav { padding: 0 12px; }
+.view { padding: 16px; }
+}
+</style>
+
 </head>
 <body>
-  <div class="container">
-    <h1>🇺🇸 Oregon Big Game Draw Planner</h1>
-    <p style="color:#555;">Buck Deer (100 series) — Loads the official ODFW Excel directly</p>
 
-    <div class="planner">
-      <h2>My Draw Plan</h2>
-      <label>Preference Points I have: 
-        <input type="number" id="myPoints" value="4" min="0" style="width:80px;">
-      </label>
-      <button onclick="generatePlan()">Show My Best Hunt Choices</button>
-      <div id="planResults" class="results"></div>
-    </div>
+<nav>
+  <div class="nav-logo">ODFW <span>BUCK DEER DRAW ANALYZER</span></div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showView('dashboard')">📊 Dashboard</button>
+    <button class="nav-tab" onclick="showView('settings')">⚙️ Settings</button>
+  </div>
+</nav>
 
-    <div id="status" class="loading">Loading ODFW Excel file… (this only happens once per year)</div>
+<!-- DASHBOARD VIEW -->
 
-    <h2>All Buck Deer Hunts</h2>
-    <input type="text" id="searchBox" placeholder="Search by hunt number or name..." onkeyup="filterTable()" style="width:300px;">
-    <table id="huntTable">
-      <thead>
-        <tr>
-          <th onclick="sortTable(0)">Hunt #</th>
-          <th onclick="sortTable(1)">Hunt Name</th>
-          <th onclick="sortTable(2)">Tags</th>
-          <th onclick="sortTable(3)">Points Needed (last year)</th>
-          <th onclick="sortTable(4)">Total Applicants</th>
-          <th>Est. Odds with your points</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-
-    <div class="disclaimer">
-      <strong>DISCLAIMER:</strong> Unofficial fan-made tool. Data is pulled directly from ODFW’s public Excel files. 
-      Always verify at <a href="https://myodfw.com" target="_blank">myodfw.com</a>. Points can change yearly.
-    </div>
-
-    <p style="font-size:12px;color:#777;">Upload new Excel to data/buck_deer_points.xlsx each year</p>
+<div id="view-dashboard" class="view active">
+  <div class="dash-header">
+    <h1>2025 Buck Deer Draw Summary</h1>
+    <p>Point analysis for 155 hunts across Oregon · 100 Series (Deer)</p>
   </div>
 
-  <script>
-    let allHunts = [];
+  <div class="points-bar">
+    <div>
+      <label>MY PREFERENCE POINTS</label>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:6px;">
+        <input type="number" id="my-points" value="5" min="0" max="30" onchange="updateAll()">
+        <span class="points-badge" id="drawable-count">— hunts drawable</span>
+      </div>
+    </div>
+    <div style="flex:1"></div>
+    <div style="color:var(--text3);font-size:13px;line-height:1.7;">
+      🟢 Points ≥ min draw &nbsp; 🟠 Within 2 pts &nbsp; 🔴 Need more points
+    </div>
+  </div>
 
-    async function loadExcelData() {
-      const status = document.getElementById('status');
-      try {
-        const response = await fetch('data/buck_deer_points.xlsx');
-        if (!response.ok) throw new Error('Excel file not found');
-        
-        const arrayBuffer = await response.arrayBuffer();
-        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 }); // array of rows
+  <div class="filter-bar">
+    <input type="text" id="search-box" placeholder="🔍 Search hunt name or number..." oninput="renderCards()">
+    <div>
+      <label>Sort by: </label>
+      <select id="sort-sel" onchange="renderCards()">
+        <option value="draw_odds_desc">Draw Odds (High→Low)</option>
+        <option value="draw_odds_asc">Draw Odds (Low→High)</option>
+        <option value="min_pts_asc">Min Points (Low→High)</option>
+        <option value="min_pts_desc">Min Points (High→Low)</option>
+        <option value="applicants_desc">Applicants (Most)</option>
+        <option value="name_asc">Name A→Z</option>
+      </select>
+    </div>
+    <div>
+      <select id="filter-draw" onchange="renderCards()">
+        <option value="all">All Hunts</option>
+        <option value="drawable">Can Draw Now</option>
+        <option value="close">Close (within 2 pts)</option>
+        <option value="no">Need More Points</option>
+      </select>
+    </div>
+  </div>
 
-        const headers = jsonData[0];
-        console.log('%c✅ Excel headers found:', 'color:green;font-weight:bold', headers);
-        // ↑ Open browser console (F12) to see exact column names if you need to tweak below
+  <div id="hunt-grid" class="hunt-grid"></div>
+</div>
 
-        // === EDIT THESE IF ODFW CHANGES COLUMN NAMES ===
-        const huntCol     = headers.indexOf('Hunt No.') !== -1 ? headers.indexOf('Hunt No.') : headers.indexOf('Hunt');
-        const nameCol     = headers.indexOf('Hunt Name') !== -1 ? headers.indexOf('Hunt Name') : headers.indexOf('Name');
-        const tagsCol     = headers.indexOf('Tags');
-        const applicantsCol = headers.indexOf('Applicants') !== -1 ? headers.indexOf('Applicants') : headers.indexOf('1st Choice Applicants');
-        const pointsCol   = headers.indexOf('Points Needed') !== -1 ? headers.indexOf('Points Needed') 
-                          : headers.indexOf('Min Points') !== -1 ? headers.indexOf('Min Points')
-                          : headers.indexOf('Points Required') !== -1 ? headers.indexOf('Points Required') : -1;
+<!-- DETAIL VIEW -->
 
-        allHunts = jsonData.slice(1).map(row => ({
-          hunt: String(row[huntCol] || ''),
-          name: String(row[nameCol] || ''),
-          tags: Number(row[tagsCol]) || 0,
-          applicants: Number(row[applicantsCol]) || 0,
-          pointsNeeded: pointsCol >= 0 ? Number(row[pointsCol]) || 0 : 0
-        })).filter(h => h.hunt && h.hunt !== ''); // remove empty rows
+<div id="view-detail" class="view">
+  <button class="detail-back" onclick="showView('dashboard')">← Back to All Hunts</button>
+  <div id="detail-content"></div>
+</div>
 
-        status.textContent = `Loaded ${allHunts.length} hunts from ODFW Excel`;
-        status.style.color = 'green';
-        
-        renderTable(allHunts);
-      } catch (err) {
-        status.innerHTML = `❌ Could not load Excel.<br>Make sure the file is at <strong>data/buck_deer_points.xlsx</strong>`;
-        console.error(err);
+<!-- SETTINGS VIEW -->
+
+<div id="view-settings" class="view">
+  <div class="settings-panel">
+    <h2>⚙️ Settings & Data Upload</h2>
+    <p>Download the latest draw report from ODFW and upload it here to update the data. The site works with 2025 Buck Deer data by default.</p>
+
+```
+<div class="settings-section">
+  <h3>ODFW DATA SOURCE</h3>
+  <a href="https://odfw.huntfishoregon.com/reportdownloads" target="_blank" class="odfw-btn">
+    🔗 Open ODFW Report Downloads
+  </a>
+  <div class="info-block">
+    <p><strong>How to update data:</strong><br>
+    1. Click the link above to go to the ODFW report downloads page.<br>
+    2. Select <strong>Hunt Series: Buck Deer (100 Series)</strong> and your desired year.<br>
+    3. Download the <strong>Point Summary</strong> Excel (.xlsx) file.<br>
+    4. Upload it below to reload the dashboard with fresh data.</p>
+  </div>
+</div>
+
+<div class="settings-section">
+  <h3>UPLOAD NEW DATA</h3>
+  <div class="year-select-row">
+    <label>Year:</label>
+    <select id="year-sel">
+      <option value="2025" selected>2025</option>
+      <option value="2024">2024</option>
+      <option value="2023">2023</option>
+    </select>
+    <label style="margin-left:12px;">Series:</label>
+    <select id="series-sel">
+      <option value="Buck Deer">Buck Deer (100)</option>
+    </select>
+  </div>
+  <div class="upload-area" id="drop-zone" onclick="document.getElementById('file-input').click()" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+    <div class="icon">📁</div>
+    <p>Click to browse or drag &amp; drop your .xlsx file</p>
+    <small>ODFW Buck Deer Controlled Hunt Draw Report</small>
+  </div>
+  <input type="file" id="file-input" accept=".xlsx" onchange="handleFile(this.files[0])">
+  <div id="upload-status"></div>
+</div>
+
+<div class="settings-section">
+  <h3>CURRENT DATA</h3>
+  <div class="info-block">
+    <p id="current-data-info">📅 <strong>Year:</strong> 2025 &nbsp;|&nbsp; 🦌 <strong>Series:</strong> Buck Deer &nbsp;|&nbsp; 🗂 <strong>Hunts loaded:</strong> 155</p>
+  </div>
+</div>
+```
+
+  </div>
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────────────────
+HUNTEOF
+echo -n 'const HUNT_DATA = ' >> /mnt/user-data/outputs/odfw_deer_points.html
+cat /tmp/hunt_data_compact.json >> /mnt/user-data/outputs/odfw_deer_points.html
+echo ';' >> /mnt/user-data/outputs/odfw_deer_points.html
+
+cat >> /mnt/user-data/outputs/odfw_deer_points.html << 'SCRIPTEOF'
+let activeData = HUNT_DATA;
+let detailChart = null;
+
+// ── VIEWS ─────────────────────────────────────────────────────────────────────
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  document.querySelectorAll('.nav-tab')[name === 'settings' ? 1 : 0].classList.add('active');
+  if (name === 'dashboard') renderCards();
+}
+
+// ── POINT LOGIC ───────────────────────────────────────────────────────────────
+function getMyPoints() { return parseInt(document.getElementById('my-points').value) || 0; }
+
+function getDrawStatus(hunt, pts) {
+  const min = hunt.min_pts_to_draw;
+  if (min === null) return 'unknown';
+  if (pts >= min) return 'drawable';
+  if (pts >= min - 2) return 'close';
+  return 'no';
+}
+
+function getOdds(hunt, pts) {
+  const dist = hunt.point_distribution;
+  const myBucket = dist.find(d => d.points === pts);
+  if (!myBucket) return null;
+  const total = myBucket.selected + myBucket.not_selected;
+  if (total === 0) return null;
+  return Math.round(myBucket.selected / total * 100);
+}
+
+// ── RENDER CARDS ─────────────────────────────────────────────────────────────
+function renderCards() {
+  const pts = getMyPoints();
+  const search = document.getElementById('search-box').value.toLowerCase();
+  const sort = document.getElementById('sort-sel').value;
+  const filterDraw = document.getElementById('filter-draw').value;
+
+  let data = activeData.filter(h => {
+    const q = search;
+    if (q && !h.hunt_name.toLowerCase().includes(q) && !h.hunt_number.toLowerCase().includes(q)) return false;
+    const st = getDrawStatus(h, pts);
+    if (filterDraw === 'drawable' && st !== 'drawable') return false;
+    if (filterDraw === 'close' && st !== 'close') return false;
+    if (filterDraw === 'no' && st !== 'no') return false;
+    return true;
+  });
+
+  data.sort((a, b) => {
+    if (sort === 'draw_odds_desc') return b.draw_odds - a.draw_odds;
+    if (sort === 'draw_odds_asc') return a.draw_odds - b.draw_odds;
+    if (sort === 'min_pts_asc') return (a.min_pts_to_draw || 0) - (b.min_pts_to_draw || 0);
+    if (sort === 'min_pts_desc') return (b.min_pts_to_draw || 0) - (a.min_pts_to_draw || 0);
+    if (sort === 'applicants_desc') return b.total_applicants - a.total_applicants;
+    if (sort === 'name_asc') return a.hunt_name.localeCompare(b.hunt_name);
+    return 0;
+  });
+
+  const drawCount = activeData.filter(h => getDrawStatus(h, pts) === 'drawable').length;
+  document.getElementById('drawable-count').textContent = drawCount + ' hunts drawable';
+
+  const grid = document.getElementById('hunt-grid');
+  if (data.length === 0) {
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="icon">🦌</div><p>No hunts match your filters.</p></div>';
+    return;
+  }
+
+  grid.innerHTML = data.map(h => {
+    const st = getDrawStatus(h, pts);
+    const badgeMap = { drawable: 'yes', close: 'close', no: 'no', unknown: 'unknown' };
+    const badgeText = { drawable: 'CAN DRAW', close: 'CLOSE', no: 'NEED POINTS', unknown: 'N/A' };
+    const minPts = h.min_pts_to_draw !== null ? h.min_pts_to_draw : '—';
+    const oddsColor = h.draw_odds >= 30 ? 'green' : h.draw_odds >= 10 ? 'orange' : 'red';
+    const myOdds = getOdds(h, pts);
+
+    return `<div class="hunt-card ${st}" onclick="showDetail('${h.hunt_number}')">
+      <div class="card-top">
+        <div>
+          <div class="card-num">HUNT #${h.hunt_number}</div>
+          <div class="card-name">${h.hunt_name}</div>
+        </div>
+        <div class="draw-badge ${badgeMap[st]}">${badgeText[st]}</div>
+      </div>
+      <div class="card-stats">
+        <div class="stat">
+          <div class="stat-val ${oddsColor}">${h.draw_odds}%</div>
+          <div class="stat-label">Draw Odds</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val">${minPts}</div>
+          <div class="stat-label">Min Pts Drew</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val">${myOdds !== null ? myOdds + '%' : '—'}</div>
+          <div class="stat-label">My Odds @ ${pts}pts</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;justify-content:space-between;font-size:12px;color:var(--text3);">
+        <span>👥 ${h.total_applicants.toLocaleString()} applicants</span>
+        <span>✅ ${h.total_selected.toLocaleString()} selected</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── DETAIL VIEW ───────────────────────────────────────────────────────────────
+function showDetail(huntNum) {
+  const h = activeData.find(x => x.hunt_number === huntNum);
+  if (!h) return;
+  const pts = getMyPoints();
+  const st = getDrawStatus(h, pts);
+  const myOdds = getOdds(h, pts);
+
+  // Build recommendation
+  const rec = buildRec(h, pts, st, myOdds);
+
+  // Point distribution table rows
+  const rows = h.point_distribution.map(row => {
+    const total = row.selected + row.not_selected;
+    const pct = total > 0 ? Math.round(row.selected / total * 100) : 0;
+    const isMyRow = row.points === pts;
+    return `<tr class="${isMyRow ? 'my-row' : ''}">
+      <td>${row.points}${isMyRow ? ' ⬅ YOU' : ''}</td>
+      <td>${row.selected}</td>
+      <td>${row.not_selected}</td>
+      <td>${total}</td>
+      <td>
+        <span>${pct}%</span>
+        <span class="odds-bar-wrap" style="margin-left:6px"><span class="odds-bar-fill" style="width:${Math.min(pct,100)}%"></span></span>
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('detail-content').innerHTML = `
+    <div class="detail-header">
+      <div class="hunt-num">HUNT #${h.hunt_number} · 100 SERIES BUCK DEER · 2025</div>
+      <h2>${h.hunt_name}</h2>
+    </div>
+
+    <div class="rec-box">
+      <h3>💡 RECOMMENDATION FOR YOU (${pts} POINTS)</h3>
+      <div class="rec-content">
+        <div class="rec-icon">${rec.icon}</div>
+        <div class="rec-text"><p>${rec.text}</p></div>
+      </div>
+    </div>
+
+    <div class="detail-grid">
+      <div class="detail-card">
+        <h3>OVERALL DRAW ODDS</h3>
+        <div class="big-stat">${h.draw_odds}%</div>
+        <div class="big-stat-label">${h.total_selected.toLocaleString()} drawn from ${h.total_applicants.toLocaleString()} applicants</div>
+      </div>
+      <div class="detail-card">
+        <h3>POINT STATS</h3>
+        <div class="stats-row">
+          <div class="mini-stat"><div class="val">${h.min_pts_to_draw ?? '—'}</div><div class="lbl">Min Pts Drew</div></div>
+          <div class="mini-stat"><div class="val">${h.max_pts_to_draw ?? '—'}</div><div class="lbl">Max Pts Drew</div></div>
+          <div class="mini-stat"><div class="val">${h.avg_pts_selected ?? '—'}</div><div class="lbl">Avg Pts Selected</div></div>
+          <div class="mini-stat"><div class="val" style="color:${myOdds >= 30 ? 'var(--accent)' : myOdds >= 10 ? 'var(--orange)' : 'var(--red)'}">${myOdds !== null ? myOdds + '%' : '—'}</div><div class="lbl">My Odds @ ${pts}pts</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-box">
+      <h3>APPLICANT DISTRIBUTION BY POINTS</h3>
+      <div class="chart-wrap"><canvas id="dist-chart"></canvas></div>
+    </div>
+
+    <div class="detail-card" style="margin-bottom:24px;">
+      <h3>FULL POINT DISTRIBUTION TABLE</h3>
+      <div style="overflow-x:auto;margin-top:12px;">
+        <table class="pt-table">
+          <thead><tr><th>Points</th><th>Selected</th><th>Not Selected</th><th>Total</th><th>Draw Rate</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  if (detailChart) { detailChart.destroy(); detailChart = null; }
+
+  const labels = h.point_distribution.map(d => d.points);
+  const selData = h.point_distribution.map(d => d.selected);
+  const notSelData = h.point_distribution.map(d => d.not_selected);
+  const myIndex = labels.indexOf(pts);
+
+  const bgSelected = labels.map((_, i) => i === myIndex ? 'rgba(109,179,63,1)' : 'rgba(109,179,63,0.7)');
+  const bgNotSel = labels.map((_, i) => i === myIndex ? 'rgba(217,124,43,0.9)' : 'rgba(217,124,43,0.4)');
+
+  const ctx = document.getElementById('dist-chart').getContext('2d');
+  detailChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Selected', data: selData, backgroundColor: bgSelected, stack: 'a' },
+        { label: 'Not Selected', data: notSelData, backgroundColor: bgNotSel, stack: 'a' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#8fad80', font: { family: 'Source Sans 3' } } },
+        tooltip: {
+          callbacks: {
+            title: ctx => 'Points: ' + ctx[0].label + (ctx[0].label == pts ? ' ← YOU' : ''),
+          }
+        }
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: '#5a7a52' }, grid: { color: 'rgba(46,74,41,.3)' }, title: { display: true, text: 'Average Points', color: '#5a7a52' } },
+        y: { stacked: true, ticks: { color: '#5a7a52' }, grid: { color: 'rgba(46,74,41,.3)' }, title: { display: true, text: 'Applicants', color: '#5a7a52' } }
       }
     }
+  });
 
-    function renderTable(data) {
-      const tbody = document.querySelector('#huntTable tbody');
-      tbody.innerHTML = '';
-      data.forEach(h => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${h.hunt}</td>
-          <td>${h.name}</td>
-          <td>${h.tags}</td>
-          <td><strong>${h.pointsNeeded}</strong></td>
-          <td>${h.applicants}</td>
-          <td>${h.pointsNeeded <= 4 ? '✅ Very Good' : h.pointsNeeded <= 8 ? '👍 Good' : 'Stretch'}</td>
-        `;
-        tbody.appendChild(row);
-      });
-    }
+  showView('detail');
+  window.scrollTo(0, 0);
+}
 
-    function filterTable() {
-      const term = document.getElementById('searchBox').value.toLowerCase();
-      const filtered = allHunts.filter(h => 
-        h.hunt.toLowerCase().includes(term) || h.name.toLowerCase().includes(term)
-      );
-      renderTable(filtered);
-    }
+function buildRec(h, pts, st, myOdds) {
+  const min = h.min_pts_to_draw;
+  const avg = h.avg_pts_selected;
+  const odds = h.draw_odds;
 
-    function generatePlan() {
-      const points = parseInt(document.getElementById('myPoints').value) || 0;
-      const resultsDiv = document.getElementById('planResults');
-      
-      const possible = allHunts
-        .filter(h => h.pointsNeeded <= points + 3)
-        .sort((a, b) => a.pointsNeeded - b.pointsNeeded || b.tags - a.tags)
-        .slice(0, 5);
+  if (st === 'drawable') {
+    if (myOdds >= 50) return { icon: '🟢', text: `<strong>Strong draw candidate!</strong> With ${pts} points you have a ~${myOdds}% chance at this hunt. The overall draw rate is ${odds}% and the minimum drawn last year was ${min} pts — you're comfortably above. <strong>This should be a high-priority choice.</strong>` };
+    if (myOdds >= 25) return { icon: '🟡', text: `<strong>Good odds.</strong> With ${pts} points you have an estimated ~${myOdds}% chance. The average drawn was ${avg} points and the min was ${min} pts. Worth including as a primary or backup choice.` };
+    return { icon: '🟠', text: `You meet the minimum (${min} pts) but draw odds at your point level are around ~${myOdds}%. The average selected was ${avg} pts. Consider this a secondary choice or apply and hope for a favorable random draw.` };
+  }
+  if (st === 'close') {
+    const need = min - pts;
+    return { icon: '⏳', text: `You're <strong>${need} point(s) short</strong> of the minimum drawn (${min} pts). If you bank your points this year you could be a strong candidate in a future draw. Average selected was ${avg} pts. <strong>Consider skipping this year to build points.</strong>` };
+  }
+  if (st === 'no') {
+    const need = min - pts;
+    return { icon: '🔴', text: `You need <strong>${need} more points</strong> to be competitive (min drawn: ${min} pts, avg drawn: ${avg} pts). At ${pts} points your odds in this draw are very low. <strong>Bank points — don't apply here yet.</strong>` };
+  }
+  return { icon: '❓', text: 'Insufficient draw data to make a recommendation for this hunt.' };
+}
 
-      let html = `<h3>With <strong>${points}</strong> points, here are your best choices:</h3><ol>`;
-      if (possible.length === 0) {
-        html += `<li>No low-point hunts right now — consider general season or more points.</li>`;
-      } else {
-        possible.forEach(h => {
-          html += `<li><strong>${h.hunt} ${h.name}</strong> — ${h.tags} tags, needed ${h.pointsNeeded} pts last year → <span style="color:green;">High chance</span></li>`;
-        });
-      }
-      html += `</ol><p><em>Tip: Put your top 5 in order on the ODFW application.</em></p>`;
-      resultsDiv.innerHTML = html;
-    }
+// ── FILE UPLOAD ───────────────────────────────────────────────────────────────
+function dragOver(e) { e.preventDefault(); document.getElementById('drop-zone').classList.add('drag'); }
+function dragLeave(e) { document.getElementById('drop-zone').classList.remove('drag'); }
+function dropFile(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+}
+function handleFile(file) {
+  const status = document.getElementById('upload-status');
+  if (!file || !file.name.endsWith('.xlsx')) {
+    status.className = 'upload-status error';
+    status.textContent = '❌ Please upload a valid .xlsx file from ODFW.';
+    return;
+  }
+  status.className = 'upload-status success';
+  status.textContent = '✅ File "' + file.name + '" received. Note: parsing XLSX in-browser requires a server-side component. For now, use the pre-loaded 2025 data or paste new JSON data via the console: window.loadHuntData(jsonArray).';
+}
 
-    function sortTable(n) {
-      allHunts.sort((a, b) => {
-        const keys = Object.keys(a);
-        const valA = a[keys[n]];
-        const valB = b[keys[n]];
-        return valA < valB ? -1 : valA > valB ? 1 : 0;
-      });
-      renderTable(allHunts);
-    }
+// Allow external data loading
+window.loadHuntData = function(data) {
+  activeData = data;
+  document.getElementById('current-data-info').innerHTML = `📅 <strong>Year:</strong> Custom &nbsp;|&nbsp; 🦌 <strong>Series:</strong> Buck Deer &nbsp;|&nbsp; 🗂 <strong>Hunts loaded:</strong> ${data.length}`;
+  showView('dashboard');
+  renderCards();
+  alert('Data loaded: ' + data.length + ' hunts.');
+};
 
-    // Start everything
-    window.onload = loadExcelData;
-  </script>
+// ── INIT ──────────────────────────────────────────────────────────────────────
+function updateAll() { renderCards(); }
+renderCards();
+</script>
+
 </body>
 </html>
