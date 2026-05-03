@@ -4,10 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ODFW Point Tracker & Analyzer</title>
+    <!-- SheetJS to read the Excel file -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root {
-            --primary: #2c5e3b; /* Forest Green */
-            --secondary: #e6a817; /* ODFW Gold */
+            --primary: #2c5e3b;
+            --secondary: #e6a817;
             --bg: #f4f4f9;
             --text: #333;
         }
@@ -20,9 +22,7 @@
             max-width: 900px;
             margin: 0 auto;
         }
-        h1, h2 {
-            color: var(--primary);
-        }
+        h1, h2 { color: var(--primary); }
         .card {
             background: white;
             padding: 20px;
@@ -46,30 +46,32 @@
             font-weight: bold;
             border-radius: 5px;
             border: 2px solid #c99314;
-            display: inline-block;
-            transition: background-color 0.3s;
         }
-        .btn-odfw:hover {
-            background-color: #ffd15c;
+        .upload-section {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            margin-bottom: 20px;
         }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        .form-group label {
-            display: block;
-            font-weight: bold;
-            margin-bottom: 5px;
+        .mapping-section {
+            display: none;
+            background-color: #e8f4ec;
+            padding: 15px;
+            border-left: 5px solid var(--primary);
+            margin-top: 15px;
         }
         .form-row {
             display: flex;
             gap: 15px;
             flex-wrap: wrap;
+            margin-bottom: 15px;
         }
         .form-row > div {
             flex: 1;
             min-width: 150px;
         }
-        input[type="number"], input[type="text"] {
+        input, select {
             width: 100%;
             padding: 8px;
             border: 1px solid #ccc;
@@ -84,9 +86,7 @@
             cursor: pointer;
             border-radius: 4px;
             font-size: 16px;
-        }
-        button:hover {
-            background-color: #1f4229;
+            margin-top: 10px;
         }
         table {
             width: 100%;
@@ -107,6 +107,7 @@
             border-left: 5px solid var(--primary);
             padding: 15px;
             margin-top: 20px;
+            display: none;
         }
         .alert-high { color: #d9534f; font-weight: bold; }
         .alert-good { color: #5cb85c; font-weight: bold; }
@@ -119,126 +120,156 @@
 
     <div class="card">
         <div class="header-actions">
-            <h2>1. Input Historical Data</h2>
+            <h2>1. Extract Data from Spreadsheet</h2>
             <a href="https://odfw.huntfishoregon.com/reportdownloads" target="_blank" class="btn-odfw">
                 📥 Get ODFW Reports Here
             </a>
         </div>
         
-        <p><em>Check the ODFW reports and enter the minimum points required to guarantee a tag for your desired unit over the past few years.</em></p>
+        <div class="upload-section">
+            <label for="excelFile"><strong>Upload your spreadsheet (e.g., 2026 Buck Deer Outfitter Draw Report Public Version_2.xlsx):</strong></label><br>
+            <input type="file" id="excelFile" accept=".xlsx, .xls">
+            
+            <div id="mappingArea" class="mapping-section">
+                <h3>Map Your Columns</h3>
+                <p>Match the data to the correct columns from your file.</p>
+                
+                <div class="form-row">
+                    <div>
+                        <label>Target Hunt Unit:</label>
+                        <input type="text" id="targetUnit" placeholder="e.g., 171M">
+                    </div>
+                    <div>
+                        <label>Your Current Points:</label>
+                        <input type="number" id="myPoints" placeholder="e.g., 4">
+                    </div>
+                </div>
 
-        <div class="form-row">
-            <div class="form-group">
-                <label for="myPoints">Your Current Points:</label>
-                <input type="number" id="myPoints" placeholder="e.g., 4" min="0">
-            </div>
-            <div class="form-group">
-                <label for="year">Hunt Year:</label>
-                <input type="number" id="year" placeholder="e.g., 2023">
-            </div>
-            <div class="form-group">
-                <label for="pointsReq">Min Points to Draw:</label>
-                <input type="number" id="pointsReq" placeholder="e.g., 3" step="0.1">
+                <div class="form-row">
+                    <div>
+                        <label>Column for "Unit/Hunt":</label>
+                        <select id="colUnit"></select>
+                    </div>
+                    <div>
+                        <label>Column for "Year":</label>
+                        <select id="colYear"></select>
+                    </div>
+                    <div>
+                        <label>Column for "Min Points Required":</label>
+                        <select id="colPoints"></select>
+                    </div>
+                </div>
+                <button onclick="processData()">Import & Analyze</button>
             </div>
         </div>
-        <button onclick="addData()">Add Year Data</button>
     </div>
 
     <div class="card">
         <h2>2. Data Trends & Analysis</h2>
-        
         <table id="dataTable">
             <thead>
                 <tr>
                     <th>Year</th>
+                    <th>Hunt Unit</th>
                     <th>Min Points Required</th>
-                    <th>Action</th>
                 </tr>
             </thead>
-            <tbody id="tableBody">
-                <!-- Data goes here -->
-            </tbody>
+            <tbody id="tableBody"></tbody>
         </table>
-
-        <div id="analysisResult" class="analysis-box" style="display:none;">
-            <!-- Analysis output goes here -->
-        </div>
+        <div id="analysisResult" class="analysis-box"></div>
     </div>
 
     <script>
+        let rawExcelData = [];
         let huntData = [];
 
-        function addData() {
-            const yearInput = document.getElementById('year').value;
-            const pointsReqInput = document.getElementById('pointsReq').value;
-            const myPointsInput = document.getElementById('myPoints').value;
+        // 1. Read the Excel File
+        document.getElementById('excelFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
 
-            if (!yearInput || !pointsReqInput || !myPointsInput) {
-                alert("Please fill in your current points, the year, and the required points to draw.");
-                return;
-            }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                
+                // Convert to JSON
+                rawExcelData = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
+                
+                if (rawExcelData.length > 0) {
+                    populateDropdowns(Object.keys(rawExcelData[0]));
+                    document.getElementById('mappingArea').style.display = 'block';
+                } else {
+                    alert("The spreadsheet appears to be empty.");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
 
-            // Check if year already exists to avoid duplicates
-            const existingIndex = huntData.findIndex(d => d.year === parseInt(yearInput));
-            if (existingIndex > -1) {
-                huntData[existingIndex].req = parseFloat(pointsReqInput);
-            } else {
-                huntData.push({
-                    year: parseInt(yearInput),
-                    req: parseFloat(pointsReqInput)
-                });
-            }
-
-            // Sort data chronologically
-            huntData.sort((a, b) => a.year - b.year);
-
-            // Clear inputs for next entry
-            document.getElementById('year').value = '';
-            document.getElementById('pointsReq').value = '';
-
-            updateTable();
-            analyzeTrends(parseFloat(myPointsInput));
-        }
-
-        function deleteData(year) {
-            huntData = huntData.filter(d => d.year !== year);
-            const myPointsInput = parseFloat(document.getElementById('myPoints').value) || 0;
-            updateTable();
-            analyzeTrends(myPointsInput);
-        }
-
-        function updateTable() {
-            const tbody = document.getElementById('tableBody');
-            tbody.innerHTML = '';
-
-            huntData.forEach(data => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${data.year}</td>
-                    <td>${data.req}</td>
-                    <td><button onclick="deleteData(${data.year})" style="background-color:#d9534f; padding:5px 10px;">Remove</button></td>
-                `;
-                tbody.appendChild(row);
+        // 2. Populate Dropdowns with Excel Headers
+        function populateDropdowns(headers) {
+            const selects = ['colUnit', 'colYear', 'colPoints'];
+            selects.forEach(id => {
+                const el = document.getElementById(id);
+                el.innerHTML = headers.map(h => `<option value="${h}">${h}</option>`).join('');
             });
         }
 
-        function analyzeTrends(myPoints) {
-            const analysisDiv = document.getElementById('analysisResult');
-            
-            if (huntData.length < 2) {
-                analysisDiv.style.display = 'block';
-                analysisDiv.innerHTML = "<h3>Analysis:</h3><p><em>Add at least 2 years of data to see point creep trends. The more years you add, the more accurate the prediction!</em></p>";
+        // 3. Process the Data based on User Selection
+        function processData() {
+            const targetUnit = document.getElementById('targetUnit').value.trim();
+            const myPoints = parseFloat(document.getElementById('myPoints').value);
+            const colUnit = document.getElementById('colUnit').value;
+            const colYear = document.getElementById('colYear').value;
+            const colPoints = document.getElementById('colPoints').value;
+
+            if (!targetUnit || isNaN(myPoints)) {
+                alert("Please enter your Target Hunt Unit and Current Points.");
                 return;
             }
 
-            analysisDiv.style.display = 'block';
+            // Filter raw data for the target unit
+            huntData = rawExcelData
+                .filter(row => String(row[colUnit]).trim().toLowerCase() === targetUnit.toLowerCase())
+                .map(row => ({
+                    year: parseInt(row[colYear]) || 2026, // Fallback if year isn't present
+                    unit: row[colUnit],
+                    req: parseFloat(row[colPoints]) || 0
+                }))
+                .filter(d => !isNaN(d.req)); // Remove rows without valid point data
 
-            // Calculate "Point Creep" (Average change per year)
+            // Sort chronologically
+            huntData.sort((a, b) => a.year - b.year);
+
+            updateTable();
+            analyzeTrends(myPoints);
+        }
+
+        // 4. Show Data in Table
+        function updateTable() {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            huntData.forEach(data => {
+                tbody.innerHTML += `<tr><td>${data.year}</td><td>${data.unit}</td><td>${data.req}</td></tr>`;
+            });
+        }
+
+        // 5. Analyze and Output
+        function analyzeTrends(myPoints) {
+            const analysisDiv = document.getElementById('analysisResult');
+            analysisDiv.style.display = 'block';
+            
+            if (huntData.length < 2) {
+                analysisDiv.innerHTML = "<h3>Analysis:</h3><p><em>Not enough historical data found for this unit to calculate trends. Make sure the spreadsheet has multiple years of data, or input manually.</em></p>";
+                return;
+            }
+
             let totalCreep = 0;
             for (let i = 1; i < huntData.length; i++) {
-                let yearDiff = huntData[i].year - huntData[i-1].year;
+                let yearDiff = huntData[i].year - huntData[i-1].year || 1; // Prevent division by zero
                 let pointDiff = huntData[i].req - huntData[i-1].req;
-                // Normalize creep per year in case years were skipped
                 totalCreep += (pointDiff / yearDiff); 
             }
             let avgCreep = totalCreep / (huntData.length - 1);
@@ -247,28 +278,22 @@
             let projectedPointsNeeded = latestData.req + avgCreep;
 
             let trendText = "";
-            if (avgCreep > 0.25) {
-                trendText = `<span class="alert-high">Severe Point Creep (+${avgCreep.toFixed(2)} pts/year).</span> The bar is rising fast.`;
-            } else if (avgCreep > 0) {
-                trendText = `Moderate Point Creep (+${avgCreep.toFixed(2)} pts/year). Points required are slowly increasing.`;
-            } else if (avgCreep < 0) {
-                trendText = `<span class="alert-good">Favorable Trend (${avgCreep.toFixed(2)} pts/year).</span> The points required are actually dropping!`;
-            } else {
-                trendText = `Stable. The points required have not changed.`;
-            }
+            if (avgCreep > 0.25) { trendText = `<span class="alert-high">Severe Point Creep (+${avgCreep.toFixed(2)} pts/year).</span>`; } 
+            else if (avgCreep > 0) { trendText = `Moderate Point Creep (+${avgCreep.toFixed(2)} pts/year).`; } 
+            else if (avgCreep < 0) { trendText = `<span class="alert-good">Favorable Trend (${avgCreep.toFixed(2)} pts/year).</span>`; } 
+            else { trendText = `Stable (0 pts/year).`; }
 
-            // Recommendation Logic
             let recommendation = "";
             if (myPoints >= Math.ceil(projectedPointsNeeded)) {
-                recommendation = `<span class="alert-good">✅ Apply for the Tag!</span> You have ${myPoints} points, and the projected requirement for next year is roughly ${projectedPointsNeeded.toFixed(1)}. You have a very high statistical chance of drawing.`;
+                recommendation = `<span class="alert-good">✅ Apply for the Tag!</span> You have ${myPoints} points, and the projected requirement is roughly ${projectedPointsNeeded.toFixed(1)}.`;
             } else if (myPoints >= latestData.req && avgCreep > 0) {
-                recommendation = `<span class="alert-hold">⚠️ Toss-Up.</span> You met last year's requirement, but due to point creep, you might fall just short this year. It is worth applying, but have a backup plan.`;
+                recommendation = `<span class="alert-hold">⚠️ Toss-Up.</span> You met last year's requirement, but might fall short due to point creep.`;
             } else {
-                let yearsOut = Math.ceil((projectedPointsNeeded - myPoints) / (1 - avgCreep)); // Assuming you gain 1 pt a year
+                let yearsOut = Math.ceil((projectedPointsNeeded - myPoints) / (1 - avgCreep));
                 if (yearsOut < 0 || avgCreep >= 1) {
-                    recommendation = `<span class="alert-high">❌ Point Creep outpaces your earning potential.</span> You may never draw this tag unless trends reverse. Consider a different unit.`;
+                    recommendation = `<span class="alert-high">❌ Point Creep outpaces your earning potential.</span> Consider a different unit.`;
                 } else {
-                    recommendation = `<span class="alert-high">⏳ Keep Buying Point Savers.</span> You are roughly ${yearsOut} year(s) away from safely drawing this tag.`;
+                    recommendation = `<span class="alert-high">⏳ Keep Buying Point Savers.</span> You are roughly ${yearsOut} year(s) away from drawing.`;
                 }
             }
 
