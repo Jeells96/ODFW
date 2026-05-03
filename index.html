@@ -1,730 +1,284 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ODFW Draw Point Analyzer</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300;0,400;0,600;0,700;1,400&family=Oswald:wght@400;500;600;700&display=swap');
-
-:root {
-–odfw-blue: #003366;
-–odfw-blue-mid: #005288;
-–odfw-blue-light: #0077b6;
-–odfw-gold: #c8a84b;
-–odfw-gold-light: #e8c96a;
-–odfw-green: #3d6b35;
-–odfw-green-light: #5a9e50;
-–odfw-tan: #f5f0e8;
-–odfw-tan2: #ede5d5;
-–odfw-tan3: #d9cdb8;
-–bg: #f2ede3;
-–white: #ffffff;
-–text: #1a2633;
-–text2: #4a5f6e;
-–text3: #7a909e;
-–border: #c8bfaa;
-–border2: #ddd5c0;
-–red: #c0392b;
-–orange: #d97c2b;
-–shadow: 0 2px 8px rgba(0,51,102,0.10);
-–shadow-lg: 0 6px 24px rgba(0,51,102,0.15);
-}
-
-- { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-background: var(–bg);
-color: var(–text);
-font-family: ‘Source Sans 3’, sans-serif;
-font-size: 15px;
-min-height: 100vh;
-}
-
-/* ─── HEADER ─────────────────────────────────────────────── */
-.site-header {
-background: var(–odfw-blue);
-border-bottom: 4px solid var(–odfw-gold);
-}
-.header-top {
-display: flex; align-items: center; gap: 16px;
-padding: 14px 32px; max-width: 1400px; margin: 0 auto;
-}
-.odfw-seal {
-width: 56px; height: 56px; border-radius: 50%;
-background: var(–white);
-display: flex; align-items: center; justify-content: center;
-flex-shrink: 0; font-size: 13px; font-weight: 700;
-font-family: ‘Oswald’, sans-serif; color: var(–odfw-blue);
-letter-spacing: 1px;
-border: 2px solid var(–odfw-gold);
-}
-.header-titles { flex: 1; }
-.header-agency {
-font-family: ‘Oswald’, sans-serif;
-font-size: 11px; letter-spacing: 2px; color: var(–odfw-gold);
-text-transform: uppercase; margin-bottom: 2px;
-}
-.header-title {
-font-family: ‘Oswald’, sans-serif;
-font-size: 22px; font-weight: 600; color: var(–white);
-letter-spacing: 0.5px;
-}
-.header-sub { color: #90aac5; font-size: 13px; margin-top: 2px; }
-
-/* NAV BAR */
-.nav-bar {
-background: var(–odfw-blue-mid);
-border-top: 1px solid rgba(255,255,255,0.1);
-}
-.nav-inner {
-display: flex; max-width: 1400px; margin: 0 auto; padding: 0 32px;
-}
-.nav-item {
-background: none; border: none; cursor: pointer;
-font-family: ‘Source Sans 3’, sans-serif; font-size: 14px; font-weight: 600;
-color: #b8cfe8; padding: 12px 20px;
-border-bottom: 3px solid transparent;
-letter-spacing: 0.3px; transition: all .15s;
-text-transform: uppercase; font-size: 12px; letter-spacing: 1px;
-}
-.nav-item:hover { color: var(–white); background: rgba(255,255,255,0.06); }
-.nav-item.active { color: var(–white); border-bottom-color: var(–odfw-gold); background: rgba(255,255,255,0.08); }
-
-/* ─── BREADCRUMB ─────────────────────────────────────────── */
-.breadcrumb {
-background: var(–odfw-tan); border-bottom: 1px solid var(–border);
-padding: 8px 32px; font-size: 12px; color: var(–text3);
-max-width: 1400px; margin: 0 auto;
-}
-.breadcrumb a { color: var(–odfw-blue); text-decoration: none; }
-.breadcrumb a:hover { text-decoration: underline; }
-.breadcrumb-wrap { background: var(–odfw-tan); border-bottom: 1px solid var(–border); }
-
-/* ─── LAYOUT ─────────────────────────────────────────────── */
-.page-wrap { max-width: 1400px; margin: 0 auto; padding: 24px 32px; }
-
-.view { display: none; }
-.view.active { display: block; }
-
-/* ─── SECTION TITLE ──────────────────────────────────────── */
-.section-title {
-display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px;
-padding-bottom: 10px; border-bottom: 2px solid var(–odfw-gold);
-}
-.section-title h2 {
-font-family: ‘Oswald’, sans-serif; font-size: 22px; font-weight: 600;
-color: var(–odfw-blue); letter-spacing: 0.3px;
-}
-.section-title .subtitle { font-size: 13px; color: var(–text3); }
-
-/* ─── POINTS PANEL ───────────────────────────────────────── */
-.points-panel {
-background: var(–odfw-blue);
-border-radius: 6px; padding: 20px 24px;
-display: flex; align-items: center; gap: 32px;
-margin-bottom: 20px; flex-wrap: wrap;
-box-shadow: var(–shadow-lg);
-}
-.points-panel-label {
-font-family: ‘Oswald’, sans-serif; font-size: 11px; letter-spacing: 2px;
-color: var(–odfw-gold); text-transform: uppercase; margin-bottom: 6px;
-}
-.points-input-wrap { display: flex; align-items: center; gap: 12px; }
-.points-input-wrap input[type=number] {
-width: 80px; background: var(–white);
-border: 2px solid var(–odfw-gold); border-radius: 4px;
-font-family: ‘Oswald’, sans-serif; font-size: 28px; color: var(–odfw-blue);
-padding: 4px 10px; outline: none; text-align: center;
-}
-.legend-row { display: flex; gap: 20px; flex-wrap: wrap; }
-.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #b8cfe8; }
-.legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.drawable-pill {
-background: rgba(200,168,75,0.2); border: 1px solid var(–odfw-gold);
-color: var(–odfw-gold); font-family: ‘Oswald’, sans-serif;
-font-size: 12px; letter-spacing: 1px; padding: 4px 14px; border-radius: 20px;
-}
-
-/* ─── FILTER BAR ─────────────────────────────────────────── */
-.filter-bar {
-background: var(–white); border: 1px solid var(–border);
-border-radius: 6px; padding: 12px 16px;
-display: flex; gap: 12px; align-items: center;
-margin-bottom: 20px; flex-wrap: wrap;
-box-shadow: var(–shadow);
-}
-.filter-bar input, .filter-bar select {
-border: 1px solid var(–border); border-radius: 4px;
-padding: 7px 12px; font-size: 14px; color: var(–text);
-font-family: ‘Source Sans 3’, sans-serif;
-background: var(–odfw-tan); outline: none; transition: border-color .15s;
-}
-.filter-bar input { width: 260px; }
-.filter-bar input:focus, .filter-bar select:focus { border-color: var(–odfw-blue-light); }
-.filter-bar label { font-size: 12px; color: var(–text3); font-weight: 600; letter-spacing: 0.5px; }
-.results-count { margin-left: auto; font-size: 13px; color: var(–text3); }
-
-/* ─── HUNT TABLE ─────────────────────────────────────────── */
-.hunt-table-wrap {
-background: var(–white); border: 1px solid var(–border);
-border-radius: 6px; overflow: hidden; box-shadow: var(–shadow);
-}
-.hunt-table { width: 100%; border-collapse: collapse; }
-.hunt-table thead tr {
-background: var(–odfw-blue);
-}
-.hunt-table th {
-font-family: ‘Oswald’, sans-serif; font-size: 11px; letter-spacing: 1.5px;
-color: var(–odfw-gold); text-align: left; padding: 11px 16px;
-white-space: nowrap; font-weight: 500;
-cursor: pointer; user-select: none;
-}
-.hunt-table th:hover { color: var(–white); }
-.hunt-table tbody tr {
-border-bottom: 1px solid var(–border2);
-transition: background .1s;
-}
-.hunt-table tbody tr:hover { background: #eef5ff; cursor: pointer; }
-.hunt-table tbody tr:last-child { border-bottom: none; }
-.hunt-table td { padding: 10px 16px; font-size: 14px; vertical-align: middle; }
-.hunt-table td.hunt-name { font-weight: 600; color: var(–odfw-blue); }
-.hunt-table td.hunt-num { font-size: 12px; color: var(–text3); font-family: ‘Oswald’, sans-serif; letter-spacing: 1px; }
-
-/* Status badges */
-.status-badge {
-display: inline-block; font-family: ‘Oswald’, sans-serif;
-font-size: 10px; letter-spacing: 1px; padding: 3px 9px; border-radius: 3px;
-white-space: nowrap;
-}
-.status-drawable { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
-.status-close    { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
-.status-no       { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
-.status-unknown  { background: #f5f5f5; color: #757575; border: 1px solid #e0e0e0; }
-
-/* Odds bar */
-.odds-bar-wrap { display: flex; align-items: center; gap: 8px; }
-.odds-bar-bg { width: 60px; height: 6px; background: var(–border2); border-radius: 3px; overflow: hidden; flex-shrink: 0; }
-.odds-bar-fill { height: 100%; border-radius: 3px; }
-.odds-green { background: #43a047; }
-.odds-orange { background: var(–orange); }
-.odds-red { background: var(–red); }
-
-/* ─── DETAIL VIEW ────────────────────────────────────────── */
-.back-btn {
-display: inline-flex; align-items: center; gap: 6px;
-background: none; border: 1px solid var(–border);
-border-radius: 4px; color: var(–odfw-blue);
-font-size: 13px; font-weight: 600; padding: 6px 14px;
-cursor: pointer; margin-bottom: 20px; transition: all .15s;
-}
-.back-btn:hover { background: var(–odfw-blue); color: var(–white); border-color: var(–odfw-blue); }
-
-.detail-hero {
-background: var(–odfw-blue); border-radius: 6px;
-padding: 24px 28px; margin-bottom: 20px;
-display: flex; align-items: flex-start; justify-content: space-between;
-flex-wrap: wrap; gap: 16px;
-box-shadow: var(–shadow-lg);
-}
-.detail-hero-left .hunt-series { font-size: 11px; letter-spacing: 2px; color: var(–odfw-gold); font-family: ‘Oswald’, sans-serif; margin-bottom: 4px; }
-.detail-hero-left h2 { font-family: ‘Oswald’, sans-serif; font-size: 32px; font-weight: 600; color: var(–white); }
-.detail-hero-left .hunt-meta { color: #90aac5; font-size: 13px; margin-top: 4px; }
-.detail-hero-stats { display: flex; gap: 32px; }
-.hero-stat { text-align: center; }
-.hero-stat-val { font-family: ‘Oswald’, sans-serif; font-size: 36px; color: var(–odfw-gold); line-height: 1; }
-.hero-stat-lbl { font-size: 11px; color: #90aac5; letter-spacing: 1px; margin-top: 4px; text-transform: uppercase; }
-
-/* Recommendation box */
-.rec-box {
-background: var(–white); border: 1px solid var(–border);
-border-left: 5px solid var(–odfw-gold);
-border-radius: 0 6px 6px 0; padding: 18px 22px;
-margin-bottom: 20px; box-shadow: var(–shadow);
-}
-.rec-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.rec-icon-badge {
-display: inline-block; font-family: ‘Oswald’, sans-serif; font-size: 10px;
-font-weight: 700; letter-spacing: 1px; padding: 3px 8px; border-radius: 3px;
-background: var(–odfw-blue); color: var(–odfw-gold); border: 1px solid var(–odfw-gold);
-white-space: nowrap; flex-shrink: 0;
-}
-.rec-header h3 { font-family: ‘Oswald’, sans-serif; font-size: 13px; letter-spacing: 1.5px; color: var(–odfw-blue); }
-.rec-body { font-size: 15px; line-height: 1.7; color: var(–text); }
-.rec-body strong { color: var(–odfw-blue); }
-
-/* Stat cards row */
-.stat-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
-.stat-card {
-background: var(–white); border: 1px solid var(–border);
-border-radius: 6px; padding: 16px; text-align: center;
-box-shadow: var(–shadow);
-}
-.stat-card-val { font-family: ‘Oswald’, sans-serif; font-size: 32px; color: var(–odfw-blue); }
-.stat-card-val.green { color: var(–odfw-green-light); }
-.stat-card-val.orange { color: var(–orange); }
-.stat-card-val.red { color: var(–red); }
-.stat-card-lbl { font-size: 11px; color: var(–text3); letter-spacing: 1px; text-transform: uppercase; margin-top: 4px; }
-
-/* Chart & Table grid */
-.detail-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-bottom: 20px; }
-@media (max-width: 860px) { .detail-grid { grid-template-columns: 1fr; } }
-
-.panel {
-background: var(–white); border: 1px solid var(–border);
-border-radius: 6px; padding: 20px;
-box-shadow: var(–shadow);
-}
-.panel h3 {
-font-family: ‘Oswald’, sans-serif; font-size: 13px; letter-spacing: 1.5px;
-color: var(–odfw-blue); margin-bottom: 14px;
-padding-bottom: 8px; border-bottom: 1px solid var(–border2);
-}
-.chart-wrap { position: relative; height: 260px; }
-
-/* Pt Distribution table */
-.pt-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.pt-table th { font-family: ‘Oswald’, sans-serif; font-size: 10px; letter-spacing: 1px; color: var(–text3); padding: 6px 10px; text-align: left; border-bottom: 1px solid var(–border); }
-.pt-table td { padding: 6px 10px; border-bottom: 1px solid var(–border2); }
-.pt-table tr.my-row td { background: #fffbe6; font-weight: 600; }
-.pt-table tr.my-row td:first-child { border-left: 3px solid var(–odfw-gold); }
-.pt-table tr:last-child td { border-bottom: none; }
-
-/* ─── SETTINGS VIEW ──────────────────────────────────────── */
-.settings-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
-@media (max-width: 860px) { .settings-grid { grid-template-columns: 1fr; } }
-
-.settings-card {
-background: var(–white); border: 1px solid var(–border);
-border-radius: 6px; padding: 24px;
-box-shadow: var(–shadow);
-}
-.settings-card h3 {
-font-family: ‘Oswald’, sans-serif; font-size: 15px; letter-spacing: 1px;
-color: var(–odfw-blue); margin-bottom: 4px;
-}
-.settings-card .help-text { font-size: 13px; color: var(–text3); margin-bottom: 18px; line-height: 1.6; }
-
-.odfw-link-btn {
-display: inline-flex; align-items: center; gap: 10px;
-background: var(–odfw-blue); color: var(–white);
-border: none; border-radius: 4px; cursor: pointer;
-font-family: ‘Oswald’, sans-serif; font-size: 14px; letter-spacing: 1px;
-padding: 11px 22px; text-decoration: none; transition: background .15s;
-}
-.odfw-link-btn:hover { background: var(–odfw-blue-light); }
-
-.instruction-list { list-style: none; margin-top: 16px; }
-.instruction-list li {
-display: flex; gap: 12px; padding: 10px 0;
-border-bottom: 1px solid var(–border2); font-size: 14px; color: var(–text2); line-height: 1.5;
-}
-.instruction-list li:last-child { border-bottom: none; }
-.step-num {
-width: 24px; height: 24px; border-radius: 50%;
-background: var(–odfw-blue); color: var(–white);
-font-family: ‘Oswald’, sans-serif; font-size: 12px;
-display: flex; align-items: center; justify-content: center;
-flex-shrink: 0; margin-top: 2px;
-}
-
-.upload-zone {
-border: 2px dashed var(–border); border-radius: 6px;
-padding: 32px 20px; text-align: center; cursor: pointer;
-margin-top: 16px; transition: all .2s; background: var(–odfw-tan);
-}
-.upload-zone:hover, .upload-zone.drag { border-color: var(–odfw-blue); background: #eef5ff; }
-.upload-zone .upload-icon { font-size: 40px; margin-bottom: 10px; }
-.upload-zone p { font-size: 14px; color: var(–text2); margin-bottom: 4px; }
-.upload-zone small { font-size: 12px; color: var(–text3); }
-input[type=file] { display: none; }
-
-.upload-msg { margin-top: 12px; padding: 10px 14px; border-radius: 4px; font-size: 13px; }
-.upload-msg.ok { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
-.upload-msg.err { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
-
-.info-card {
-background: var(–odfw-tan); border: 1px solid var(–border);
-border-radius: 6px; padding: 18px; margin-bottom: 16px;
-}
-.info-card h4 { font-family: ‘Oswald’, sans-serif; font-size: 13px; color: var(–odfw-blue); letter-spacing: 1px; margin-bottom: 8px; }
-.info-card p { font-size: 13px; color: var(–text2); line-height: 1.7; }
-.info-card strong { color: var(–text); }
-
-.data-status {
-background: var(–odfw-blue); color: var(–white); border-radius: 6px;
-padding: 16px 20px;
-}
-.data-status .ds-row { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }
-.data-status .ds-row:last-child { border-bottom: none; }
-.data-status .ds-label { color: var(–odfw-gold); font-family: ‘Oswald’, sans-serif; font-size: 11px; letter-spacing: 1px; }
-.data-status .ds-val { color: var(–white); font-weight: 600; }
-
-/* Hunt type badges */
-.type-badge {
-display: inline-block; font-family: ‘Oswald’, sans-serif;
-font-size: 10px; letter-spacing: 1px; padding: 2px 8px; border-radius: 3px;
-white-space: nowrap;
-}
-.type-rifle      { background: #e3eaf5; color: #003366; border: 1px solid #b8cfe8; }
-.type-bow        { background: #fff8e1; color: #7b5800; border: 1px solid #ffe082; }
-.type-muzzleloader { background: #f3e5f5; color: #6a1b9a; border: 1px solid #ce93d8; }
-.type-youth      { background: #e8f5e9; color: #1b5e20; border: 1px solid #a5d6a7; }
-
-/* Empty state */
-.empty-state { text-align: center; padding: 48px 20px; color: var(–text3); }
-.empty-state .ei { font-size: 48px; margin-bottom: 12px; }
-.empty-state p { font-size: 15px; }
-
-@media (max-width: 600px) {
-.page-wrap { padding: 16px; }
-.header-top { padding: 12px 16px; }
-.nav-inner { padding: 0 8px; }
-.nav-item { padding: 10px 12px; font-size: 11px; }
-.points-panel { padding: 14px 16px; gap: 16px; }
-.detail-hero-stats { gap: 16px; }
-.hero-stat-val { font-size: 26px; }
-}
-</style>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ODFW Point Tracker & Analyzer</title>
+    <style>
+        :root {
+            --primary: #2c5e3b; /* Forest Green */
+            --secondary: #e6a817; /* ODFW Gold */
+            --bg: #f4f4f9;
+            --text: #333;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 20px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1, h2 {
+            color: var(--primary);
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .btn-odfw {
+            background-color: var(--secondary);
+            color: #000;
+            padding: 10px 20px;
+            text-decoration: none;
+            font-weight: bold;
+            border-radius: 5px;
+            border: 2px solid #c99314;
+            display: inline-block;
+            transition: background-color 0.3s;
+        }
+        .btn-odfw:hover {
+            background-color: #ffd15c;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .form-row {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .form-row > div {
+            flex: 1;
+            min-width: 150px;
+        }
+        input[type="number"], input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #1f4229;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: var(--primary);
+            color: white;
+        }
+        .analysis-box {
+            background-color: #e8f4ec;
+            border-left: 5px solid var(--primary);
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .alert-high { color: #d9534f; font-weight: bold; }
+        .alert-good { color: #5cb85c; font-weight: bold; }
+        .alert-hold { color: #f0ad4e; font-weight: bold; }
+    </style>
 </head>
 <body>
 
-<!-- ─── HEADER ─────────────────────────────────────── -->
+    <h1>Oregon Hunting Unit Analyzer</h1>
 
-<header class="site-header">
-  <div class="header-top">
-    <div class="odfw-seal">OR</div>
-    <div class="header-titles">
-      <div class="header-agency">Oregon Department of Fish &amp; Wildlife</div>
-      <div class="header-title">Controlled Hunt Draw Analyzer</div>
-      <div class="header-sub">2025 Buck Deer · 100 Series · Point Summary Tool</div>
-    </div>
-  </div>
-  <nav class="nav-bar">
-    <div class="nav-inner">
-      <button class="nav-item active" onclick="showView('dashboard')">Draw Dashboard</button>
-      <button class="nav-item" onclick="showView('settings')">Settings &amp; Data</button>
-    </div>
-  </nav>
-</header>
-<div class="breadcrumb-wrap">
-  <div class="breadcrumb page-wrap" style="padding-top:8px;padding-bottom:8px;max-width:none;">
-    <a href="#">ODFW</a> › <a href="#">Hunting</a> › <a href="#">Controlled Hunts</a> › Draw Point Analyzer
-  </div>
-</div>
+    <div class="card">
+        <div class="header-actions">
+            <h2>1. Input Historical Data</h2>
+            <a href="https://odfw.huntfishoregon.com/reportdownloads" target="_blank" class="btn-odfw">
+                📥 Get ODFW Reports Here
+            </a>
+        </div>
+        
+        <p><em>Check the ODFW reports and enter the minimum points required to guarantee a tag for your desired unit over the past few years.</em></p>
 
-<!-- ─── DASHBOARD VIEW ─────────────────────────────── -->
+        <div class="form-row">
+            <div class="form-group">
+                <label for="myPoints">Your Current Points:</label>
+                <input type="number" id="myPoints" placeholder="e.g., 4" min="0">
+            </div>
+            <div class="form-group">
+                <label for="year">Hunt Year:</label>
+                <input type="number" id="year" placeholder="e.g., 2023">
+            </div>
+            <div class="form-group">
+                <label for="pointsReq">Min Points to Draw:</label>
+                <input type="number" id="pointsReq" placeholder="e.g., 3" step="0.1">
+            </div>
+        </div>
+        <button onclick="addData()">Add Year Data</button>
+    </div>
 
-<div id="view-dashboard" class="view active">
-<div class="page-wrap">
+    <div class="card">
+        <h2>2. Data Trends & Analysis</h2>
+        
+        <table id="dataTable">
+            <thead>
+                <tr>
+                    <th>Year</th>
+                    <th>Min Points Required</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <!-- Data goes here -->
+            </tbody>
+        </table>
 
-  <div class="section-title">
-    <h2>2025 Buck Deer Draw Summary</h2>
-    <span class="subtitle">100 Series · 155 Controlled Hunts</span>
-  </div>
+        <div id="analysisResult" class="analysis-box" style="display:none;">
+            <!-- Analysis output goes here -->
+        </div>
+    </div>
 
-  <div class="points-panel">
-    <div>
-      <div class="points-panel-label">My Preference Points</div>
-      <div class="points-input-wrap">
-        <input type="number" id="my-points" value="5" min="0" max="30" oninput="updateAll()">
-        <span class="drawable-pill" id="drawable-count">— drawable</span>
-      </div>
-    </div>
-    <div class="legend-row" style="flex:1;justify-content:flex-end;">
-      <div class="legend-item"><div class="legend-dot" style="background:#43a047"></div>Can Draw Now</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div>Within 2 Points</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Need More Points</div>
-    </div>
-  </div>
+    <script>
+        let huntData = [];
 
-  <div class="filter-bar">
-    <input type="text" id="search-box" placeholder="Search hunt name or number..." oninput="renderTable()">
-    <div style="display:flex;align-items:center;gap:6px;">
-      <label>TYPE</label>
-      <select id="filter-type" onchange="renderTable()">
-        <option value="all">All Types</option>
-        <option value="Rifle">Rifle</option>
-        <option value="Bow">Bow</option>
-        <option value="Muzzleloader">Muzzleloader</option>
-        <option value="Youth">Youth</option>
-      </select>
-    </div>
-    <div style="display:flex;align-items:center;gap:6px;">
-      <label>STATUS</label>
-      <select id="filter-draw" onchange="renderTable()">
-        <option value="all">All Hunts</option>
-        <option value="drawable">Can Draw Now</option>
-        <option value="close">Within 2 Points</option>
-        <option value="no">Need More Points</option>
-      </select>
-    </div>
-    <div style="display:flex;align-items:center;gap:6px;">
-      <label>SORT</label>
-      <select id="sort-sel" onchange="renderTable()">
-        <option value="odds_desc">Draw Odds ↓</option>
-        <option value="odds_asc">Draw Odds ↑</option>
-        <option value="minpts_asc">Min Points ↑</option>
-        <option value="minpts_desc">Min Points ↓</option>
-        <option value="apps_desc">Most Applicants</option>
-        <option value="name_asc">Name A–Z</option>
-      </select>
-    </div>
-    <div class="results-count" id="results-count"></div>
-  </div>
+        function addData() {
+            const yearInput = document.getElementById('year').value;
+            const pointsReqInput = document.getElementById('pointsReq').value;
+            const myPointsInput = document.getElementById('myPoints').value;
 
-  <div class="hunt-table-wrap">
-    <table class="hunt-table">
-      <thead>
-        <tr>
-          <th>Hunt #</th>
-          <th>Hunt Name</th>
-          <th>Type</th>
-          <th>Status</th>
-          <th>Overall Odds</th>
-          <th>Min Pts Drew</th>
-          <th>Avg Pts Selected</th>
-          <th>My Odds</th>
-          <th>Applicants</th>
-        </tr>
-      </thead>
-      <tbody id="hunt-tbody"></tbody>
-    </table>
-  </div>
+            if (!yearInput || !pointsReqInput || !myPointsInput) {
+                alert("Please fill in your current points, the year, and the required points to draw.");
+                return;
+            }
 
-</div>
-</div>
+            // Check if year already exists to avoid duplicates
+            const existingIndex = huntData.findIndex(d => d.year === parseInt(yearInput));
+            if (existingIndex > -1) {
+                huntData[existingIndex].req = parseFloat(pointsReqInput);
+            } else {
+                huntData.push({
+                    year: parseInt(yearInput),
+                    req: parseFloat(pointsReqInput)
+                });
+            }
 
-<!-- ─── DETAIL VIEW ────────────────────────────────── -->
+            // Sort data chronologically
+            huntData.sort((a, b) => a.year - b.year);
 
-<div id="view-detail" class="view">
-<div class="page-wrap">
-  <button class="back-btn" onclick="showView('dashboard')">&#8592; Back to All Hunts</button>
-  <div id="detail-content"></div>
-</div>
-</div>
+            // Clear inputs for next entry
+            document.getElementById('year').value = '';
+            document.getElementById('pointsReq').value = '';
 
-<!-- ─── SETTINGS VIEW ─────────────────────────────── -->
+            updateTable();
+            analyzeTrends(parseFloat(myPointsInput));
+        }
 
-<div id="view-settings" class="view">
-<div class="page-wrap">
+        function deleteData(year) {
+            huntData = huntData.filter(d => d.year !== year);
+            const myPointsInput = parseFloat(document.getElementById('myPoints').value) || 0;
+            updateTable();
+            analyzeTrends(myPointsInput);
+        }
 
-  <div class="section-title">
-    <h2>Settings &amp; Data Management</h2>
-    <span class="subtitle">Upload new draw reports or link to ODFW source data</span>
-  </div>
+        function updateTable() {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
 
-  <div class="settings-grid">
-    <div>
-      <div class="settings-card" style="margin-bottom:16px;">
-        <h3>ODFW Data Source</h3>
-        <p class="help-text">Download the official draw report directly from the Oregon Department of Fish &amp; Wildlife report downloads portal.</p>
-        <a href="https://odfw.huntfishoregon.com/reportdownloads" target="_blank" class="odfw-link-btn">
-          &#8599; Open ODFW Report Downloads
-        </a>
-        <ol class="instruction-list">
-          <li><div class="step-num">1</div><div>Click the link above to open the ODFW Hunt Fish Oregon portal.</div></li>
-          <li><div class="step-num">2</div><div>Select <strong>Hunt Series: Buck Deer (100 Series)</strong> from the dropdown.</div></li>
-          <li><div class="step-num">3</div><div>Choose your desired <strong>Year</strong> and click <strong>Download Point Summary</strong>.</div></li>
-          <li><div class="step-num">4</div><div>Save the <strong>.xlsx</strong> file to your computer.</div></li>
-          <li><div class="step-num">5</div><div>Upload the file below to refresh the dashboard with the latest draw data.</div></li>
-        </ol>
-      </div>
+            huntData.forEach(data => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${data.year}</td>
+                    <td>${data.req}</td>
+                    <td><button onclick="deleteData(${data.year})" style="background-color:#d9534f; padding:5px 10px;">Remove</button></td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
 
-```
-  <div class="settings-card">
-    <h3>Upload Draw Report</h3>
-    <p class="help-text">Upload an ODFW Buck Deer Controlled Hunt Draw Report (.xlsx) to update the data shown on the dashboard.</p>
-    <div class="upload-zone" id="drop-zone"
-      onclick="document.getElementById('file-input').click()"
-      ondragover="evDragOver(event)" ondragleave="evDragLeave(event)" ondrop="evDrop(event)">
-      <div class="upload-icon">&#128193;</div>
-      <p>Click to browse or drag &amp; drop</p>
-      <small>ODFW Buck Deer Controlled Hunt Draw Report (.xlsx)</small>
-    </div>
-    <input type="file" id="file-input" accept=".xlsx" onchange="handleFile(this.files[0])">
-    <div id="upload-msg"></div>
-  </div>
-</div>
+        function analyzeTrends(myPoints) {
+            const analysisDiv = document.getElementById('analysisResult');
+            
+            if (huntData.length < 2) {
+                analysisDiv.style.display = 'block';
+                analysisDiv.innerHTML = "<h3>Analysis:</h3><p><em>Add at least 2 years of data to see point creep trends. The more years you add, the more accurate the prediction!</em></p>";
+                return;
+            }
 
-<div>
-  <div class="info-card">
-    <h4>CURRENT DATA</h4>
-    <div class="data-status">
-      <div class="ds-row"><span class="ds-label">YEAR</span><span class="ds-val" id="ds-year">2025</span></div>
-      <div class="ds-row"><span class="ds-label">SERIES</span><span class="ds-val">Buck Deer (100)</span></div>
-      <div class="ds-row"><span class="ds-label">HUNTS LOADED</span><span class="ds-val" id="ds-hunts">155</span></div>
-      <div class="ds-row"><span class="ds-label">TOTAL APPLICANTS</span><span class="ds-val" id="ds-apps">—</span></div>
-    </div>
-  </div>
+            analysisDiv.style.display = 'block';
 
-  <div class="info-card">
-    <h4>ABOUT THIS TOOL</h4>
-    <p>This analyzer parses ODFW draw report data to show you point distribution, draw odds, and personalized recommendations for every controlled hunt. Enter your preference points in the dashboard to see which hunts you can realistically draw.</p>
-  </div>
+            // Calculate "Point Creep" (Average change per year)
+            let totalCreep = 0;
+            for (let i = 1; i < huntData.length; i++) {
+                let yearDiff = huntData[i].year - huntData[i-1].year;
+                let pointDiff = huntData[i].req - huntData[i-1].req;
+                // Normalize creep per year in case years were skipped
+                totalCreep += (pointDiff / yearDiff); 
+            }
+            let avgCreep = totalCreep / (huntData.length - 1);
+            
+            let latestData = huntData[huntData.length - 1];
+            let projectedPointsNeeded = latestData.req + avgCreep;
 
-  <div class="info-card">
-    <h4>PLANNED FEATURES</h4>
-    <p>&#10003; 100 Series Buck Deer (2025)<br>
-    &#9670; Multi-year trend comparison<br>
-    &#9670; Elk (200 Series)<br>
-    &#9670; Antelope (300 Series)<br>
-    &#9670; Export/share recommendations</p>
-  </div>
-</div>
-```
+            let trendText = "";
+            if (avgCreep > 0.25) {
+                trendText = `<span class="alert-high">Severe Point Creep (+${avgCreep.toFixed(2)} pts/year).</span> The bar is rising fast.`;
+            } else if (avgCreep > 0) {
+                trendText = `Moderate Point Creep (+${avgCreep.toFixed(2)} pts/year). Points required are slowly increasing.`;
+            } else if (avgCreep < 0) {
+                trendText = `<span class="alert-good">Favorable Trend (${avgCreep.toFixed(2)} pts/year).</span> The points required are actually dropping!`;
+            } else {
+                trendText = `Stable. The points required have not changed.`;
+            }
 
-  </div>
+            // Recommendation Logic
+            let recommendation = "";
+            if (myPoints >= Math.ceil(projectedPointsNeeded)) {
+                recommendation = `<span class="alert-good">✅ Apply for the Tag!</span> You have ${myPoints} points, and the projected requirement for next year is roughly ${projectedPointsNeeded.toFixed(1)}. You have a very high statistical chance of drawing.`;
+            } else if (myPoints >= latestData.req && avgCreep > 0) {
+                recommendation = `<span class="alert-hold">⚠️ Toss-Up.</span> You met last year's requirement, but due to point creep, you might fall just short this year. It is worth applying, but have a backup plan.`;
+            } else {
+                let yearsOut = Math.ceil((projectedPointsNeeded - myPoints) / (1 - avgCreep)); // Assuming you gain 1 pt a year
+                if (yearsOut < 0 || avgCreep >= 1) {
+                    recommendation = `<span class="alert-high">❌ Point Creep outpaces your earning potential.</span> You may never draw this tag unless trends reverse. Consider a different unit.`;
+                } else {
+                    recommendation = `<span class="alert-high">⏳ Keep Buying Point Savers.</span> You are roughly ${yearsOut} year(s) away from safely drawing this tag.`;
+                }
+            }
 
-</div>
-</div>
-
-<script>
-var HUNT_DATA = [{"hunt_number":"112","hunt_name":"Wilson Unit","hunt_type":"Rifle","total_applicants":791,"total_selected":17,"total_not_selected":774,"min_pts_to_draw":2.0,"max_pts_to_draw":16.0,"avg_pts_selected":9.2,"draw_odds":2.1,"point_distribution":[{"points":0,"selected":0,"not_selected":282},{"points":1,"selected":0,"not_selected":169},{"points":2,"selected":2,"not_selected":119},{"points":3,"selected":1,"not_selected":76},{"points":4,"selected":1,"not_selected":47},{"points":5,"selected":0,"not_selected":33},{"points":6,"selected":0,"not_selected":19},{"points":7,"selected":0,"not_selected":10},{"points":8,"selected":0,"not_selected":6},{"points":9,"selected":6,"not_selected":7},{"points":10,"selected":3,"not_selected":3},{"points":12,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":2},{"points":15,"selected":2,"not_selected":0},{"points":16,"selected":2,"not_selected":0}]},{"hunt_number":"122","hunt_name":"Dixon Unit","hunt_type":"Rifle","total_applicants":1262,"total_selected":15,"total_not_selected":1247,"min_pts_to_draw":0.0,"max_pts_to_draw":28.0,"avg_pts_selected":15.1,"draw_odds":1.2,"point_distribution":[{"points":0,"selected":2,"not_selected":286},{"points":1,"selected":1,"not_selected":181},{"points":2,"selected":0,"not_selected":189},{"points":3,"selected":0,"not_selected":122},{"points":4,"selected":0,"not_selected":90},{"points":5,"selected":0,"not_selected":79},{"points":6,"selected":0,"not_selected":55},{"points":7,"selected":0,"not_selected":34},{"points":8,"selected":0,"not_selected":36},{"points":9,"selected":0,"not_selected":36},{"points":10,"selected":1,"not_selected":21},{"points":11,"selected":0,"not_selected":23},{"points":12,"selected":0,"not_selected":18},{"points":13,"selected":0,"not_selected":18},{"points":14,"selected":0,"not_selected":8},{"points":15,"selected":0,"not_selected":13},{"points":16,"selected":0,"not_selected":12},{"points":17,"selected":0,"not_selected":13},{"points":18,"selected":5,"not_selected":2},{"points":19,"selected":2,"not_selected":2},{"points":20,"selected":3,"not_selected":2},{"points":24,"selected":0,"not_selected":3},{"points":25,"selected":0,"not_selected":2},{"points":27,"selected":0,"not_selected":2},{"points":28,"selected":1,"not_selected":0}]},{"hunt_number":"131","hunt_name":"Keno Unit","hunt_type":"Rifle","total_applicants":1810,"total_selected":825,"total_not_selected":985,"min_pts_to_draw":0.0,"max_pts_to_draw":10.0,"avg_pts_selected":0.5,"draw_odds":45.6,"point_distribution":[{"points":0,"selected":496,"not_selected":510},{"points":1,"selected":289,"not_selected":223},{"points":2,"selected":32,"not_selected":125},{"points":3,"selected":5,"not_selected":64},{"points":4,"selected":0,"not_selected":24},{"points":5,"selected":1,"not_selected":15},{"points":6,"selected":0,"not_selected":3},{"points":7,"selected":0,"not_selected":3},{"points":8,"selected":0,"not_selected":1},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":2,"not_selected":0},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":3},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":4},{"points":16,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":4},{"points":18,"selected":0,"not_selected":2}]},{"hunt_number":"132","hunt_name":"Klamath Falls Unit","hunt_type":"Rifle","total_applicants":2139,"total_selected":825,"total_not_selected":1314,"min_pts_to_draw":0.0,"max_pts_to_draw":10.0,"avg_pts_selected":0.7,"draw_odds":38.6,"point_distribution":[{"points":0,"selected":359,"not_selected":707},{"points":1,"selected":369,"not_selected":281},{"points":2,"selected":74,"not_selected":135},{"points":3,"selected":11,"not_selected":88},{"points":4,"selected":5,"not_selected":30},{"points":5,"selected":3,"not_selected":31},{"points":6,"selected":3,"not_selected":6},{"points":7,"selected":0,"not_selected":3},{"points":8,"selected":0,"not_selected":6},{"points":9,"selected":0,"not_selected":5},{"points":10,"selected":1,"not_selected":6},{"points":11,"selected":0,"not_selected":3},{"points":12,"selected":0,"not_selected":4},{"points":13,"selected":0,"not_selected":4},{"points":14,"selected":0,"not_selected":3},{"points":16,"selected":0,"not_selected":1},{"points":19,"selected":0,"not_selected":1}]},{"hunt_number":"133","hunt_name":"Sprague Unit","hunt_type":"Rifle","total_applicants":1718,"total_selected":495,"total_not_selected":1223,"min_pts_to_draw":0.0,"max_pts_to_draw":3.0,"avg_pts_selected":0.4,"draw_odds":28.8,"point_distribution":[{"points":0,"selected":352,"not_selected":565},{"points":1,"selected":115,"not_selected":355},{"points":2,"selected":24,"not_selected":135},{"points":3,"selected":4,"not_selected":62},{"points":4,"selected":0,"not_selected":33},{"points":5,"selected":0,"not_selected":25},{"points":6,"selected":0,"not_selected":7},{"points":7,"selected":0,"not_selected":11},{"points":8,"selected":0,"not_selected":2},{"points":9,"selected":0,"not_selected":4},{"points":10,"selected":0,"not_selected":4},{"points":11,"selected":0,"not_selected":6},{"points":12,"selected":0,"not_selected":3},{"points":13,"selected":0,"not_selected":2},{"points":14,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":2},{"points":17,"selected":0,"not_selected":5},{"points":19,"selected":0,"not_selected":1}]},{"hunt_number":"134","hunt_name":"Upper Deschutes Unit","hunt_type":"Rifle","total_applicants":4811,"total_selected":1980,"total_not_selected":2831,"min_pts_to_draw":0.0,"max_pts_to_draw":11.0,"avg_pts_selected":0.5,"draw_odds":41.2,"point_distribution":[{"points":0,"selected":1222,"not_selected":1313},{"points":1,"selected":612,"not_selected":881},{"points":2,"selected":104,"not_selected":351},{"points":3,"selected":29,"not_selected":143},{"points":4,"selected":6,"not_selected":62},{"points":5,"selected":5,"not_selected":35},{"points":6,"selected":0,"not_selected":12},{"points":7,"selected":1,"not_selected":7},{"points":8,"selected":0,"not_selected":5},{"points":9,"selected":0,"not_selected":2},{"points":10,"selected":0,"not_selected":6},{"points":11,"selected":1,"not_selected":3},{"points":12,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":2},{"points":14,"selected":0,"not_selected":3},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":1},{"points":19,"selected":0,"not_selected":1},{"points":20,"selected":0,"not_selected":1}]},{"hunt_number":"135","hunt_name":"Paulina Unit","hunt_type":"Rifle","total_applicants":4487,"total_selected":990,"total_not_selected":3497,"min_pts_to_draw":0.0,"max_pts_to_draw":6.0,"avg_pts_selected":1.4,"draw_odds":22.1,"point_distribution":[{"points":0,"selected":237,"not_selected":1796},{"points":1,"selected":219,"not_selected":1244},{"points":2,"selected":437,"not_selected":256},{"points":3,"selected":80,"not_selected":108},{"points":4,"selected":9,"not_selected":52},{"points":5,"selected":5,"not_selected":14},{"points":6,"selected":3,"not_selected":9},{"points":7,"selected":0,"not_selected":3},{"points":8,"selected":0,"not_selected":2},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":2},{"points":11,"selected":0,"not_selected":3},{"points":12,"selected":0,"not_selected":2},{"points":14,"selected":0,"not_selected":3},{"points":16,"selected":0,"not_selected":2}]},{"hunt_number":"136","hunt_name":"Maury Unit","hunt_type":"Rifle","total_applicants":1413,"total_selected":275,"total_not_selected":1138,"min_pts_to_draw":0.0,"max_pts_to_draw":8.0,"avg_pts_selected":2.0,"draw_odds":19.5,"point_distribution":[{"points":0,"selected":36,"not_selected":448},{"points":1,"selected":33,"not_selected":470},{"points":2,"selected":140,"not_selected":153},{"points":3,"selected":45,"not_selected":36},{"points":4,"selected":14,"not_selected":17},{"points":5,"selected":1,"not_selected":3},{"points":6,"selected":3,"not_selected":5},{"points":7,"selected":2,"not_selected":0},{"points":8,"selected":1,"not_selected":0},{"points":9,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":2},{"points":21,"selected":0,"not_selected":1}]},{"hunt_number":"137","hunt_name":"Ochoco Unit","hunt_type":"Rifle","total_applicants":6094,"total_selected":2144,"total_not_selected":3950,"min_pts_to_draw":0.0,"max_pts_to_draw":17.0,"avg_pts_selected":1.3,"draw_odds":35.2,"point_distribution":[{"points":0,"selected":536,"not_selected":1628},{"points":1,"selected":820,"not_selected":1470},{"points":2,"selected":579,"not_selected":451},{"points":3,"selected":155,"not_selected":181},{"points":4,"selected":37,"not_selected":93},{"points":5,"selected":11,"not_selected":59},{"points":6,"selected":1,"not_selected":17},{"points":7,"selected":0,"not_selected":9},{"points":8,"selected":3,"not_selected":5},{"points":9,"selected":0,"not_selected":15},{"points":10,"selected":0,"not_selected":7},{"points":11,"selected":0,"not_selected":2},{"points":12,"selected":0,"not_selected":6},{"points":13,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":1},{"points":17,"selected":2,"not_selected":2},{"points":19,"selected":0,"not_selected":1},{"points":22,"selected":0,"not_selected":1}]},{"hunt_number":"138","hunt_name":"Grizzly Unit","hunt_type":"Rifle","total_applicants":3550,"total_selected":765,"total_not_selected":2785,"min_pts_to_draw":0.0,"max_pts_to_draw":10.0,"avg_pts_selected":1.8,"draw_odds":21.5,"point_distribution":[{"points":0,"selected":122,"not_selected":1187},{"points":1,"selected":94,"not_selected":1132},{"points":2,"selected":454,"not_selected":243},{"points":3,"selected":65,"not_selected":93},{"points":4,"selected":16,"not_selected":72},{"points":5,"selected":10,"not_selected":21},{"points":6,"selected":0,"not_selected":7},{"points":7,"selected":2,"not_selected":9},{"points":8,"selected":0,"not_selected":3},{"points":9,"selected":1,"not_selected":6},{"points":10,"selected":1,"not_selected":2},{"points":11,"selected":0,"not_selected":3},{"points":12,"selected":0,"not_selected":3},{"points":15,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":2},{"points":21,"selected":0,"not_selected":1}]},{"hunt_number":"139","hunt_name":"Metolius Unit","hunt_type":"Rifle","total_applicants":3130,"total_selected":242,"total_not_selected":2888,"min_pts_to_draw":0.0,"max_pts_to_draw":13.0,"avg_pts_selected":5.0,"draw_odds":7.7,"point_distribution":[{"points":0,"selected":13,"not_selected":1005},{"points":1,"selected":22,"not_selected":736},{"points":2,"selected":10,"not_selected":519},{"points":3,"selected":7,"not_selected":342},{"points":4,"selected":8,"not_selected":183},{"points":5,"selected":64,"not_selected":57},{"points":6,"selected":66,"not_selected":7},{"points":7,"selected":29,"not_selected":10},{"points":8,"selected":11,"not_selected":7},{"points":9,"selected":5,"not_selected":1},{"points":10,"selected":5,"not_selected":3},{"points":11,"selected":1,"not_selected":2},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":1,"not_selected":4},{"points":14,"selected":0,"not_selected":2},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":4},{"points":18,"selected":0,"not_selected":1},{"points":19,"selected":0,"not_selected":1},{"points":21,"selected":0,"not_selected":1}]},{"hunt_number":"140","hunt_name":"Maupin Unit","hunt_type":"Rifle","total_applicants":826,"total_selected":304,"total_not_selected":353,"min_pts_to_draw":0.0,"max_pts_to_draw":8.0,"avg_pts_selected":0.4,"draw_odds":36.8,"point_distribution":[{"points":0,"selected":219,"not_selected":145},{"points":1,"selected":66,"not_selected":95},{"points":2,"selected":13,"not_selected":53},{"points":3,"selected":2,"not_selected":22},{"points":4,"selected":1,"not_selected":8},{"points":5,"selected":1,"not_selected":12},{"points":6,"selected":0,"not_selected":3},{"points":7,"selected":0,"not_selected":1},{"points":8,"selected":2,"not_selected":3},{"points":9,"selected":0,"not_selected":2},{"points":10,"selected":0,"not_selected":0},{"points":11,"selected":0,"not_selected":2},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":0},{"points":14,"selected":0,"not_selected":2},{"points":16,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":2},{"points":18,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":1},{"points":21,"selected":0,"not_selected":0}]},{"hunt_number":"144","hunt_name":"Columbia Basin Unit","hunt_type":"Rifle","total_applicants":2589,"total_selected":1241,"total_not_selected":609,"min_pts_to_draw":0.0,"max_pts_to_draw":10.0,"avg_pts_selected":0.3,"draw_odds":47.9,"point_distribution":[{"points":0,"selected":957,"not_selected":326},{"points":1,"selected":234,"not_selected":139},{"points":2,"selected":23,"not_selected":43},{"points":3,"selected":11,"not_selected":50},{"points":4,"selected":6,"not_selected":20},{"points":5,"selected":7,"not_selected":11},{"points":6,"selected":0,"not_selected":5},{"points":7,"selected":1,"not_selected":4},{"points":8,"selected":1,"not_selected":1},{"points":9,"selected":0,"not_selected":0},{"points":10,"selected":1,"not_selected":0},{"points":11,"selected":0,"not_selected":3},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":0},{"points":15,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":0},{"points":17,"selected":0,"not_selected":2},{"points":18,"selected":0,"not_selected":3},{"points":19,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":0},{"points":21,"selected":0,"not_selected":0}]},{"hunt_number":"145","hunt_name":"Fossil Unit No. 1","hunt_type":"Rifle","total_applicants":2606,"total_selected":975,"total_not_selected":846,"min_pts_to_draw":0.0,"max_pts_to_draw":8.0,"avg_pts_selected":0.4,"draw_odds":37.4,"point_distribution":[{"points":0,"selected":659,"not_selected":327},{"points":1,"selected":265,"not_selected":238},{"points":2,"selected":32,"not_selected":137},{"points":3,"selected":12,"not_selected":40},{"points":4,"selected":3,"not_selected":29},{"points":5,"selected":2,"not_selected":33},{"points":6,"selected":1,"not_selected":10},{"points":7,"selected":0,"not_selected":1},{"points":8,"selected":1,"not_selected":3},{"points":9,"selected":0,"not_selected":9},{"points":10,"selected":0,"not_selected":2},{"points":11,"selected":0,"not_selected":3},{"points":12,"selected":0,"not_selected":3},{"points":13,"selected":0,"not_selected":0},{"points":14,"selected":0,"not_selected":2},{"points":15,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":6},{"points":17,"selected":0,"not_selected":0},{"points":18,"selected":0,"not_selected":1},{"points":19,"selected":0,"not_selected":1},{"points":21,"selected":0,"not_selected":1}]},{"hunt_number":"146","hunt_name":"Murderers Cr Unit","hunt_type":"Rifle","total_applicants":5394,"total_selected":687,"total_not_selected":4707,"min_pts_to_draw":0.0,"max_pts_to_draw":13.0,"avg_pts_selected":4.6,"draw_odds":12.7,"point_distribution":[{"points":0,"selected":38,"not_selected":1263},{"points":1,"selected":48,"not_selected":1278},{"points":2,"selected":44,"not_selected":867},{"points":3,"selected":33,"not_selected":687},{"points":4,"selected":9,"not_selected":477},{"points":5,"selected":345,"not_selected":90},{"points":6,"selected":98,"not_selected":12},{"points":7,"selected":40,"not_selected":6},{"points":8,"selected":21,"not_selected":6},{"points":9,"selected":4,"not_selected":6},{"points":10,"selected":3,"not_selected":6},{"points":11,"selected":0,"not_selected":3},{"points":12,"selected":1,"not_selected":1},{"points":13,"selected":3,"not_selected":0},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":2},{"points":18,"selected":0,"not_selected":1},{"points":20,"selected":0,"not_selected":1}]},{"hunt_number":"147","hunt_name":"Northside Unit","hunt_type":"Rifle","total_applicants":2942,"total_selected":865,"total_not_selected":2077,"min_pts_to_draw":0.0,"max_pts_to_draw":7.0,"avg_pts_selected":1.6,"draw_odds":29.4,"point_distribution":[{"points":0,"selected":182,"not_selected":789},{"points":1,"selected":168,"not_selected":822},{"points":2,"selected":394,"not_selected":205},{"points":3,"selected":83,"not_selected":151},{"points":4,"selected":16,"not_selected":63},{"points":5,"selected":17,"not_selected":24},{"points":6,"selected":2,"not_selected":6},{"points":7,"selected":3,"not_selected":4},{"points":8,"selected":0,"not_selected":2},{"points":9,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":2},{"points":12,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":2},{"points":14,"selected":0,"not_selected":2},{"points":15,"selected":0,"not_selected":2}]},{"hunt_number":"148","hunt_name":"Heppner Unit No. 1","hunt_type":"Rifle","total_applicants":5103,"total_selected":2596,"total_not_selected":2507,"min_pts_to_draw":0.0,"max_pts_to_draw":6.0,"avg_pts_selected":0.4,"draw_odds":50.9,"point_distribution":[{"points":0,"selected":1727,"not_selected":1144},{"points":1,"selected":701,"not_selected":667},{"points":2,"selected":107,"not_selected":280},{"points":3,"selected":36,"not_selected":161},{"points":4,"selected":16,"not_selected":95},{"points":5,"selected":8,"not_selected":70},{"points":6,"selected":1,"not_selected":25},{"points":7,"selected":0,"not_selected":11},{"points":8,"selected":0,"not_selected":10},{"points":9,"selected":0,"not_selected":6},{"points":10,"selected":0,"not_selected":3},{"points":11,"selected":0,"not_selected":5},{"points":12,"selected":0,"not_selected":3},{"points":13,"selected":0,"not_selected":5},{"points":14,"selected":0,"not_selected":3},{"points":15,"selected":0,"not_selected":3},{"points":16,"selected":0,"not_selected":3},{"points":17,"selected":0,"not_selected":10},{"points":18,"selected":0,"not_selected":1},{"points":21,"selected":0,"not_selected":1},{"points":26,"selected":0,"not_selected":1}]},{"hunt_number":"149","hunt_name":"Ukiah Unit","hunt_type":"Rifle","total_applicants":3352,"total_selected":1320,"total_not_selected":2032,"min_pts_to_draw":0.0,"max_pts_to_draw":13.0,"avg_pts_selected":0.4,"draw_odds":39.4,"point_distribution":[{"points":0,"selected":892,"not_selected":1011},{"points":1,"selected":346,"not_selected":591},{"points":2,"selected":55,"not_selected":222},{"points":3,"selected":23,"not_selected":70},{"points":4,"selected":1,"not_selected":41},{"points":5,"selected":0,"not_selected":26},{"points":6,"selected":1,"not_selected":10},{"points":7,"selected":0,"not_selected":8},{"points":8,"selected":0,"not_selected":7},{"points":9,"selected":0,"not_selected":4},{"points":10,"selected":1,"not_selected":10},{"points":11,"selected":0,"not_selected":8},{"points":12,"selected":0,"not_selected":3},{"points":13,"selected":1,"not_selected":6},{"points":14,"selected":0,"not_selected":3},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":3},{"points":17,"selected":0,"not_selected":5},{"points":18,"selected":0,"not_selected":1},{"points":20,"selected":0,"not_selected":2}]},{"hunt_number":"150","hunt_name":"Desolation Unit","hunt_type":"Rifle","total_applicants":2529,"total_selected":764,"total_not_selected":1765,"min_pts_to_draw":0.0,"max_pts_to_draw":15.0,"avg_pts_selected":1.3,"draw_odds":30.2,"point_distribution":[{"points":0,"selected":191,"not_selected":828},{"points":1,"selected":238,"not_selected":569},{"points":2,"selected":257,"not_selected":204},{"points":3,"selected":58,"not_selected":111},{"points":4,"selected":11,"not_selected":25},{"points":5,"selected":5,"not_selected":14},{"points":6,"selected":2,"not_selected":5},{"points":7,"selected":1,"not_selected":1},{"points":9,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":3},{"points":12,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":1,"not_selected":0},{"points":16,"selected":0,"not_selected":2}]},{"hunt_number":"151","hunt_name":"Sumpter Unit","hunt_type":"Rifle","total_applicants":3091,"total_selected":935,"total_not_selected":2156,"min_pts_to_draw":0.0,"max_pts_to_draw":8.0,"avg_pts_selected":2.1,"draw_odds":30.2,"point_distribution":[{"points":0,"selected":108,"not_selected":879},{"points":1,"selected":126,"not_selected":836},{"points":2,"selected":382,"not_selected":269},{"points":3,"selected":269,"not_selected":95},{"points":4,"selected":35,"not_selected":41},{"points":5,"selected":9,"not_selected":15},{"points":6,"selected":2,"not_selected":3},{"points":7,"selected":1,"not_selected":4},{"points":8,"selected":3,"not_selected":1},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":2},{"points":11,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":2},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":1},{"points":19,"selected":0,"not_selected":2}]},{"hunt_number":"153","hunt_name":"Catherine Cr Unit","hunt_type":"Rifle","total_applicants":1541,"total_selected":330,"total_not_selected":1211,"min_pts_to_draw":0.0,"max_pts_to_draw":14.0,"avg_pts_selected":1.9,"draw_odds":21.4,"point_distribution":[{"points":0,"selected":44,"not_selected":524},{"points":1,"selected":38,"not_selected":481},{"points":2,"selected":183,"not_selected":142},{"points":3,"selected":49,"not_selected":29},{"points":4,"selected":11,"not_selected":17},{"points":5,"selected":1,"not_selected":7},{"points":6,"selected":1,"not_selected":1},{"points":7,"selected":0,"not_selected":2},{"points":8,"selected":0,"not_selected":2},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":2},{"points":11,"selected":1,"not_selected":2},{"points":12,"selected":1,"not_selected":1},{"points":14,"selected":1,"not_selected":0}]},{"hunt_number":"155","hunt_name":"Walla Walla Unit","hunt_type":"Rifle","total_applicants":798,"total_selected":248,"total_not_selected":550,"min_pts_to_draw":0.0,"max_pts_to_draw":8.0,"avg_pts_selected":1.1,"draw_odds":31.1,"point_distribution":[{"points":0,"selected":62,"not_selected":350},{"points":1,"selected":133,"not_selected":124},{"points":2,"selected":38,"not_selected":19},{"points":3,"selected":8,"not_selected":22},{"points":4,"selected":2,"not_selected":6},{"points":5,"selected":2,"not_selected":6},{"points":6,"selected":2,"not_selected":7},{"points":8,"selected":1,"not_selected":3},{"points":9,"selected":0,"not_selected":3},{"points":10,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":2},{"points":15,"selected":0,"not_selected":2},{"points":16,"selected":0,"not_selected":2},{"points":17,"selected":0,"not_selected":2},{"points":18,"selected":0,"not_selected":1}]},{"hunt_number":"156","hunt_name":"Wenaha Unit","hunt_type":"Rifle","total_applicants":1092,"total_selected":319,"total_not_selected":773,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":1.2,"draw_odds":29.2,"point_distribution":[{"points":0,"selected":80,"not_selected":406},{"points":1,"selected":127,"not_selected":250},{"points":2,"selected":82,"not_selected":62},{"points":3,"selected":21,"not_selected":22},{"points":4,"selected":5,"not_selected":9},{"points":5,"selected":4,"not_selected":1},{"points":6,"selected":0,"not_selected":9},{"points":7,"selected":0,"not_selected":2},{"points":8,"selected":0,"not_selected":4},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":2},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":2},{"points":20,"selected":0,"not_selected":1}]},{"hunt_number":"157","hunt_name":"Sled Springs Unit","hunt_type":"Rifle","total_applicants":2511,"total_selected":1417,"total_not_selected":861,"min_pts_to_draw":0.0,"max_pts_to_draw":7.0,"avg_pts_selected":0.3,"draw_odds":56.4,"point_distribution":[{"points":0,"selected":1043,"not_selected":342},{"points":1,"selected":308,"not_selected":227},{"points":2,"selected":47,"not_selected":163},{"points":3,"selected":5,"not_selected":36},{"points":4,"selected":11,"not_selected":39},{"points":5,"selected":2,"not_selected":24},{"points":6,"selected":0,"not_selected":3},{"points":7,"selected":1,"not_selected":6},{"points":8,"selected":0,"not_selected":2},{"points":9,"selected":0,"not_selected":5},{"points":10,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":2},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":3},{"points":14,"selected":0,"not_selected":2},{"points":15,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":2},{"points":21,"selected":0,"not_selected":1}]},{"hunt_number":"158","hunt_name":"Chesnimnus Unit","hunt_type":"Rifle","total_applicants":1183,"total_selected":440,"total_not_selected":743,"min_pts_to_draw":0.0,"max_pts_to_draw":12.0,"avg_pts_selected":1.5,"draw_odds":37.2,"point_distribution":[{"points":0,"selected":110,"not_selected":370},{"points":1,"selected":127,"not_selected":273},{"points":2,"selected":129,"not_selected":40},{"points":3,"selected":58,"not_selected":23},{"points":4,"selected":4,"not_selected":8},{"points":5,"selected":6,"not_selected":8},{"points":6,"selected":4,"not_selected":3},{"points":7,"selected":0,"not_selected":4},{"points":8,"selected":0,"not_selected":10},{"points":9,"selected":1,"not_selected":0},{"points":10,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":2},{"points":12,"selected":1,"not_selected":0},{"points":15,"selected":0,"not_selected":1}]},{"hunt_number":"159","hunt_name":"Snake Rvr Unit","hunt_type":"Rifle","total_applicants":890,"total_selected":329,"total_not_selected":561,"min_pts_to_draw":0.0,"max_pts_to_draw":10.0,"avg_pts_selected":1.3,"draw_odds":37.0,"point_distribution":[{"points":0,"selected":82,"not_selected":287},{"points":1,"selected":150,"not_selected":134},{"points":2,"selected":49,"not_selected":54},{"points":3,"selected":36,"not_selected":35},{"points":4,"selected":3,"not_selected":17},{"points":5,"selected":0,"not_selected":11},{"points":6,"selected":4,"not_selected":2},{"points":7,"selected":2,"not_selected":4},{"points":8,"selected":1,"not_selected":8},{"points":9,"selected":1,"not_selected":5},{"points":10,"selected":1,"not_selected":3},{"points":22,"selected":0,"not_selected":1}]},{"hunt_number":"160","hunt_name":"Minam Unit","hunt_type":"Rifle","total_applicants":1178,"total_selected":495,"total_not_selected":683,"min_pts_to_draw":0.0,"max_pts_to_draw":6.0,"avg_pts_selected":0.4,"draw_odds":42.0,"point_distribution":[{"points":0,"selected":350,"not_selected":361},{"points":1,"selected":122,"not_selected":162},{"points":2,"selected":12,"not_selected":82},{"points":3,"selected":6,"not_selected":30},{"points":4,"selected":2,"not_selected":11},{"points":5,"selected":2,"not_selected":11},{"points":6,"selected":1,"not_selected":6},{"points":7,"selected":0,"not_selected":4},{"points":8,"selected":0,"not_selected":3},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":5},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":3},{"points":17,"selected":0,"not_selected":1}]},{"hunt_number":"161","hunt_name":"Imnaha Unit","hunt_type":"Rifle","total_applicants":1715,"total_selected":760,"total_not_selected":890,"min_pts_to_draw":0.0,"max_pts_to_draw":12.0,"avg_pts_selected":0.5,"draw_odds":44.3,"point_distribution":[{"points":0,"selected":479,"not_selected":363},{"points":1,"selected":229,"not_selected":262},{"points":2,"selected":32,"not_selected":102},{"points":3,"selected":11,"not_selected":88},{"points":4,"selected":6,"not_selected":22},{"points":5,"selected":2,"not_selected":25},{"points":6,"selected":0,"not_selected":7},{"points":7,"selected":0,"not_selected":1},{"points":8,"selected":0,"not_selected":3},{"points":9,"selected":0,"not_selected":5},{"points":10,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":4},{"points":12,"selected":1,"not_selected":2},{"points":13,"selected":0,"not_selected":2},{"points":14,"selected":0,"not_selected":0},{"points":15,"selected":0,"not_selected":2},{"points":16,"selected":0,"not_selected":0},{"points":18,"selected":0,"not_selected":1}]},{"hunt_number":"162","hunt_name":"Pine Cr Unit","hunt_type":"Rifle","total_applicants":1192,"total_selected":216,"total_not_selected":976,"min_pts_to_draw":0.0,"max_pts_to_draw":14.0,"avg_pts_selected":3.6,"draw_odds":18.1,"point_distribution":[{"points":0,"selected":12,"not_selected":308},{"points":1,"selected":23,"not_selected":271},{"points":2,"selected":14,"not_selected":171},{"points":3,"selected":14,"not_selected":166},{"points":4,"selected":100,"not_selected":28},{"points":5,"selected":42,"not_selected":15},{"points":6,"selected":5,"not_selected":1},{"points":7,"selected":3,"not_selected":3},{"points":8,"selected":0,"not_selected":3},{"points":9,"selected":0,"not_selected":2},{"points":10,"selected":2,"not_selected":2},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":1,"not_selected":1},{"points":16,"selected":0,"not_selected":3}]},{"hunt_number":"163","hunt_name":"Keating Unit","hunt_type":"Rifle","total_applicants":2284,"total_selected":326,"total_not_selected":1958,"min_pts_to_draw":0.0,"max_pts_to_draw":14.0,"avg_pts_selected":4.5,"draw_odds":14.3,"point_distribution":[{"points":0,"selected":23,"not_selected":509},{"points":1,"selected":26,"not_selected":574},{"points":2,"selected":21,"not_selected":380},{"points":3,"selected":11,"not_selected":288},{"points":4,"selected":43,"not_selected":163},{"points":5,"selected":125,"not_selected":28},{"points":6,"selected":32,"not_selected":3},{"points":7,"selected":20,"not_selected":5},{"points":8,"selected":12,"not_selected":3},{"points":9,"selected":6,"not_selected":0},{"points":10,"selected":2,"not_selected":1},{"points":12,"selected":1,"not_selected":1},{"points":13,"selected":3,"not_selected":0},{"points":14,"selected":1,"not_selected":0},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":1},{"points":19,"selected":0,"not_selected":1}]},{"hunt_number":"164","hunt_name":"Lookout Mtn Unit","hunt_type":"Rifle","total_applicants":1343,"total_selected":242,"total_not_selected":1101,"min_pts_to_draw":0.0,"max_pts_to_draw":20.0,"avg_pts_selected":3.5,"draw_odds":18.0,"point_distribution":[{"points":0,"selected":21,"not_selected":340},{"points":1,"selected":25,"not_selected":331},{"points":2,"selected":14,"not_selected":232},{"points":3,"selected":29,"not_selected":130},{"points":4,"selected":106,"not_selected":39},{"points":5,"selected":29,"not_selected":16},{"points":6,"selected":12,"not_selected":1},{"points":7,"selected":2,"not_selected":5},{"points":8,"selected":2,"not_selected":4},{"points":9,"selected":0,"not_selected":2},{"points":10,"selected":1,"not_selected":1},{"points":20,"selected":1,"not_selected":0}]},{"hunt_number":"165","hunt_name":"Beulah Unit","hunt_type":"Rifle","total_applicants":5694,"total_selected":1530,"total_not_selected":4164,"min_pts_to_draw":0.0,"max_pts_to_draw":13.0,"avg_pts_selected":2.8,"draw_odds":26.9,"point_distribution":[{"points":0,"selected":143,"not_selected":1277},{"points":1,"selected":174,"not_selected":1387},{"points":2,"selected":65,"not_selected":982},{"points":3,"selected":751,"not_selected":322},{"points":4,"selected":307,"not_selected":94},{"points":5,"selected":58,"not_selected":29},{"points":6,"selected":16,"not_selected":23},{"points":7,"selected":8,"not_selected":12},{"points":8,"selected":2,"not_selected":12},{"points":9,"selected":1,"not_selected":5},{"points":10,"selected":2,"not_selected":3},{"points":11,"selected":0,"not_selected":2},{"points":12,"selected":2,"not_selected":3},{"points":13,"selected":1,"not_selected":4},{"points":14,"selected":0,"not_selected":2},{"points":15,"selected":0,"not_selected":3},{"points":16,"selected":0,"not_selected":3},{"points":17,"selected":0,"not_selected":1}]},{"hunt_number":"166","hunt_name":"Malheur Rvr Unit","hunt_type":"Rifle","total_applicants":4160,"total_selected":1232,"total_not_selected":2928,"min_pts_to_draw":0.0,"max_pts_to_draw":13.0,"avg_pts_selected":2.3,"draw_odds":29.6,"point_distribution":[{"points":0,"selected":132,"not_selected":865},{"points":1,"selected":176,"not_selected":1058},{"points":2,"selected":331,"not_selected":619},{"points":3,"selected":481,"not_selected":196},{"points":4,"selected":80,"not_selected":93},{"points":5,"selected":20,"not_selected":45},{"points":6,"selected":6,"not_selected":5},{"points":7,"selected":4,"not_selected":11},{"points":8,"selected":0,"not_selected":9},{"points":9,"selected":0,"not_selected":13},{"points":10,"selected":0,"not_selected":6},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":2},{"points":13,"selected":2,"not_selected":1},{"points":14,"selected":0,"not_selected":2},{"points":16,"selected":0,"not_selected":2}]},{"hunt_number":"167","hunt_name":"Owyhee Unit","hunt_type":"Rifle","total_applicants":2597,"total_selected":358,"total_not_selected":2239,"min_pts_to_draw":0.0,"max_pts_to_draw":19.0,"avg_pts_selected":4.5,"draw_odds":13.8,"point_distribution":[{"points":0,"selected":27,"not_selected":569},{"points":1,"selected":26,"not_selected":557},{"points":2,"selected":21,"not_selected":420},{"points":3,"selected":15,"not_selected":370},{"points":4,"selected":57,"not_selected":187},{"points":5,"selected":126,"not_selected":50},{"points":6,"selected":43,"not_selected":25},{"points":7,"selected":22,"not_selected":16},{"points":8,"selected":2,"not_selected":15},{"points":9,"selected":2,"not_selected":5},{"points":10,"selected":3,"not_selected":13},{"points":11,"selected":11,"not_selected":5},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":2},{"points":14,"selected":0,"not_selected":2},{"points":15,"selected":2,"not_selected":0},{"points":17,"selected":0,"not_selected":1},{"points":19,"selected":1,"not_selected":0},{"points":21,"selected":0,"not_selected":1}]},{"hunt_number":"172","hunt_name":"Silvies Unit","hunt_type":"Rifle","total_applicants":4136,"total_selected":823,"total_not_selected":3313,"min_pts_to_draw":0.0,"max_pts_to_draw":9.0,"avg_pts_selected":3.8,"draw_odds":19.9,"point_distribution":[{"points":0,"selected":47,"not_selected":847},{"points":1,"selected":54,"not_selected":918},{"points":2,"selected":66,"not_selected":700},{"points":3,"selected":39,"not_selected":621},{"points":4,"selected":329,"not_selected":155},{"points":5,"selected":217,"not_selected":22},{"points":6,"selected":49,"not_selected":14},{"points":7,"selected":21,"not_selected":5},{"points":8,"selected":0,"not_selected":11},{"points":9,"selected":1,"not_selected":2},{"points":10,"selected":0,"not_selected":5},{"points":11,"selected":0,"not_selected":3},{"points":12,"selected":0,"not_selected":3},{"points":13,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":3},{"points":17,"selected":0,"not_selected":1},{"points":20,"selected":0,"not_selected":1}]},{"hunt_number":"173","hunt_name":"Wagontire Unit","hunt_type":"Rifle","total_applicants":913,"total_selected":138,"total_not_selected":775,"min_pts_to_draw":0.0,"max_pts_to_draw":9.0,"avg_pts_selected":2.9,"draw_odds":15.1,"point_distribution":[{"points":0,"selected":16,"not_selected":271},{"points":1,"selected":10,"not_selected":292},{"points":2,"selected":22,"not_selected":136},{"points":3,"selected":58,"not_selected":39},{"points":4,"selected":14,"not_selected":13},{"points":5,"selected":2,"not_selected":13},{"points":6,"selected":8,"not_selected":1},{"points":7,"selected":2,"not_selected":3},{"points":8,"selected":3,"not_selected":1},{"points":9,"selected":3,"not_selected":1},{"points":10,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":1}]},{"hunt_number":"175","hunt_name":"Interstate Unit","hunt_type":"Rifle","total_applicants":4526,"total_selected":825,"total_not_selected":3701,"min_pts_to_draw":0.0,"max_pts_to_draw":14.0,"avg_pts_selected":3.1,"draw_odds":18.2,"point_distribution":[{"points":0,"selected":64,"not_selected":1181},{"points":1,"selected":76,"not_selected":1182},{"points":2,"selected":66,"not_selected":858},{"points":3,"selected":293,"not_selected":300},{"points":4,"selected":214,"not_selected":58},{"points":5,"selected":68,"not_selected":31},{"points":6,"selected":27,"not_selected":27},{"points":7,"selected":11,"not_selected":14},{"points":8,"selected":0,"not_selected":8},{"points":9,"selected":2,"not_selected":8},{"points":10,"selected":1,"not_selected":6},{"points":11,"selected":0,"not_selected":4},{"points":12,"selected":0,"not_selected":6},{"points":13,"selected":0,"not_selected":4},{"points":14,"selected":3,"not_selected":4},{"points":16,"selected":0,"not_selected":3},{"points":17,"selected":0,"not_selected":6},{"points":18,"selected":0,"not_selected":1}]},{"hunt_number":"176","hunt_name":"Silver Lake Unit","hunt_type":"Rifle","total_applicants":3679,"total_selected":1430,"total_not_selected":2249,"min_pts_to_draw":0.0,"max_pts_to_draw":20.0,"avg_pts_selected":0.7,"draw_odds":38.9,"point_distribution":[{"points":0,"selected":650,"not_selected":1037},{"points":1,"selected":646,"not_selected":602},{"points":2,"selected":97,"not_selected":328},{"points":3,"selected":15,"not_selected":148},{"points":4,"selected":14,"not_selected":51},{"points":5,"selected":2,"not_selected":30},{"points":6,"selected":4,"not_selected":18},{"points":7,"selected":0,"not_selected":10},{"points":8,"selected":1,"not_selected":14},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":2},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":5},{"points":15,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":1},{"points":20,"selected":1,"not_selected":0}]},{"hunt_number":"177","hunt_name":"Fort Rock Unit","hunt_type":"Rifle","total_applicants":4124,"total_selected":1819,"total_not_selected":2254,"min_pts_to_draw":0.0,"max_pts_to_draw":12.0,"avg_pts_selected":0.5,"draw_odds":44.1,"point_distribution":[{"points":0,"selected":1085,"not_selected":943},{"points":1,"selected":611,"not_selected":797},{"points":2,"selected":90,"not_selected":299},{"points":3,"selected":14,"not_selected":98},{"points":4,"selected":4,"not_selected":60},{"points":5,"selected":6,"not_selected":16},{"points":6,"selected":2,"not_selected":9},{"points":7,"selected":1,"not_selected":11},{"points":8,"selected":2,"not_selected":2},{"points":9,"selected":1,"not_selected":8},{"points":10,"selected":2,"not_selected":1},{"points":12,"selected":1,"not_selected":4},{"points":13,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":2},{"points":18,"selected":0,"not_selected":2},{"points":19,"selected":0,"not_selected":1}]},{"hunt_number":"114M","hunt_name":"Trask Unit Muzzleloader","hunt_type":"Muzzleloader","total_applicants":453,"total_selected":220,"total_not_selected":233,"min_pts_to_draw":0.0,"max_pts_to_draw":12.0,"avg_pts_selected":0.6,"draw_odds":48.6,"point_distribution":[{"points":0,"selected":139,"not_selected":99},{"points":1,"selected":53,"not_selected":53},{"points":2,"selected":16,"not_selected":27},{"points":3,"selected":7,"not_selected":14},{"points":4,"selected":1,"not_selected":7},{"points":5,"selected":1,"not_selected":9},{"points":6,"selected":1,"not_selected":7},{"points":7,"selected":1,"not_selected":5},{"points":8,"selected":0,"not_selected":3},{"points":9,"selected":0,"not_selected":3},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":1,"not_selected":3},{"points":13,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":1}]},{"hunt_number":"119A","hunt_name":"W High Cascade","hunt_type":"Rifle","total_applicants":6526,"total_selected":1311,"total_not_selected":3226,"min_pts_to_draw":0.0,"max_pts_to_draw":15.0,"avg_pts_selected":0.5,"draw_odds":20.1,"point_distribution":[{"points":0,"selected":870,"not_selected":882},{"points":1,"selected":338,"not_selected":692},{"points":2,"selected":53,"not_selected":542},{"points":3,"selected":24,"not_selected":368},{"points":4,"selected":15,"not_selected":202},{"points":5,"selected":5,"not_selected":167},{"points":6,"selected":2,"not_selected":87},{"points":7,"selected":0,"not_selected":56},{"points":8,"selected":1,"not_selected":46},{"points":9,"selected":0,"not_selected":29},{"points":10,"selected":1,"not_selected":21},{"points":11,"selected":0,"not_selected":26},{"points":12,"selected":1,"not_selected":20},{"points":13,"selected":0,"not_selected":18},{"points":14,"selected":0,"not_selected":15},{"points":15,"selected":1,"not_selected":10},{"points":16,"selected":0,"not_selected":9},{"points":17,"selected":0,"not_selected":18},{"points":18,"selected":0,"not_selected":7},{"points":19,"selected":0,"not_selected":4},{"points":20,"selected":0,"not_selected":1},{"points":21,"selected":0,"not_selected":3},{"points":22,"selected":0,"not_selected":1},{"points":23,"selected":0,"not_selected":1},{"points":24,"selected":0,"not_selected":1}]},{"hunt_number":"119M","hunt_name":"McKenzie Unit Muzzleloader","hunt_type":"Muzzleloader","total_applicants":762,"total_selected":385,"total_not_selected":377,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":0.9,"draw_odds":50.5,"point_distribution":[{"points":0,"selected":108,"not_selected":227},{"points":1,"selected":223,"not_selected":50},{"points":2,"selected":39,"not_selected":31},{"points":3,"selected":10,"not_selected":20},{"points":4,"selected":3,"not_selected":13},{"points":5,"selected":2,"not_selected":7},{"points":6,"selected":0,"not_selected":3},{"points":7,"selected":0,"not_selected":7},{"points":8,"selected":0,"not_selected":2},{"points":9,"selected":0,"not_selected":3},{"points":10,"selected":0,"not_selected":4},{"points":11,"selected":0,"not_selected":3},{"points":12,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":3},{"points":16,"selected":0,"not_selected":1}]},{"hunt_number":"121M","hunt_name":"Indigo Unit Muzzleloader","hunt_type":"Muzzleloader","total_applicants":641,"total_selected":163,"total_not_selected":478,"min_pts_to_draw":0.0,"max_pts_to_draw":10.0,"avg_pts_selected":2.3,"draw_odds":25.4,"point_distribution":[{"points":0,"selected":23,"not_selected":194},{"points":1,"selected":18,"not_selected":179},{"points":2,"selected":50,"not_selected":56},{"points":3,"selected":47,"not_selected":14},{"points":4,"selected":17,"not_selected":13},{"points":5,"selected":6,"not_selected":3},{"points":6,"selected":1,"not_selected":2},{"points":7,"selected":0,"not_selected":5},{"points":8,"selected":0,"not_selected":3},{"points":9,"selected":0,"not_selected":2},{"points":10,"selected":1,"not_selected":1},{"points":11,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":2},{"points":14,"selected":0,"not_selected":2},{"points":19,"selected":0,"not_selected":1}]},{"hunt_number":"123A","hunt_name":"Umpqua","hunt_type":"Rifle","total_applicants":244,"total_selected":22,"total_not_selected":222,"min_pts_to_draw":0.0,"max_pts_to_draw":24.0,"avg_pts_selected":2.9,"draw_odds":9.0,"point_distribution":[{"points":0,"selected":4,"not_selected":113},{"points":1,"selected":1,"not_selected":47},{"points":2,"selected":11,"not_selected":16},{"points":3,"selected":4,"not_selected":7},{"points":4,"selected":1,"not_selected":5},{"points":5,"selected":0,"not_selected":4},{"points":6,"selected":0,"not_selected":3},{"points":7,"selected":0,"not_selected":2},{"points":8,"selected":0,"not_selected":6},{"points":9,"selected":0,"not_selected":5},{"points":10,"selected":0,"not_selected":2},{"points":11,"selected":0,"not_selected":3},{"points":13,"selected":0,"not_selected":3},{"points":14,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":3},{"points":22,"selected":0,"not_selected":1},{"points":24,"selected":1,"not_selected":0}]},{"hunt_number":"123B","hunt_name":"Melrose - N Bank Habitat","hunt_type":"Rifle","total_applicants":312,"total_selected":3,"total_not_selected":309,"min_pts_to_draw":2.0,"max_pts_to_draw":18.0,"avg_pts_selected":12.0,"draw_odds":1.0,"point_distribution":[{"points":0,"selected":0,"not_selected":88},{"points":1,"selected":0,"not_selected":52},{"points":2,"selected":1,"not_selected":48},{"points":3,"selected":0,"not_selected":32},{"points":4,"selected":0,"not_selected":24},{"points":5,"selected":0,"not_selected":9},{"points":6,"selected":0,"not_selected":9},{"points":7,"selected":0,"not_selected":12},{"points":8,"selected":0,"not_selected":11},{"points":9,"selected":0,"not_selected":6},{"points":10,"selected":0,"not_selected":3},{"points":11,"selected":0,"not_selected":5},{"points":13,"selected":0,"not_selected":3},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":2},{"points":16,"selected":1,"not_selected":2},{"points":18,"selected":1,"not_selected":2}]},{"hunt_number":"123M1","hunt_name":"Melrose Unit Muzzleloader","hunt_type":"Muzzleloader","total_applicants":308,"total_selected":65,"total_not_selected":176,"min_pts_to_draw":0.0,"max_pts_to_draw":10.0,"avg_pts_selected":0.7,"draw_odds":21.1,"point_distribution":[{"points":0,"selected":38,"not_selected":49},{"points":1,"selected":23,"not_selected":38},{"points":2,"selected":2,"not_selected":42},{"points":3,"selected":0,"not_selected":11},{"points":4,"selected":0,"not_selected":13},{"points":5,"selected":0,"not_selected":3},{"points":6,"selected":0,"not_selected":1},{"points":7,"selected":0,"not_selected":8},{"points":8,"selected":0,"not_selected":3},{"points":9,"selected":0,"not_selected":2},{"points":10,"selected":2,"not_selected":1},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":0},{"points":13,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":2},{"points":18,"selected":0,"not_selected":0},{"points":23,"selected":0,"not_selected":1}]},{"hunt_number":"123M2","hunt_name":"Melrose - N Bank Habitat Muzzleloader","hunt_type":"Muzzleloader","total_applicants":89,"total_selected":2,"total_not_selected":87,"min_pts_to_draw":12.0,"max_pts_to_draw":12.0,"avg_pts_selected":12.0,"draw_odds":2.2,"point_distribution":[{"points":0,"selected":0,"not_selected":19},{"points":1,"selected":0,"not_selected":13},{"points":2,"selected":0,"not_selected":15},{"points":3,"selected":0,"not_selected":7},{"points":4,"selected":0,"not_selected":5},{"points":5,"selected":0,"not_selected":4},{"points":6,"selected":0,"not_selected":1},{"points":7,"selected":0,"not_selected":10},{"points":9,"selected":0,"not_selected":4},{"points":10,"selected":0,"not_selected":2},{"points":11,"selected":0,"not_selected":2},{"points":12,"selected":2,"not_selected":0},{"points":13,"selected":0,"not_selected":2},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":1}]},{"hunt_number":"123R1","hunt_name":"Umpqua Bow","hunt_type":"Bow","total_applicants":100,"total_selected":25,"total_not_selected":46,"min_pts_to_draw":0.0,"max_pts_to_draw":6.0,"avg_pts_selected":0.8,"draw_odds":25.0,"point_distribution":[{"points":0,"selected":16,"not_selected":12},{"points":1,"selected":5,"not_selected":6},{"points":2,"selected":0,"not_selected":13},{"points":3,"selected":2,"not_selected":2},{"points":4,"selected":1,"not_selected":4},{"points":5,"selected":0,"not_selected":3},{"points":6,"selected":1,"not_selected":0},{"points":7,"selected":0,"not_selected":4},{"points":8,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":0},{"points":12,"selected":0,"not_selected":0},{"points":13,"selected":0,"not_selected":0},{"points":14,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":1}]},{"hunt_number":"123R2","hunt_name":"Melrose - N Bank Habitat Bow","hunt_type":"Bow","total_applicants":53,"total_selected":10,"total_not_selected":43,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":1.2,"draw_odds":18.9,"point_distribution":[{"points":0,"selected":4,"not_selected":14},{"points":1,"selected":3,"not_selected":11},{"points":2,"selected":2,"not_selected":8},{"points":3,"selected":0,"not_selected":3},{"points":4,"selected":0,"not_selected":3},{"points":5,"selected":1,"not_selected":3},{"points":6,"selected":0,"not_selected":1}]},{"hunt_number":"125M","hunt_name":"Sixes Unit Muzzleloader","hunt_type":"Muzzleloader","total_applicants":155,"total_selected":38,"total_not_selected":62,"min_pts_to_draw":0.0,"max_pts_to_draw":3.0,"avg_pts_selected":0.5,"draw_odds":24.5,"point_distribution":[{"points":0,"selected":25,"not_selected":21},{"points":1,"selected":9,"not_selected":14},{"points":2,"selected":3,"not_selected":9},{"points":3,"selected":1,"not_selected":6},{"points":4,"selected":0,"not_selected":4},{"points":5,"selected":0,"not_selected":3},{"points":6,"selected":0,"not_selected":1},{"points":8,"selected":0,"not_selected":1},{"points":9,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":0},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":0},{"points":13,"selected":0,"not_selected":0},{"points":14,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":0},{"points":17,"selected":0,"not_selected":0},{"points":18,"selected":0,"not_selected":0},{"points":23,"selected":0,"not_selected":2}]},{"hunt_number":"127M","hunt_name":"Chetco Unit Muzzleloader","hunt_type":"Muzzleloader","total_applicants":182,"total_selected":39,"total_not_selected":143,"min_pts_to_draw":0.0,"max_pts_to_draw":3.0,"avg_pts_selected":1.0,"draw_odds":21.4,"point_distribution":[{"points":0,"selected":17,"not_selected":49},{"points":1,"selected":9,"not_selected":24},{"points":2,"selected":8,"not_selected":31},{"points":3,"selected":5,"not_selected":17},{"points":4,"selected":0,"not_selected":6},{"points":6,"selected":0,"not_selected":1},{"points":7,"selected":0,"not_selected":4},{"points":8,"selected":0,"not_selected":6},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":1}]},{"hunt_number":"128M","hunt_name":"Applegate Unit Muzzleloader","hunt_type":"Muzzleloader","total_applicants":1265,"total_selected":325,"total_not_selected":940,"min_pts_to_draw":0.0,"max_pts_to_draw":18.0,"avg_pts_selected":3.2,"draw_odds":25.7,"point_distribution":[{"points":0,"selected":39,"not_selected":277},{"points":1,"selected":32,"not_selected":245},{"points":2,"selected":21,"not_selected":211},{"points":3,"selected":153,"not_selected":48},{"points":4,"selected":42,"not_selected":34},{"points":5,"selected":14,"not_selected":14},{"points":6,"selected":2,"not_selected":24},{"points":7,"selected":7,"not_selected":17},{"points":8,"selected":1,"not_selected":10},{"points":9,"selected":0,"not_selected":6},{"points":10,"selected":0,"not_selected":15},{"points":11,"selected":1,"not_selected":6},{"points":12,"selected":0,"not_selected":18},{"points":13,"selected":3,"not_selected":6},{"points":14,"selected":5,"not_selected":2},{"points":15,"selected":1,"not_selected":1},{"points":16,"selected":2,"not_selected":4},{"points":17,"selected":1,"not_selected":1},{"points":18,"selected":1,"not_selected":1}]},{"hunt_number":"130R","hunt_name":"Rogue-Siskiyou Early Bow","hunt_type":"Bow","total_applicants":158,"total_selected":54,"total_not_selected":104,"min_pts_to_draw":0.0,"max_pts_to_draw":14.0,"avg_pts_selected":0.9,"draw_odds":34.2,"point_distribution":[{"points":0,"selected":31,"not_selected":31},{"points":1,"selected":16,"not_selected":16},{"points":2,"selected":1,"not_selected":24},{"points":3,"selected":3,"not_selected":9},{"points":4,"selected":1,"not_selected":1},{"points":5,"selected":0,"not_selected":6},{"points":6,"selected":1,"not_selected":3},{"points":7,"selected":0,"not_selected":1},{"points":8,"selected":0,"not_selected":3},{"points":9,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":3},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":1,"not_selected":1},{"points":15,"selected":0,"not_selected":3},{"points":23,"selected":0,"not_selected":1}]},{"hunt_number":"131R1","hunt_name":"Keno Unit Bow","hunt_type":"Bow","total_applicants":360,"total_selected":101,"total_not_selected":141,"min_pts_to_draw":0.0,"max_pts_to_draw":2.0,"avg_pts_selected":0.2,"draw_odds":28.1,"point_distribution":[{"points":0,"selected":82,"not_selected":65},{"points":1,"selected":18,"not_selected":18},{"points":2,"selected":1,"not_selected":19},{"points":3,"selected":0,"not_selected":17},{"points":4,"selected":0,"not_selected":4},{"points":5,"selected":0,"not_selected":2},{"points":6,"selected":0,"not_selected":1},{"points":7,"selected":0,"not_selected":7},{"points":8,"selected":0,"not_selected":1},{"points":9,"selected":0,"not_selected":2},{"points":11,"selected":0,"not_selected":2},{"points":12,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":0},{"points":15,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":0},{"points":17,"selected":0,"not_selected":0}]},{"hunt_number":"131R2","hunt_name":"Keno Unit Late Bow","hunt_type":"Bow","total_applicants":448,"total_selected":110,"total_not_selected":338,"min_pts_to_draw":0.0,"max_pts_to_draw":8.0,"avg_pts_selected":1.9,"draw_odds":24.6,"point_distribution":[{"points":0,"selected":16,"not_selected":156},{"points":1,"selected":11,"not_selected":103},{"points":2,"selected":64,"not_selected":18},{"points":3,"selected":15,"not_selected":8},{"points":4,"selected":1,"not_selected":7},{"points":5,"selected":1,"not_selected":9},{"points":6,"selected":0,"not_selected":4},{"points":7,"selected":1,"not_selected":8},{"points":8,"selected":1,"not_selected":4},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":8},{"points":11,"selected":0,"not_selected":2},{"points":12,"selected":0,"not_selected":2},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":2},{"points":16,"selected":0,"not_selected":3},{"points":17,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":1}]},{"hunt_number":"131T","hunt_name":"Keno Unit Youth","hunt_type":"Youth","total_applicants":96,"total_selected":22,"total_not_selected":74,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":2.0,"draw_odds":22.9,"point_distribution":[{"points":0,"selected":5,"not_selected":45},{"points":1,"selected":3,"not_selected":19},{"points":2,"selected":7,"not_selected":5},{"points":3,"selected":4,"not_selected":2},{"points":4,"selected":1,"not_selected":1},{"points":5,"selected":2,"not_selected":2}]},{"hunt_number":"132M","hunt_name":"Klamath Falls Unit Muzzleloader","hunt_type":"Muzzleloader","total_applicants":458,"total_selected":21,"total_not_selected":437,"min_pts_to_draw":1.0,"max_pts_to_draw":23.0,"avg_pts_selected":12.3,"draw_odds":4.6,"point_distribution":[{"points":0,"selected":0,"not_selected":81},{"points":1,"selected":2,"not_selected":65},{"points":2,"selected":1,"not_selected":39},{"points":3,"selected":0,"not_selected":37},{"points":4,"selected":0,"not_selected":25},{"points":5,"selected":0,"not_selected":22},{"points":6,"selected":0,"not_selected":21},{"points":7,"selected":0,"not_selected":14},{"points":8,"selected":0,"not_selected":28},{"points":9,"selected":0,"not_selected":23},{"points":10,"selected":1,"not_selected":27},{"points":11,"selected":0,"not_selected":19},{"points":12,"selected":1,"not_selected":23},{"points":13,"selected":8,"not_selected":8},{"points":14,"selected":4,"not_selected":3},{"points":15,"selected":1,"not_selected":1},{"points":16,"selected":1,"not_selected":1},{"points":19,"selected":1,"not_selected":0},{"points":23,"selected":1,"not_selected":0}]},{"hunt_number":"132R","hunt_name":"Klamath Falls Unit Bow","hunt_type":"Bow","total_applicants":383,"total_selected":51,"total_not_selected":166,"min_pts_to_draw":0.0,"max_pts_to_draw":4.0,"avg_pts_selected":0.6,"draw_odds":13.3,"point_distribution":[{"points":0,"selected":34,"not_selected":89},{"points":1,"selected":9,"not_selected":42},{"points":2,"selected":2,"not_selected":10},{"points":3,"selected":4,"not_selected":5},{"points":4,"selected":2,"not_selected":1},{"points":5,"selected":0,"not_selected":1},{"points":6,"selected":0,"not_selected":1},{"points":7,"selected":0,"not_selected":2},{"points":8,"selected":0,"not_selected":1},{"points":9,"selected":0,"not_selected":2},{"points":10,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":4},{"points":13,"selected":0,"not_selected":5},{"points":14,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":0},{"points":17,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":0}]},{"hunt_number":"132T","hunt_name":"Klamath Falls Unit Youth","hunt_type":"Youth","total_applicants":108,"total_selected":22,"total_not_selected":86,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":2.1,"draw_odds":20.4,"point_distribution":[{"points":0,"selected":5,"not_selected":50},{"points":1,"selected":1,"not_selected":19},{"points":2,"selected":9,"not_selected":11},{"points":3,"selected":3,"not_selected":4},{"points":4,"selected":2,"not_selected":0},{"points":5,"selected":2,"not_selected":2}]},{"hunt_number":"133R","hunt_name":"Sprague Unit Bow","hunt_type":"Bow","total_applicants":63,"total_selected":6,"total_not_selected":42,"min_pts_to_draw":0.0,"max_pts_to_draw":1.0,"avg_pts_selected":0.3,"draw_odds":9.5,"point_distribution":[{"points":0,"selected":4,"not_selected":28},{"points":1,"selected":2,"not_selected":4},{"points":2,"selected":0,"not_selected":1},{"points":3,"selected":0,"not_selected":3},{"points":5,"selected":0,"not_selected":2},{"points":7,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":0}]},{"hunt_number":"133T","hunt_name":"Sprague Unit Youth","hunt_type":"Youth","total_applicants":64,"total_selected":15,"total_not_selected":42,"min_pts_to_draw":0.0,"max_pts_to_draw":0.0,"avg_pts_selected":0.0,"draw_odds":23.4,"point_distribution":[{"points":0,"selected":15,"not_selected":19},{"points":1,"selected":0,"not_selected":11},{"points":2,"selected":0,"not_selected":6},{"points":3,"selected":0,"not_selected":2},{"points":5,"selected":0,"not_selected":4}]},{"hunt_number":"134R","hunt_name":"Upper Deschutes Unit Bow","hunt_type":"Bow","total_applicants":886,"total_selected":270,"total_not_selected":391,"min_pts_to_draw":0.0,"max_pts_to_draw":6.0,"avg_pts_selected":0.3,"draw_odds":30.5,"point_distribution":[{"points":0,"selected":218,"not_selected":234},{"points":1,"selected":42,"not_selected":77},{"points":2,"selected":7,"not_selected":36},{"points":3,"selected":2,"not_selected":19},{"points":4,"selected":0,"not_selected":3},{"points":5,"selected":0,"not_selected":2},{"points":6,"selected":1,"not_selected":3},{"points":7,"selected":0,"not_selected":2},{"points":8,"selected":0,"not_selected":5},{"points":9,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":2},{"points":11,"selected":0,"not_selected":2},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":0},{"points":15,"selected":0,"not_selected":2},{"points":16,"selected":0,"not_selected":0},{"points":17,"selected":0,"not_selected":0},{"points":18,"selected":0,"not_selected":1},{"points":19,"selected":0,"not_selected":0},{"points":22,"selected":0,"not_selected":0},{"points":23,"selected":0,"not_selected":1}]},{"hunt_number":"135R","hunt_name":"Paulina Unit Bow","hunt_type":"Bow","total_applicants":659,"total_selected":169,"total_not_selected":309,"min_pts_to_draw":0.0,"max_pts_to_draw":4.0,"avg_pts_selected":0.4,"draw_odds":25.6,"point_distribution":[{"points":0,"selected":112,"not_selected":203},{"points":1,"selected":43,"not_selected":43},{"points":2,"selected":11,"not_selected":36},{"points":3,"selected":2,"not_selected":16},{"points":4,"selected":1,"not_selected":1},{"points":5,"selected":0,"not_selected":1},{"points":6,"selected":0,"not_selected":2},{"points":7,"selected":0,"not_selected":1},{"points":8,"selected":0,"not_selected":1},{"points":9,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":0},{"points":14,"selected":0,"not_selected":0},{"points":15,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":0},{"points":18,"selected":0,"not_selected":0},{"points":19,"selected":0,"not_selected":1},{"points":20,"selected":0,"not_selected":0}]},{"hunt_number":"136R","hunt_name":"Maury Unit Bow","hunt_type":"Bow","total_applicants":174,"total_selected":23,"total_not_selected":99,"min_pts_to_draw":0.0,"max_pts_to_draw":1.0,"avg_pts_selected":0.3,"draw_odds":13.2,"point_distribution":[{"points":0,"selected":15,"not_selected":61},{"points":1,"selected":8,"not_selected":23},{"points":2,"selected":0,"not_selected":10},{"points":3,"selected":0,"not_selected":1},{"points":4,"selected":0,"not_selected":3},{"points":5,"selected":0,"not_selected":0},{"points":6,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":0},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":0}]},{"hunt_number":"137R","hunt_name":"Ochoco Unit Bow","hunt_type":"Bow","total_applicants":860,"total_selected":329,"total_not_selected":531,"min_pts_to_draw":0.0,"max_pts_to_draw":10.0,"avg_pts_selected":0.8,"draw_odds":38.3,"point_distribution":[{"points":0,"selected":160,"not_selected":352},{"points":1,"selected":128,"not_selected":83},{"points":2,"selected":21,"not_selected":41},{"points":3,"selected":13,"not_selected":9},{"points":4,"selected":3,"not_selected":15},{"points":5,"selected":2,"not_selected":5},{"points":6,"selected":0,"not_selected":2},{"points":7,"selected":1,"not_selected":4},{"points":8,"selected":0,"not_selected":2},{"points":10,"selected":1,"not_selected":2},{"points":11,"selected":0,"not_selected":4},{"points":12,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":4},{"points":17,"selected":0,"not_selected":2},{"points":19,"selected":0,"not_selected":1},{"points":21,"selected":0,"not_selected":1},{"points":22,"selected":0,"not_selected":2}]},{"hunt_number":"138R","hunt_name":"Grizzly Unit Bow","hunt_type":"Bow","total_applicants":732,"total_selected":145,"total_not_selected":326,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":0.3,"draw_odds":19.8,"point_distribution":[{"points":0,"selected":109,"not_selected":161},{"points":1,"selected":27,"not_selected":69},{"points":2,"selected":7,"not_selected":58},{"points":3,"selected":1,"not_selected":15},{"points":4,"selected":0,"not_selected":4},{"points":5,"selected":1,"not_selected":4},{"points":6,"selected":0,"not_selected":4},{"points":7,"selected":0,"not_selected":2},{"points":8,"selected":0,"not_selected":0},{"points":9,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":0},{"points":11,"selected":0,"not_selected":0},{"points":12,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":4},{"points":17,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":0},{"points":21,"selected":0,"not_selected":0},{"points":22,"selected":0,"not_selected":1}]},{"hunt_number":"139M","hunt_name":"Metolius Unit Muzzleloader","hunt_type":"Muzzleloader","total_applicants":334,"total_selected":22,"total_not_selected":312,"min_pts_to_draw":0.0,"max_pts_to_draw":19.0,"avg_pts_selected":9.1,"draw_odds":6.6,"point_distribution":[{"points":0,"selected":2,"not_selected":80},{"points":1,"selected":1,"not_selected":56},{"points":2,"selected":1,"not_selected":38},{"points":3,"selected":0,"not_selected":41},{"points":4,"selected":0,"not_selected":18},{"points":5,"selected":0,"not_selected":21},{"points":6,"selected":0,"not_selected":15},{"points":7,"selected":1,"not_selected":15},{"points":8,"selected":0,"not_selected":9},{"points":9,"selected":4,"not_selected":6},{"points":10,"selected":2,"not_selected":3},{"points":11,"selected":7,"not_selected":2},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":3,"not_selected":3},{"points":16,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":1},{"points":19,"selected":1,"not_selected":0},{"points":20,"selected":0,"not_selected":1}]},{"hunt_number":"139R1","hunt_name":"Metolius Unit Bow","hunt_type":"Bow","total_applicants":575,"total_selected":264,"total_not_selected":311,"min_pts_to_draw":0.0,"max_pts_to_draw":21.0,"avg_pts_selected":1.4,"draw_odds":45.9,"point_distribution":[{"points":0,"selected":161,"not_selected":144},{"points":1,"selected":50,"not_selected":60},{"points":2,"selected":17,"not_selected":26},{"points":3,"selected":13,"not_selected":30},{"points":4,"selected":1,"not_selected":9},{"points":5,"selected":4,"not_selected":5},{"points":6,"selected":2,"not_selected":6},{"points":7,"selected":1,"not_selected":3},{"points":8,"selected":2,"not_selected":2},{"points":9,"selected":1,"not_selected":1},{"points":10,"selected":1,"not_selected":2},{"points":11,"selected":0,"not_selected":5},{"points":12,"selected":2,"not_selected":3},{"points":13,"selected":3,"not_selected":4},{"points":14,"selected":2,"not_selected":3},{"points":15,"selected":1,"not_selected":2},{"points":16,"selected":1,"not_selected":2},{"points":18,"selected":0,"not_selected":3},{"points":19,"selected":0,"not_selected":1},{"points":20,"selected":1,"not_selected":0},{"points":21,"selected":1,"not_selected":0}]},{"hunt_number":"139R2","hunt_name":"Metolius Unit Late Bow","hunt_type":"Bow","total_applicants":2218,"total_selected":14,"total_not_selected":2204,"min_pts_to_draw":12.0,"max_pts_to_draw":24.0,"avg_pts_selected":21.5,"draw_odds":0.6,"point_distribution":[{"points":0,"selected":0,"not_selected":349},{"points":1,"selected":0,"not_selected":274},{"points":2,"selected":0,"not_selected":214},{"points":3,"selected":0,"not_selected":209},{"points":4,"selected":0,"not_selected":115},{"points":5,"selected":0,"not_selected":101},{"points":6,"selected":0,"not_selected":96},{"points":7,"selected":0,"not_selected":85},{"points":8,"selected":0,"not_selected":95},{"points":9,"selected":0,"not_selected":67},{"points":10,"selected":0,"not_selected":63},{"points":11,"selected":0,"not_selected":74},{"points":12,"selected":1,"not_selected":51},{"points":13,"selected":0,"not_selected":71},{"points":14,"selected":1,"not_selected":63},{"points":15,"selected":0,"not_selected":40},{"points":16,"selected":0,"not_selected":48},{"points":17,"selected":0,"not_selected":41},{"points":18,"selected":0,"not_selected":46},{"points":19,"selected":0,"not_selected":19},{"points":20,"selected":0,"not_selected":27},{"points":21,"selected":1,"not_selected":27},{"points":22,"selected":0,"not_selected":19},{"points":23,"selected":10,"not_selected":4},{"points":24,"selected":1,"not_selected":2},{"points":25,"selected":0,"not_selected":3},{"points":26,"selected":0,"not_selected":1}]},{"hunt_number":"141A","hunt_name":"Hood-White River","hunt_type":"Rifle","total_applicants":1035,"total_selected":83,"total_not_selected":952,"min_pts_to_draw":0.0,"max_pts_to_draw":8.0,"avg_pts_selected":2.5,"draw_odds":8.0,"point_distribution":[{"points":0,"selected":13,"not_selected":384},{"points":1,"selected":8,"not_selected":373},{"points":2,"selected":23,"not_selected":122},{"points":3,"selected":20,"not_selected":25},{"points":4,"selected":8,"not_selected":16},{"points":5,"selected":4,"not_selected":11},{"points":6,"selected":5,"not_selected":7},{"points":7,"selected":1,"not_selected":0},{"points":8,"selected":1,"not_selected":1},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":2},{"points":16,"selected":0,"not_selected":3},{"points":19,"selected":0,"not_selected":1}]},{"hunt_number":"141B","hunt_name":"White River Unit No. 1","hunt_type":"Rifle","total_applicants":3045,"total_selected":1041,"total_not_selected":2004,"min_pts_to_draw":0.0,"max_pts_to_draw":7.0,"avg_pts_selected":1.2,"draw_odds":34.2,"point_distribution":[{"points":0,"selected":260,"not_selected":1031},{"points":1,"selected":451,"not_selected":636},{"points":2,"selected":271,"not_selected":131},{"points":3,"selected":40,"not_selected":70},{"points":4,"selected":9,"not_selected":31},{"points":5,"selected":7,"not_selected":23},{"points":6,"selected":2,"not_selected":9},{"points":7,"selected":1,"not_selected":10},{"points":8,"selected":0,"not_selected":10},{"points":9,"selected":0,"not_selected":8},{"points":10,"selected":0,"not_selected":6},{"points":11,"selected":0,"not_selected":7},{"points":12,"selected":0,"not_selected":6},{"points":13,"selected":0,"not_selected":4},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":6},{"points":16,"selected":0,"not_selected":2},{"points":17,"selected":0,"not_selected":8},{"points":18,"selected":0,"not_selected":1},{"points":19,"selected":0,"not_selected":1},{"points":20,"selected":0,"not_selected":2},{"points":25,"selected":0,"not_selected":1}]},{"hunt_number":"141C","hunt_name":"White River Unit No. 2","hunt_type":"Rifle","total_applicants":3051,"total_selected":9,"total_not_selected":3042,"min_pts_to_draw":0.0,"max_pts_to_draw":25.0,"avg_pts_selected":19.1,"draw_odds":0.3,"point_distribution":[{"points":0,"selected":1,"not_selected":582},{"points":1,"selected":0,"not_selected":498},{"points":2,"selected":0,"not_selected":332},{"points":3,"selected":0,"not_selected":216},{"points":4,"selected":0,"not_selected":171},{"points":5,"selected":0,"not_selected":129},{"points":6,"selected":0,"not_selected":154},{"points":7,"selected":0,"not_selected":123},{"points":8,"selected":1,"not_selected":99},{"points":9,"selected":0,"not_selected":89},{"points":10,"selected":0,"not_selected":75},{"points":11,"selected":0,"not_selected":84},{"points":12,"selected":0,"not_selected":63},{"points":13,"selected":0,"not_selected":61},{"points":14,"selected":0,"not_selected":48},{"points":15,"selected":0,"not_selected":55},{"points":16,"selected":0,"not_selected":63},{"points":17,"selected":0,"not_selected":52},{"points":18,"selected":0,"not_selected":40},{"points":19,"selected":0,"not_selected":33},{"points":20,"selected":0,"not_selected":15},{"points":21,"selected":0,"not_selected":22},{"points":22,"selected":0,"not_selected":14},{"points":23,"selected":5,"not_selected":15},{"points":24,"selected":1,"not_selected":2},{"points":25,"selected":1,"not_selected":4},{"points":26,"selected":0,"not_selected":3}]},{"hunt_number":"141M","hunt_name":"Hood- N White Rvr Muzzleloader","hunt_type":"Muzzleloader","total_applicants":186,"total_selected":22,"total_not_selected":164,"min_pts_to_draw":0.0,"max_pts_to_draw":8.0,"avg_pts_selected":4.7,"draw_odds":11.8,"point_distribution":[{"points":0,"selected":2,"not_selected":47},{"points":1,"selected":2,"not_selected":51},{"points":2,"selected":1,"not_selected":15},{"points":3,"selected":0,"not_selected":22},{"points":4,"selected":0,"not_selected":10},{"points":5,"selected":9,"not_selected":4},{"points":6,"selected":3,"not_selected":5},{"points":7,"selected":4,"not_selected":2},{"points":8,"selected":1,"not_selected":0},{"points":9,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":3},{"points":12,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":2},{"points":21,"selected":0,"not_selected":1}]},{"hunt_number":"141R","hunt_name":"Hood - White Rvr Bow","hunt_type":"Bow","total_applicants":577,"total_selected":196,"total_not_selected":175,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":0.4,"draw_odds":34.0,"point_distribution":[{"points":0,"selected":146,"not_selected":80},{"points":1,"selected":39,"not_selected":42},{"points":2,"selected":3,"not_selected":21},{"points":3,"selected":2,"not_selected":6},{"points":4,"selected":5,"not_selected":2},{"points":5,"selected":1,"not_selected":6},{"points":6,"selected":0,"not_selected":2},{"points":7,"selected":0,"not_selected":0},{"points":8,"selected":0,"not_selected":0},{"points":9,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":2},{"points":11,"selected":0,"not_selected":3},{"points":12,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":3},{"points":16,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":2},{"points":18,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":1},{"points":21,"selected":0,"not_selected":0}]},{"hunt_number":"141T","hunt_name":"The Dalles Watershed Youth","hunt_type":"Youth","total_applicants":418,"total_selected":7,"total_not_selected":411,"min_pts_to_draw":7.0,"max_pts_to_draw":16.0,"avg_pts_selected":13.0,"draw_odds":1.7,"point_distribution":[{"points":0,"selected":0,"not_selected":76},{"points":1,"selected":0,"not_selected":61},{"points":2,"selected":0,"not_selected":55},{"points":3,"selected":0,"not_selected":66},{"points":4,"selected":0,"not_selected":48},{"points":5,"selected":0,"not_selected":47},{"points":6,"selected":0,"not_selected":25},{"points":7,"selected":2,"not_selected":15},{"points":8,"selected":0,"not_selected":7},{"points":9,"selected":0,"not_selected":2},{"points":10,"selected":0,"not_selected":3},{"points":11,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":2},{"points":14,"selected":0,"not_selected":2},{"points":15,"selected":3,"not_selected":1},{"points":16,"selected":2,"not_selected":0}]},{"hunt_number":"142A","hunt_name":"Hood Unit No. 1","hunt_type":"Rifle","total_applicants":1102,"total_selected":120,"total_not_selected":552,"min_pts_to_draw":0.0,"max_pts_to_draw":7.0,"avg_pts_selected":0.6,"draw_odds":10.9,"point_distribution":[{"points":0,"selected":72,"not_selected":204},{"points":1,"selected":34,"not_selected":206},{"points":2,"selected":11,"not_selected":76},{"points":3,"selected":1,"not_selected":24},{"points":4,"selected":1,"not_selected":11},{"points":5,"selected":0,"not_selected":6},{"points":6,"selected":0,"not_selected":1},{"points":7,"selected":1,"not_selected":3},{"points":8,"selected":0,"not_selected":2},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":2},{"points":12,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":4},{"points":16,"selected":0,"not_selected":2},{"points":17,"selected":0,"not_selected":3},{"points":18,"selected":0,"not_selected":0},{"points":19,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":1},{"points":23,"selected":0,"not_selected":1}]},{"hunt_number":"142B","hunt_name":"Hood Unit No. 2","hunt_type":"Rifle","total_applicants":477,"total_selected":10,"total_not_selected":467,"min_pts_to_draw":0.0,"max_pts_to_draw":19.0,"avg_pts_selected":12.7,"draw_odds":2.1,"point_distribution":[{"points":0,"selected":1,"not_selected":151},{"points":1,"selected":1,"not_selected":96},{"points":2,"selected":0,"not_selected":54},{"points":3,"selected":0,"not_selected":34},{"points":4,"selected":0,"not_selected":17},{"points":5,"selected":0,"not_selected":18},{"points":6,"selected":0,"not_selected":18},{"points":7,"selected":0,"not_selected":16},{"points":8,"selected":0,"not_selected":16},{"points":9,"selected":0,"not_selected":2},{"points":10,"selected":0,"not_selected":10},{"points":11,"selected":0,"not_selected":10},{"points":12,"selected":0,"not_selected":5},{"points":13,"selected":0,"not_selected":5},{"points":14,"selected":0,"not_selected":4},{"points":15,"selected":6,"not_selected":3},{"points":16,"selected":0,"not_selected":2},{"points":17,"selected":1,"not_selected":4},{"points":18,"selected":0,"not_selected":2},{"points":19,"selected":1,"not_selected":0}]},{"hunt_number":"143A","hunt_name":"E Biggs","hunt_type":"Rifle","total_applicants":1205,"total_selected":461,"total_not_selected":435,"min_pts_to_draw":0.0,"max_pts_to_draw":16.0,"avg_pts_selected":0.4,"draw_odds":38.3,"point_distribution":[{"points":0,"selected":331,"not_selected":211},{"points":1,"selected":111,"not_selected":117},{"points":2,"selected":12,"not_selected":27},{"points":3,"selected":3,"not_selected":23},{"points":4,"selected":0,"not_selected":13},{"points":5,"selected":1,"not_selected":7},{"points":6,"selected":1,"not_selected":6},{"points":7,"selected":1,"not_selected":5},{"points":8,"selected":0,"not_selected":2},{"points":9,"selected":0,"not_selected":6},{"points":10,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":2},{"points":12,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":4},{"points":14,"selected":0,"not_selected":2},{"points":15,"selected":0,"not_selected":2},{"points":16,"selected":1,"not_selected":2},{"points":17,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":2},{"points":21,"selected":0,"not_selected":0}]},{"hunt_number":"143B","hunt_name":"W Biggs","hunt_type":"Rifle","total_applicants":1232,"total_selected":770,"total_not_selected":462,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":0.5,"draw_odds":62.5,"point_distribution":[{"points":0,"selected":483,"not_selected":271},{"points":1,"selected":241,"not_selected":88},{"points":2,"selected":29,"not_selected":34},{"points":3,"selected":10,"not_selected":21},{"points":4,"selected":3,"not_selected":10},{"points":5,"selected":4,"not_selected":15},{"points":6,"selected":0,"not_selected":4},{"points":7,"selected":0,"not_selected":2},{"points":8,"selected":0,"not_selected":6},{"points":9,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":3},{"points":12,"selected":0,"not_selected":3},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":1},{"points":19,"selected":0,"not_selected":1}]},{"hunt_number":"143C","hunt_name":"John Day Canyon","hunt_type":"Rifle","total_applicants":575,"total_selected":10,"total_not_selected":565,"min_pts_to_draw":0.0,"max_pts_to_draw":22.0,"avg_pts_selected":14.3,"draw_odds":1.7,"point_distribution":[{"points":0,"selected":1,"not_selected":144},{"points":1,"selected":1,"not_selected":95},{"points":2,"selected":0,"not_selected":58},{"points":3,"selected":0,"not_selected":52},{"points":4,"selected":0,"not_selected":31},{"points":5,"selected":0,"not_selected":41},{"points":6,"selected":0,"not_selected":34},{"points":7,"selected":0,"not_selected":15},{"points":8,"selected":0,"not_selected":15},{"points":9,"selected":0,"not_selected":18},{"points":10,"selected":0,"not_selected":12},{"points":11,"selected":0,"not_selected":10},{"points":12,"selected":0,"not_selected":8},{"points":13,"selected":0,"not_selected":9},{"points":14,"selected":0,"not_selected":10},{"points":15,"selected":0,"not_selected":6},{"points":16,"selected":2,"not_selected":5},{"points":17,"selected":3,"not_selected":1},{"points":18,"selected":1,"not_selected":0},{"points":19,"selected":1,"not_selected":0},{"points":20,"selected":0,"not_selected":1},{"points":22,"selected":1,"not_selected":0}]},{"hunt_number":"144R","hunt_name":"Columbia Plateau Bow","hunt_type":"Bow","total_applicants":195,"total_selected":44,"total_not_selected":84,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":0.4,"draw_odds":22.6,"point_distribution":[{"points":0,"selected":33,"not_selected":36},{"points":1,"selected":9,"not_selected":15},{"points":2,"selected":0,"not_selected":5},{"points":3,"selected":0,"not_selected":2},{"points":4,"selected":1,"not_selected":5},{"points":5,"selected":1,"not_selected":10},{"points":6,"selected":0,"not_selected":2},{"points":7,"selected":0,"not_selected":3},{"points":8,"selected":0,"not_selected":2},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":0},{"points":13,"selected":0,"not_selected":0},{"points":14,"selected":0,"not_selected":0},{"points":15,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":0},{"points":18,"selected":0,"not_selected":0},{"points":19,"selected":0,"not_selected":0},{"points":21,"selected":0,"not_selected":1},{"points":22,"selected":0,"not_selected":0}]},{"hunt_number":"145A","hunt_name":"Fossil Unit No. 2","hunt_type":"Rifle","total_applicants":737,"total_selected":9,"total_not_selected":728,"min_pts_to_draw":6.0,"max_pts_to_draw":18.0,"avg_pts_selected":14.9,"draw_odds":1.2,"point_distribution":[{"points":0,"selected":0,"not_selected":213},{"points":1,"selected":0,"not_selected":149},{"points":2,"selected":0,"not_selected":68},{"points":3,"selected":0,"not_selected":69},{"points":4,"selected":0,"not_selected":61},{"points":5,"selected":0,"not_selected":50},{"points":6,"selected":2,"not_selected":24},{"points":7,"selected":0,"not_selected":26},{"points":8,"selected":0,"not_selected":8},{"points":9,"selected":0,"not_selected":15},{"points":10,"selected":0,"not_selected":7},{"points":11,"selected":0,"not_selected":5},{"points":12,"selected":0,"not_selected":8},{"points":13,"selected":0,"not_selected":3},{"points":14,"selected":0,"not_selected":10},{"points":15,"selected":0,"not_selected":6},{"points":16,"selected":1,"not_selected":5},{"points":17,"selected":2,"not_selected":1},{"points":18,"selected":4,"not_selected":0}]},{"hunt_number":"145M","hunt_name":"Flatiron Muzzleloader","hunt_type":"Muzzleloader","total_applicants":139,"total_selected":66,"total_not_selected":73,"min_pts_to_draw":0.0,"max_pts_to_draw":4.0,"avg_pts_selected":1.0,"draw_odds":47.5,"point_distribution":[{"points":0,"selected":19,"not_selected":36},{"points":1,"selected":32,"not_selected":18},{"points":2,"selected":10,"not_selected":10},{"points":3,"selected":4,"not_selected":1},{"points":4,"selected":1,"not_selected":2},{"points":5,"selected":0,"not_selected":2},{"points":7,"selected":0,"not_selected":2},{"points":14,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":1}]},{"hunt_number":"145R","hunt_name":"Fossil Unit Bow","hunt_type":"Bow","total_applicants":158,"total_selected":46,"total_not_selected":74,"min_pts_to_draw":0.0,"max_pts_to_draw":4.0,"avg_pts_selected":0.3,"draw_odds":29.1,"point_distribution":[{"points":0,"selected":38,"not_selected":35},{"points":1,"selected":6,"not_selected":13},{"points":2,"selected":1,"not_selected":13},{"points":3,"selected":0,"not_selected":2},{"points":4,"selected":1,"not_selected":5},{"points":5,"selected":0,"not_selected":1},{"points":7,"selected":0,"not_selected":0},{"points":8,"selected":0,"not_selected":1},{"points":9,"selected":0,"not_selected":2},{"points":10,"selected":0,"not_selected":0},{"points":11,"selected":0,"not_selected":0},{"points":12,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":0},{"points":18,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":1},{"points":21,"selected":0,"not_selected":0}]},{"hunt_number":"146R1","hunt_name":"Murderers Cr Unit Bow","hunt_type":"Bow","total_applicants":1211,"total_selected":247,"total_not_selected":621,"min_pts_to_draw":0.0,"max_pts_to_draw":13.0,"avg_pts_selected":0.6,"draw_odds":20.4,"point_distribution":[{"points":0,"selected":152,"not_selected":274},{"points":1,"selected":73,"not_selected":90},{"points":2,"selected":14,"not_selected":67},{"points":3,"selected":3,"not_selected":46},{"points":4,"selected":2,"not_selected":44},{"points":5,"selected":0,"not_selected":47},{"points":6,"selected":1,"not_selected":19},{"points":7,"selected":1,"not_selected":0},{"points":8,"selected":0,"not_selected":3},{"points":9,"selected":0,"not_selected":3},{"points":10,"selected":0,"not_selected":7},{"points":11,"selected":0,"not_selected":4},{"points":12,"selected":0,"not_selected":3},{"points":13,"selected":1,"not_selected":1},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":2},{"points":16,"selected":0,"not_selected":4},{"points":17,"selected":0,"not_selected":3},{"points":18,"selected":0,"not_selected":2},{"points":19,"selected":0,"not_selected":0},{"points":21,"selected":0,"not_selected":0},{"points":22,"selected":0,"not_selected":1}]},{"hunt_number":"146R2","hunt_name":"Grant Co Whitetail Bow","hunt_type":"Bow","total_applicants":72,"total_selected":20,"total_not_selected":52,"min_pts_to_draw":0.0,"max_pts_to_draw":3.0,"avg_pts_selected":1.7,"draw_odds":27.8,"point_distribution":[{"points":0,"selected":5,"not_selected":24},{"points":1,"selected":3,"not_selected":11},{"points":2,"selected":5,"not_selected":3},{"points":3,"selected":7,"not_selected":8},{"points":4,"selected":0,"not_selected":1},{"points":7,"selected":0,"not_selected":1},{"points":9,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":2},{"points":20,"selected":0,"not_selected":1}]},{"hunt_number":"147R","hunt_name":"Northside Unit Bow","hunt_type":"Bow","total_applicants":775,"total_selected":214,"total_not_selected":298,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":0.4,"draw_odds":27.6,"point_distribution":[{"points":0,"selected":154,"not_selected":152},{"points":1,"selected":43,"not_selected":35},{"points":2,"selected":10,"not_selected":33},{"points":3,"selected":3,"not_selected":22},{"points":4,"selected":1,"not_selected":15},{"points":5,"selected":3,"not_selected":23},{"points":6,"selected":0,"not_selected":4},{"points":7,"selected":0,"not_selected":1},{"points":8,"selected":0,"not_selected":0},{"points":9,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":3},{"points":11,"selected":0,"not_selected":3},{"points":12,"selected":0,"not_selected":0},{"points":13,"selected":0,"not_selected":0},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":2},{"points":16,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":2},{"points":18,"selected":0,"not_selected":0},{"points":19,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":1},{"points":21,"selected":0,"not_selected":0}]},{"hunt_number":"148A","hunt_name":"Heppner Unit No. 2","hunt_type":"Rifle","total_applicants":1634,"total_selected":9,"total_not_selected":1625,"min_pts_to_draw":1.0,"max_pts_to_draw":22.0,"avg_pts_selected":15.8,"draw_odds":0.6,"point_distribution":[{"points":0,"selected":0,"not_selected":468},{"points":1,"selected":1,"not_selected":293},{"points":2,"selected":0,"not_selected":180},{"points":3,"selected":0,"not_selected":137},{"points":4,"selected":0,"not_selected":106},{"points":5,"selected":0,"not_selected":102},{"points":6,"selected":1,"not_selected":77},{"points":7,"selected":0,"not_selected":42},{"points":8,"selected":0,"not_selected":50},{"points":9,"selected":0,"not_selected":31},{"points":10,"selected":0,"not_selected":21},{"points":11,"selected":0,"not_selected":25},{"points":12,"selected":0,"not_selected":19},{"points":13,"selected":0,"not_selected":14},{"points":14,"selected":0,"not_selected":13},{"points":15,"selected":0,"not_selected":13},{"points":16,"selected":0,"not_selected":7},{"points":17,"selected":0,"not_selected":14},{"points":18,"selected":3,"not_selected":6},{"points":19,"selected":1,"not_selected":1},{"points":20,"selected":2,"not_selected":0},{"points":21,"selected":0,"not_selected":2},{"points":22,"selected":1,"not_selected":0},{"points":23,"selected":0,"not_selected":2},{"points":25,"selected":0,"not_selected":1},{"points":26,"selected":0,"not_selected":1}]},{"hunt_number":"148M","hunt_name":"Ditch Cr Muzzleloader","hunt_type":"Muzzleloader","total_applicants":385,"total_selected":169,"total_not_selected":216,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":1.1,"draw_odds":43.9,"point_distribution":[{"points":0,"selected":42,"not_selected":141},{"points":1,"selected":99,"not_selected":32},{"points":2,"selected":12,"not_selected":22},{"points":3,"selected":10,"not_selected":6},{"points":4,"selected":2,"not_selected":5},{"points":5,"selected":4,"not_selected":2},{"points":6,"selected":0,"not_selected":1},{"points":7,"selected":0,"not_selected":2},{"points":9,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":3},{"points":15,"selected":0,"not_selected":1}]},{"hunt_number":"148R","hunt_name":"Heppner Unit Bow","hunt_type":"Bow","total_applicants":799,"total_selected":266,"total_not_selected":302,"min_pts_to_draw":0.0,"max_pts_to_draw":12.0,"avg_pts_selected":0.4,"draw_odds":33.3,"point_distribution":[{"points":0,"selected":203,"not_selected":169},{"points":1,"selected":50,"not_selected":61},{"points":2,"selected":3,"not_selected":19},{"points":3,"selected":4,"not_selected":16},{"points":4,"selected":2,"not_selected":7},{"points":5,"selected":0,"not_selected":8},{"points":6,"selected":1,"not_selected":1},{"points":7,"selected":1,"not_selected":0},{"points":8,"selected":0,"not_selected":1},{"points":9,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":1},{"points":11,"selected":1,"not_selected":5},{"points":12,"selected":1,"not_selected":2},{"points":13,"selected":0,"not_selected":3},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":3},{"points":16,"selected":0,"not_selected":0},{"points":17,"selected":0,"not_selected":2},{"points":18,"selected":0,"not_selected":2},{"points":19,"selected":0,"not_selected":0},{"points":21,"selected":0,"not_selected":0},{"points":22,"selected":0,"not_selected":1}]},{"hunt_number":"149R","hunt_name":"Ukiah Unit Bow","hunt_type":"Bow","total_applicants":663,"total_selected":202,"total_not_selected":278,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":0.4,"draw_odds":30.5,"point_distribution":[{"points":0,"selected":143,"not_selected":176},{"points":1,"selected":49,"not_selected":38},{"points":2,"selected":7,"not_selected":19},{"points":3,"selected":1,"not_selected":13},{"points":4,"selected":1,"not_selected":2},{"points":5,"selected":1,"not_selected":5},{"points":6,"selected":0,"not_selected":4},{"points":7,"selected":0,"not_selected":1},{"points":8,"selected":0,"not_selected":4},{"points":9,"selected":0,"not_selected":4},{"points":10,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":3},{"points":12,"selected":0,"not_selected":0},{"points":13,"selected":0,"not_selected":0},{"points":14,"selected":0,"not_selected":2},{"points":15,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":4},{"points":18,"selected":0,"not_selected":1},{"points":19,"selected":0,"not_selected":0},{"points":22,"selected":0,"not_selected":0}]},{"hunt_number":"150R","hunt_name":"Desolation Unit Bow","hunt_type":"Bow","total_applicants":749,"total_selected":197,"total_not_selected":361,"min_pts_to_draw":0.0,"max_pts_to_draw":8.0,"avg_pts_selected":0.5,"draw_odds":26.3,"point_distribution":[{"points":0,"selected":140,"not_selected":207},{"points":1,"selected":40,"not_selected":73},{"points":2,"selected":6,"not_selected":30},{"points":3,"selected":7,"not_selected":15},{"points":4,"selected":1,"not_selected":6},{"points":5,"selected":1,"not_selected":5},{"points":6,"selected":0,"not_selected":9},{"points":7,"selected":1,"not_selected":2},{"points":8,"selected":1,"not_selected":3},{"points":9,"selected":0,"not_selected":3},{"points":10,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":2},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":0},{"points":17,"selected":0,"not_selected":0},{"points":18,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":1},{"points":21,"selected":0,"not_selected":0}]},{"hunt_number":"151M","hunt_name":"Baker Muzzleloader","hunt_type":"Muzzleloader","total_applicants":221,"total_selected":88,"total_not_selected":133,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":1.2,"draw_odds":39.8,"point_distribution":[{"points":0,"selected":22,"not_selected":69},{"points":1,"selected":42,"not_selected":34},{"points":2,"selected":15,"not_selected":9},{"points":3,"selected":6,"not_selected":8},{"points":4,"selected":2,"not_selected":8},{"points":5,"selected":1,"not_selected":0},{"points":7,"selected":0,"not_selected":2},{"points":8,"selected":0,"not_selected":2},{"points":10,"selected":0,"not_selected":1}]},{"hunt_number":"151R","hunt_name":"Sumpter Unit Bow","hunt_type":"Bow","total_applicants":736,"total_selected":234,"total_not_selected":252,"min_pts_to_draw":0.0,"max_pts_to_draw":3.0,"avg_pts_selected":0.3,"draw_odds":31.8,"point_distribution":[{"points":0,"selected":178,"not_selected":114},{"points":1,"selected":45,"not_selected":55},{"points":2,"selected":9,"not_selected":46},{"points":3,"selected":2,"not_selected":17},{"points":4,"selected":0,"not_selected":12},{"points":5,"selected":0,"not_selected":2},{"points":6,"selected":0,"not_selected":1},{"points":7,"selected":0,"not_selected":0},{"points":8,"selected":0,"not_selected":0},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":0},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":0},{"points":17,"selected":0,"not_selected":0},{"points":19,"selected":0,"not_selected":0}]},{"hunt_number":"152A","hunt_name":"Starkey","hunt_type":"Rifle","total_applicants":2085,"total_selected":384,"total_not_selected":1701,"min_pts_to_draw":0.0,"max_pts_to_draw":6.0,"avg_pts_selected":1.6,"draw_odds":18.4,"point_distribution":[{"points":0,"selected":72,"not_selected":841},{"points":1,"selected":62,"not_selected":590},{"points":2,"selected":215,"not_selected":148},{"points":3,"selected":24,"not_selected":71},{"points":4,"selected":9,"not_selected":20},{"points":5,"selected":1,"not_selected":18},{"points":6,"selected":1,"not_selected":3},{"points":8,"selected":0,"not_selected":3},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":2},{"points":15,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":1},{"points":19,"selected":0,"not_selected":1}]},{"hunt_number":"152M","hunt_name":"Grande Ronde Muzzleloader","hunt_type":"Muzzleloader","total_applicants":799,"total_selected":517,"total_not_selected":282,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":0.5,"draw_odds":64.7,"point_distribution":[{"points":0,"selected":337,"not_selected":129},{"points":1,"selected":147,"not_selected":62},{"points":2,"selected":15,"not_selected":33},{"points":3,"selected":8,"not_selected":26},{"points":4,"selected":6,"not_selected":5},{"points":5,"selected":4,"not_selected":0},{"points":6,"selected":0,"not_selected":5},{"points":8,"selected":0,"not_selected":5},{"points":9,"selected":0,"not_selected":3},{"points":10,"selected":0,"not_selected":3},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":2},{"points":15,"selected":0,"not_selected":2},{"points":16,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":3}]},{"hunt_number":"152R","hunt_name":"Starkey Bow","hunt_type":"Bow","total_applicants":782,"total_selected":239,"total_not_selected":287,"min_pts_to_draw":0.0,"max_pts_to_draw":4.0,"avg_pts_selected":0.3,"draw_odds":30.6,"point_distribution":[{"points":0,"selected":178,"not_selected":155},{"points":1,"selected":46,"not_selected":55},{"points":2,"selected":13,"not_selected":43},{"points":3,"selected":1,"not_selected":10},{"points":4,"selected":1,"not_selected":5},{"points":5,"selected":0,"not_selected":4},{"points":6,"selected":0,"not_selected":2},{"points":7,"selected":0,"not_selected":2},{"points":8,"selected":0,"not_selected":0},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":3},{"points":11,"selected":0,"not_selected":0},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":2},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":0},{"points":17,"selected":0,"not_selected":3},{"points":19,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":0}]},{"hunt_number":"153R","hunt_name":"Catherine Cr Unit Bow","hunt_type":"Bow","total_applicants":519,"total_selected":123,"total_not_selected":240,"min_pts_to_draw":0.0,"max_pts_to_draw":17.0,"avg_pts_selected":0.6,"draw_odds":23.7,"point_distribution":[{"points":0,"selected":82,"not_selected":112},{"points":1,"selected":32,"not_selected":46},{"points":2,"selected":5,"not_selected":38},{"points":3,"selected":1,"not_selected":11},{"points":4,"selected":2,"not_selected":15},{"points":5,"selected":0,"not_selected":6},{"points":6,"selected":0,"not_selected":3},{"points":7,"selected":0,"not_selected":1},{"points":8,"selected":0,"not_selected":4},{"points":9,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":0},{"points":11,"selected":0,"not_selected":0},{"points":12,"selected":0,"not_selected":0},{"points":13,"selected":0,"not_selected":0},{"points":14,"selected":0,"not_selected":2},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":0},{"points":17,"selected":1,"not_selected":1},{"points":18,"selected":0,"not_selected":0}]},{"hunt_number":"154A","hunt_name":"E Mt Emily","hunt_type":"Rifle","total_applicants":856,"total_selected":110,"total_not_selected":746,"min_pts_to_draw":0.0,"max_pts_to_draw":15.0,"avg_pts_selected":3.1,"draw_odds":12.9,"point_distribution":[{"points":0,"selected":18,"not_selected":320},{"points":1,"selected":6,"not_selected":258},{"points":2,"selected":3,"not_selected":115},{"points":3,"selected":60,"not_selected":22},{"points":4,"selected":6,"not_selected":6},{"points":5,"selected":9,"not_selected":9},{"points":6,"selected":1,"not_selected":7},{"points":7,"selected":1,"not_selected":2},{"points":8,"selected":1,"not_selected":1},{"points":9,"selected":0,"not_selected":2},{"points":11,"selected":2,"not_selected":1},{"points":13,"selected":2,"not_selected":0},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":1,"not_selected":0},{"points":17,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":1}]},{"hunt_number":"154B","hunt_name":"W Mt Emily","hunt_type":"Rifle","total_applicants":1044,"total_selected":385,"total_not_selected":659,"min_pts_to_draw":0.0,"max_pts_to_draw":6.0,"avg_pts_selected":0.9,"draw_odds":36.9,"point_distribution":[{"points":0,"selected":125,"not_selected":382},{"points":1,"selected":214,"not_selected":171},{"points":2,"selected":21,"not_selected":41},{"points":3,"selected":10,"not_selected":28},{"points":4,"selected":8,"not_selected":6},{"points":5,"selected":4,"not_selected":9},{"points":6,"selected":3,"not_selected":5},{"points":7,"selected":0,"not_selected":2},{"points":8,"selected":0,"not_selected":1},{"points":9,"selected":0,"not_selected":2},{"points":10,"selected":0,"not_selected":2},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":2},{"points":16,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":3}]},{"hunt_number":"154C","hunt_name":"Mt Emily Unit","hunt_type":"Rifle","total_applicants":3342,"total_selected":9,"total_not_selected":3333,"min_pts_to_draw":0.0,"max_pts_to_draw":23.0,"avg_pts_selected":18.9,"draw_odds":0.3,"point_distribution":[{"points":0,"selected":1,"not_selected":606},{"points":1,"selected":0,"not_selected":541},{"points":2,"selected":0,"not_selected":375},{"points":3,"selected":0,"not_selected":322},{"points":4,"selected":0,"not_selected":253},{"points":5,"selected":0,"not_selected":199},{"points":6,"selected":0,"not_selected":161},{"points":7,"selected":0,"not_selected":135},{"points":8,"selected":0,"not_selected":120},{"points":9,"selected":0,"not_selected":84},{"points":10,"selected":0,"not_selected":102},{"points":11,"selected":0,"not_selected":65},{"points":12,"selected":0,"not_selected":50},{"points":13,"selected":0,"not_selected":56},{"points":14,"selected":0,"not_selected":55},{"points":15,"selected":0,"not_selected":53},{"points":16,"selected":0,"not_selected":44},{"points":17,"selected":0,"not_selected":44},{"points":18,"selected":1,"not_selected":29},{"points":19,"selected":0,"not_selected":16},{"points":20,"selected":0,"not_selected":10},{"points":21,"selected":3,"not_selected":8},{"points":22,"selected":3,"not_selected":2},{"points":23,"selected":1,"not_selected":0},{"points":24,"selected":0,"not_selected":1},{"points":25,"selected":0,"not_selected":2}]},{"hunt_number":"154R","hunt_name":"N Blue Mtns Bow","hunt_type":"Bow","total_applicants":589,"total_selected":166,"total_not_selected":202,"min_pts_to_draw":0.0,"max_pts_to_draw":8.0,"avg_pts_selected":0.4,"draw_odds":28.2,"point_distribution":[{"points":0,"selected":120,"not_selected":87},{"points":1,"selected":38,"not_selected":53},{"points":2,"selected":5,"not_selected":25},{"points":3,"selected":2,"not_selected":14},{"points":4,"selected":0,"not_selected":6},{"points":5,"selected":0,"not_selected":4},{"points":6,"selected":0,"not_selected":2},{"points":7,"selected":0,"not_selected":2},{"points":8,"selected":1,"not_selected":0},{"points":9,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":0},{"points":11,"selected":0,"not_selected":0},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":4},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":0},{"points":17,"selected":0,"not_selected":0},{"points":18,"selected":0,"not_selected":1},{"points":19,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":0},{"points":21,"selected":0,"not_selected":0},{"points":22,"selected":0,"not_selected":0},{"points":23,"selected":0,"not_selected":1}]},{"hunt_number":"154T","hunt_name":"Mt Emily Unit Youth","hunt_type":"Youth","total_applicants":176,"total_selected":22,"total_not_selected":154,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":3.1,"draw_odds":12.5,"point_distribution":[{"points":0,"selected":3,"not_selected":59},{"points":1,"selected":1,"not_selected":45},{"points":2,"selected":1,"not_selected":28},{"points":3,"selected":6,"not_selected":18},{"points":4,"selected":7,"not_selected":2},{"points":5,"selected":4,"not_selected":0},{"points":6,"selected":0,"not_selected":2}]},{"hunt_number":"157A","hunt_name":"Lower Wallowa Valley","hunt_type":"Rifle","total_applicants":224,"total_selected":55,"total_not_selected":169,"min_pts_to_draw":0.0,"max_pts_to_draw":6.0,"avg_pts_selected":1.8,"draw_odds":24.6,"point_distribution":[{"points":0,"selected":7,"not_selected":110},{"points":1,"selected":8,"not_selected":43},{"points":2,"selected":35,"not_selected":3},{"points":3,"selected":2,"not_selected":3},{"points":4,"selected":2,"not_selected":5},{"points":5,"selected":0,"not_selected":2},{"points":6,"selected":1,"not_selected":1},{"points":7,"selected":0,"not_selected":2}]},{"hunt_number":"157M","hunt_name":"Sled Springs Unit Muzzleloader","hunt_type":"Muzzleloader","total_applicants":462,"total_selected":184,"total_not_selected":220,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":0.2,"draw_odds":39.8,"point_distribution":[{"points":0,"selected":147,"not_selected":117},{"points":1,"selected":33,"not_selected":43},{"points":2,"selected":2,"not_selected":25},{"points":3,"selected":0,"not_selected":9},{"points":4,"selected":1,"not_selected":4},{"points":5,"selected":1,"not_selected":3},{"points":6,"selected":0,"not_selected":1},{"points":7,"selected":0,"not_selected":3},{"points":8,"selected":0,"not_selected":2},{"points":9,"selected":0,"not_selected":2},{"points":10,"selected":0,"not_selected":5},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":0},{"points":17,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":1},{"points":21,"selected":0,"not_selected":1},{"points":22,"selected":0,"not_selected":0}]},{"hunt_number":"157R","hunt_name":"Sled Springs Unit Bow","hunt_type":"Bow","total_applicants":241,"total_selected":71,"total_not_selected":90,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":0.5,"draw_odds":29.5,"point_distribution":[{"points":0,"selected":52,"not_selected":44},{"points":1,"selected":11,"not_selected":19},{"points":2,"selected":6,"not_selected":10},{"points":3,"selected":0,"not_selected":3},{"points":4,"selected":0,"not_selected":3},{"points":5,"selected":2,"not_selected":3},{"points":6,"selected":0,"not_selected":2},{"points":7,"selected":0,"not_selected":0},{"points":8,"selected":0,"not_selected":3},{"points":9,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":0},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":0},{"points":14,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":0}]},{"hunt_number":"158M","hunt_name":"Chesnimnus Private Muzzleloader","hunt_type":"Muzzleloader","total_applicants":46,"total_selected":14,"total_not_selected":23,"min_pts_to_draw":0.0,"max_pts_to_draw":2.0,"avg_pts_selected":0.5,"draw_odds":30.4,"point_distribution":[{"points":0,"selected":9,"not_selected":16},{"points":1,"selected":3,"not_selected":1},{"points":2,"selected":2,"not_selected":4},{"points":3,"selected":0,"not_selected":1},{"points":4,"selected":0,"not_selected":0},{"points":11,"selected":0,"not_selected":1}]},{"hunt_number":"158R","hunt_name":"Chesnimnus Unit Bow","hunt_type":"Bow","total_applicants":191,"total_selected":56,"total_not_selected":65,"min_pts_to_draw":0.0,"max_pts_to_draw":2.0,"avg_pts_selected":0.3,"draw_odds":29.3,"point_distribution":[{"points":0,"selected":41,"not_selected":34},{"points":1,"selected":13,"not_selected":12},{"points":2,"selected":2,"not_selected":7},{"points":3,"selected":0,"not_selected":7},{"points":4,"selected":0,"not_selected":1},{"points":5,"selected":0,"not_selected":0},{"points":6,"selected":0,"not_selected":1},{"points":7,"selected":0,"not_selected":0},{"points":9,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":0},{"points":12,"selected":0,"not_selected":0},{"points":13,"selected":0,"not_selected":0},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":0},{"points":18,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":0}]},{"hunt_number":"159M","hunt_name":"Snake River Private Muzzleloader","hunt_type":"Muzzleloader","total_applicants":33,"total_selected":3,"total_not_selected":24,"min_pts_to_draw":0.0,"max_pts_to_draw":0.0,"avg_pts_selected":0.0,"draw_odds":9.1,"point_distribution":[{"points":0,"selected":3,"not_selected":6},{"points":1,"selected":0,"not_selected":13},{"points":2,"selected":0,"not_selected":3},{"points":3,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":1}]},{"hunt_number":"159R","hunt_name":"Snake Rvr Unit Bow","hunt_type":"Bow","total_applicants":120,"total_selected":13,"total_not_selected":65,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":0.7,"draw_odds":10.8,"point_distribution":[{"points":0,"selected":10,"not_selected":24},{"points":1,"selected":1,"not_selected":12},{"points":2,"selected":0,"not_selected":13},{"points":3,"selected":1,"not_selected":3},{"points":4,"selected":0,"not_selected":1},{"points":5,"selected":1,"not_selected":0},{"points":6,"selected":0,"not_selected":1},{"points":7,"selected":0,"not_selected":0},{"points":8,"selected":0,"not_selected":0},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":6},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":0},{"points":18,"selected":0,"not_selected":1},{"points":20,"selected":0,"not_selected":0}]},{"hunt_number":"160R","hunt_name":"Minam Unit Bow","hunt_type":"Bow","total_applicants":168,"total_selected":40,"total_not_selected":89,"min_pts_to_draw":0.0,"max_pts_to_draw":13.0,"avg_pts_selected":0.6,"draw_odds":23.8,"point_distribution":[{"points":0,"selected":29,"not_selected":53},{"points":1,"selected":9,"not_selected":17},{"points":2,"selected":1,"not_selected":4},{"points":3,"selected":0,"not_selected":3},{"points":4,"selected":0,"not_selected":3},{"points":5,"selected":0,"not_selected":2},{"points":6,"selected":0,"not_selected":2},{"points":7,"selected":0,"not_selected":1},{"points":8,"selected":0,"not_selected":0},{"points":9,"selected":0,"not_selected":0},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":1,"not_selected":0},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":0},{"points":17,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":1}]},{"hunt_number":"161M","hunt_name":"Imnaha Private Muzzleloader","hunt_type":"Muzzleloader","total_applicants":54,"total_selected":20,"total_not_selected":21,"min_pts_to_draw":0.0,"max_pts_to_draw":6.0,"avg_pts_selected":0.8,"draw_odds":37.0,"point_distribution":[{"points":0,"selected":11,"not_selected":14},{"points":1,"selected":6,"not_selected":3},{"points":2,"selected":1,"not_selected":0},{"points":3,"selected":1,"not_selected":1},{"points":4,"selected":0,"not_selected":2},{"points":6,"selected":1,"not_selected":0},{"points":9,"selected":0,"not_selected":0},{"points":11,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":0}]},{"hunt_number":"161R","hunt_name":"Imnaha Unit Bow","hunt_type":"Bow","total_applicants":246,"total_selected":65,"total_not_selected":119,"min_pts_to_draw":0.0,"max_pts_to_draw":3.0,"avg_pts_selected":0.3,"draw_odds":26.4,"point_distribution":[{"points":0,"selected":48,"not_selected":70},{"points":1,"selected":14,"not_selected":16},{"points":2,"selected":1,"not_selected":8},{"points":3,"selected":2,"not_selected":3},{"points":4,"selected":0,"not_selected":1},{"points":5,"selected":0,"not_selected":3},{"points":6,"selected":0,"not_selected":1},{"points":7,"selected":0,"not_selected":0},{"points":8,"selected":0,"not_selected":2},{"points":9,"selected":0,"not_selected":2},{"points":11,"selected":0,"not_selected":0},{"points":12,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":5},{"points":14,"selected":0,"not_selected":3},{"points":15,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":2},{"points":18,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":0}]},{"hunt_number":"162R","hunt_name":"Pine Cr Unit Bow","hunt_type":"Bow","total_applicants":380,"total_selected":68,"total_not_selected":139,"min_pts_to_draw":0.0,"max_pts_to_draw":4.0,"avg_pts_selected":0.3,"draw_odds":17.9,"point_distribution":[{"points":0,"selected":54,"not_selected":50},{"points":1,"selected":10,"not_selected":24},{"points":2,"selected":2,"not_selected":15},{"points":3,"selected":1,"not_selected":21},{"points":4,"selected":1,"not_selected":17},{"points":5,"selected":0,"not_selected":4},{"points":6,"selected":0,"not_selected":1},{"points":7,"selected":0,"not_selected":0},{"points":8,"selected":0,"not_selected":2},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":0},{"points":11,"selected":0,"not_selected":0},{"points":12,"selected":0,"not_selected":0},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":2}]},{"hunt_number":"163R","hunt_name":"Keating Unit Bow","hunt_type":"Bow","total_applicants":436,"total_selected":125,"total_not_selected":162,"min_pts_to_draw":0.0,"max_pts_to_draw":6.0,"avg_pts_selected":0.5,"draw_odds":28.7,"point_distribution":[{"points":0,"selected":86,"not_selected":80},{"points":1,"selected":28,"not_selected":20},{"points":2,"selected":8,"not_selected":20},{"points":3,"selected":1,"not_selected":8},{"points":4,"selected":1,"not_selected":8},{"points":5,"selected":0,"not_selected":9},{"points":6,"selected":1,"not_selected":2},{"points":7,"selected":0,"not_selected":3},{"points":8,"selected":0,"not_selected":1},{"points":9,"selected":0,"not_selected":2},{"points":10,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":0},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":4},{"points":17,"selected":0,"not_selected":0},{"points":19,"selected":0,"not_selected":1},{"points":22,"selected":0,"not_selected":0}]},{"hunt_number":"164R","hunt_name":"Lookout Mtn Unit Bow","hunt_type":"Bow","total_applicants":228,"total_selected":40,"total_not_selected":104,"min_pts_to_draw":0.0,"max_pts_to_draw":4.0,"avg_pts_selected":1.0,"draw_odds":17.5,"point_distribution":[{"points":0,"selected":21,"not_selected":41},{"points":1,"selected":6,"not_selected":20},{"points":2,"selected":9,"not_selected":29},{"points":3,"selected":1,"not_selected":3},{"points":4,"selected":3,"not_selected":5},{"points":5,"selected":0,"not_selected":2},{"points":6,"selected":0,"not_selected":0},{"points":7,"selected":0,"not_selected":1},{"points":8,"selected":0,"not_selected":0},{"points":9,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":0},{"points":12,"selected":0,"not_selected":0},{"points":13,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":1}]},{"hunt_number":"165R1","hunt_name":"Beulah Unit Bow","hunt_type":"Bow","total_applicants":955,"total_selected":223,"total_not_selected":516,"min_pts_to_draw":0.0,"max_pts_to_draw":10.0,"avg_pts_selected":0.5,"draw_odds":23.4,"point_distribution":[{"points":0,"selected":147,"not_selected":189},{"points":1,"selected":51,"not_selected":105},{"points":2,"selected":15,"not_selected":54},{"points":3,"selected":6,"not_selected":72},{"points":4,"selected":2,"not_selected":26},{"points":5,"selected":1,"not_selected":15},{"points":6,"selected":0,"not_selected":6},{"points":7,"selected":0,"not_selected":6},{"points":8,"selected":0,"not_selected":4},{"points":9,"selected":0,"not_selected":5},{"points":10,"selected":1,"not_selected":4},{"points":11,"selected":0,"not_selected":4},{"points":12,"selected":0,"not_selected":5},{"points":13,"selected":0,"not_selected":5},{"points":14,"selected":0,"not_selected":3},{"points":15,"selected":0,"not_selected":3},{"points":16,"selected":0,"not_selected":4},{"points":17,"selected":0,"not_selected":3},{"points":18,"selected":0,"not_selected":1},{"points":20,"selected":0,"not_selected":0},{"points":23,"selected":0,"not_selected":2}]},{"hunt_number":"165R2","hunt_name":"Beulah Unit Late Bow","hunt_type":"Bow","total_applicants":807,"total_selected":20,"total_not_selected":787,"min_pts_to_draw":1.0,"max_pts_to_draw":19.0,"avg_pts_selected":13.9,"draw_odds":2.5,"point_distribution":[{"points":0,"selected":0,"not_selected":125},{"points":1,"selected":1,"not_selected":101},{"points":2,"selected":1,"not_selected":97},{"points":3,"selected":0,"not_selected":82},{"points":4,"selected":0,"not_selected":62},{"points":5,"selected":0,"not_selected":34},{"points":6,"selected":1,"not_selected":28},{"points":7,"selected":0,"not_selected":28},{"points":8,"selected":2,"not_selected":31},{"points":9,"selected":0,"not_selected":29},{"points":10,"selected":0,"not_selected":38},{"points":11,"selected":0,"not_selected":22},{"points":12,"selected":0,"not_selected":16},{"points":13,"selected":0,"not_selected":26},{"points":14,"selected":0,"not_selected":18},{"points":15,"selected":0,"not_selected":21},{"points":16,"selected":5,"not_selected":21},{"points":17,"selected":7,"not_selected":1},{"points":18,"selected":2,"not_selected":1},{"points":19,"selected":1,"not_selected":2},{"points":20,"selected":0,"not_selected":3},{"points":23,"selected":0,"not_selected":1}]},{"hunt_number":"165T","hunt_name":"Beulah Unit Youth","hunt_type":"Youth","total_applicants":256,"total_selected":21,"total_not_selected":235,"min_pts_to_draw":0.0,"max_pts_to_draw":7.0,"avg_pts_selected":4.5,"draw_odds":8.2,"point_distribution":[{"points":0,"selected":1,"not_selected":75},{"points":1,"selected":3,"not_selected":52},{"points":2,"selected":0,"not_selected":43},{"points":3,"selected":1,"not_selected":33},{"points":4,"selected":1,"not_selected":21},{"points":5,"selected":8,"not_selected":6},{"points":6,"selected":5,"not_selected":5},{"points":7,"selected":2,"not_selected":0}]},{"hunt_number":"166M","hunt_name":"N Malheur Muzzleloader","hunt_type":"Muzzleloader","total_applicants":226,"total_selected":55,"total_not_selected":171,"min_pts_to_draw":0.0,"max_pts_to_draw":10.0,"avg_pts_selected":2.7,"draw_odds":24.3,"point_distribution":[{"points":0,"selected":8,"not_selected":47},{"points":1,"selected":4,"not_selected":58},{"points":2,"selected":7,"not_selected":48},{"points":3,"selected":24,"not_selected":12},{"points":4,"selected":8,"not_selected":1},{"points":5,"selected":1,"not_selected":1},{"points":6,"selected":1,"not_selected":0},{"points":7,"selected":1,"not_selected":0},{"points":10,"selected":1,"not_selected":0},{"points":13,"selected":0,"not_selected":3},{"points":15,"selected":0,"not_selected":1}]},{"hunt_number":"166R","hunt_name":"Malheur Rvr Unit Bow","hunt_type":"Bow","total_applicants":705,"total_selected":159,"total_not_selected":265,"min_pts_to_draw":0.0,"max_pts_to_draw":11.0,"avg_pts_selected":0.6,"draw_odds":22.6,"point_distribution":[{"points":0,"selected":112,"not_selected":104},{"points":1,"selected":31,"not_selected":42},{"points":2,"selected":7,"not_selected":35},{"points":3,"selected":2,"not_selected":38},{"points":4,"selected":2,"not_selected":19},{"points":5,"selected":2,"not_selected":9},{"points":6,"selected":0,"not_selected":1},{"points":7,"selected":0,"not_selected":1},{"points":8,"selected":0,"not_selected":4},{"points":9,"selected":0,"not_selected":2},{"points":10,"selected":2,"not_selected":1},{"points":11,"selected":1,"not_selected":1},{"points":12,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":2},{"points":14,"selected":0,"not_selected":0},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":0},{"points":17,"selected":0,"not_selected":2},{"points":18,"selected":0,"not_selected":0},{"points":23,"selected":0,"not_selected":1}]},{"hunt_number":"166T","hunt_name":"Malheur Rvr Unit Youth","hunt_type":"Youth","total_applicants":118,"total_selected":22,"total_not_selected":96,"min_pts_to_draw":0.0,"max_pts_to_draw":5.0,"avg_pts_selected":2.4,"draw_odds":18.6,"point_distribution":[{"points":0,"selected":4,"not_selected":37},{"points":1,"selected":1,"not_selected":29},{"points":2,"selected":5,"not_selected":17},{"points":3,"selected":8,"not_selected":6},{"points":4,"selected":3,"not_selected":6},{"points":5,"selected":1,"not_selected":0},{"points":6,"selected":0,"not_selected":1}]},{"hunt_number":"167A","hunt_name":"NE Owyhee","hunt_type":"Rifle","total_applicants":437,"total_selected":99,"total_not_selected":338,"min_pts_to_draw":0.0,"max_pts_to_draw":6.0,"avg_pts_selected":1.6,"draw_odds":22.7,"point_distribution":[{"points":0,"selected":25,"not_selected":113},{"points":1,"selected":23,"not_selected":120},{"points":2,"selected":31,"not_selected":39},{"points":3,"selected":13,"not_selected":46},{"points":4,"selected":5,"not_selected":11},{"points":5,"selected":1,"not_selected":5},{"points":6,"selected":1,"not_selected":1},{"points":7,"selected":0,"not_selected":1},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":1}]},{"hunt_number":"167R","hunt_name":"Owyhee Unit Bow","hunt_type":"Bow","total_applicants":246,"total_selected":33,"total_not_selected":136,"min_pts_to_draw":0.0,"max_pts_to_draw":4.0,"avg_pts_selected":0.6,"draw_odds":13.4,"point_distribution":[{"points":0,"selected":19,"not_selected":68},{"points":1,"selected":10,"not_selected":19},{"points":2,"selected":2,"not_selected":14},{"points":3,"selected":1,"not_selected":5},{"points":4,"selected":1,"not_selected":8},{"points":5,"selected":0,"not_selected":12},{"points":6,"selected":0,"not_selected":2},{"points":7,"selected":0,"not_selected":4},{"points":8,"selected":0,"not_selected":0},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":0},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":0},{"points":17,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":0}]},{"hunt_number":"168A","hunt_name":"Trout Cr Mtns","hunt_type":"Rifle","total_applicants":3942,"total_selected":64,"total_not_selected":3878,"min_pts_to_draw":0.0,"max_pts_to_draw":26.0,"avg_pts_selected":16.3,"draw_odds":1.6,"point_distribution":[{"points":0,"selected":1,"not_selected":468},{"points":1,"selected":3,"not_selected":470},{"points":2,"selected":2,"not_selected":457},{"points":3,"selected":0,"not_selected":361},{"points":4,"selected":1,"not_selected":296},{"points":5,"selected":1,"not_selected":300},{"points":6,"selected":0,"not_selected":224},{"points":7,"selected":1,"not_selected":192},{"points":8,"selected":0,"not_selected":152},{"points":9,"selected":3,"not_selected":155},{"points":10,"selected":0,"not_selected":117},{"points":11,"selected":1,"not_selected":106},{"points":12,"selected":0,"not_selected":91},{"points":13,"selected":0,"not_selected":82},{"points":14,"selected":0,"not_selected":80},{"points":15,"selected":1,"not_selected":69},{"points":16,"selected":1,"not_selected":66},{"points":17,"selected":1,"not_selected":69},{"points":18,"selected":16,"not_selected":54},{"points":19,"selected":20,"not_selected":8},{"points":20,"selected":3,"not_selected":11},{"points":21,"selected":3,"not_selected":7},{"points":22,"selected":2,"not_selected":8},{"points":23,"selected":1,"not_selected":8},{"points":24,"selected":0,"not_selected":17},{"points":25,"selected":1,"not_selected":5},{"points":26,"selected":2,"not_selected":5}]},{"hunt_number":"168B","hunt_name":"E Whitehorse","hunt_type":"Rifle","total_applicants":916,"total_selected":246,"total_not_selected":670,"min_pts_to_draw":0.0,"max_pts_to_draw":14.0,"avg_pts_selected":2.2,"draw_odds":26.9,"point_distribution":[{"points":0,"selected":29,"not_selected":245},{"points":1,"selected":36,"not_selected":209},{"points":2,"selected":122,"not_selected":64},{"points":3,"selected":31,"not_selected":46},{"points":4,"selected":12,"not_selected":27},{"points":5,"selected":3,"not_selected":26},{"points":6,"selected":2,"not_selected":18},{"points":7,"selected":2,"not_selected":5},{"points":8,"selected":2,"not_selected":4},{"points":9,"selected":2,"not_selected":4},{"points":10,"selected":2,"not_selected":3},{"points":11,"selected":2,"not_selected":4},{"points":12,"selected":0,"not_selected":4},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":1,"not_selected":4},{"points":16,"selected":0,"not_selected":2},{"points":17,"selected":0,"not_selected":2},{"points":21,"selected":0,"not_selected":1},{"points":25,"selected":0,"not_selected":1}]},{"hunt_number":"168M","hunt_name":"NE Whitehorse Muzzleloader","hunt_type":"Muzzleloader","total_applicants":298,"total_selected":21,"total_not_selected":277,"min_pts_to_draw":0.0,"max_pts_to_draw":16.0,"avg_pts_selected":11.2,"draw_odds":7.0,"point_distribution":[{"points":0,"selected":1,"not_selected":46},{"points":1,"selected":0,"not_selected":40},{"points":2,"selected":0,"not_selected":12},{"points":3,"selected":0,"not_selected":27},{"points":4,"selected":0,"not_selected":31},{"points":5,"selected":2,"not_selected":22},{"points":6,"selected":1,"not_selected":9},{"points":7,"selected":0,"not_selected":19},{"points":8,"selected":0,"not_selected":9},{"points":9,"selected":0,"not_selected":14},{"points":10,"selected":1,"not_selected":11},{"points":11,"selected":0,"not_selected":18},{"points":12,"selected":8,"not_selected":1},{"points":13,"selected":2,"not_selected":2},{"points":14,"selected":4,"not_selected":4},{"points":15,"selected":1,"not_selected":3},{"points":16,"selected":1,"not_selected":2},{"points":17,"selected":0,"not_selected":2},{"points":18,"selected":0,"not_selected":1},{"points":21,"selected":0,"not_selected":1},{"points":22,"selected":0,"not_selected":2},{"points":24,"selected":0,"not_selected":1}]},{"hunt_number":"168R1","hunt_name":"E Whitehorse Bow","hunt_type":"Bow","total_applicants":57,"total_selected":8,"total_not_selected":35,"min_pts_to_draw":0.0,"max_pts_to_draw":2.0,"avg_pts_selected":0.4,"draw_odds":14.0,"point_distribution":[{"points":0,"selected":6,"not_selected":12},{"points":1,"selected":1,"not_selected":8},{"points":2,"selected":1,"not_selected":3},{"points":3,"selected":0,"not_selected":1},{"points":5,"selected":0,"not_selected":0},{"points":6,"selected":0,"not_selected":0},{"points":8,"selected":0,"not_selected":2},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":2},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":2},{"points":17,"selected":0,"not_selected":1},{"points":20,"selected":0,"not_selected":1}]},{"hunt_number":"168R2","hunt_name":"Trout Cr Mtns Traditional Bow","hunt_type":"Bow","total_applicants":193,"total_selected":35,"total_not_selected":83,"min_pts_to_draw":0.0,"max_pts_to_draw":9.0,"avg_pts_selected":0.9,"draw_odds":18.1,"point_distribution":[{"points":0,"selected":18,"not_selected":17},{"points":1,"selected":11,"not_selected":15},{"points":2,"selected":5,"not_selected":7},{"points":3,"selected":0,"not_selected":12},{"points":4,"selected":0,"not_selected":1},{"points":5,"selected":0,"not_selected":2},{"points":6,"selected":0,"not_selected":6},{"points":7,"selected":0,"not_selected":2},{"points":8,"selected":0,"not_selected":1},{"points":9,"selected":1,"not_selected":1},{"points":10,"selected":0,"not_selected":3},{"points":11,"selected":0,"not_selected":4},{"points":12,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":3},{"points":14,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":4},{"points":20,"selected":0,"not_selected":1},{"points":21,"selected":0,"not_selected":1}]},{"hunt_number":"169A","hunt_name":"Steens Mtn","hunt_type":"Rifle","total_applicants":2555,"total_selected":286,"total_not_selected":2269,"min_pts_to_draw":0.0,"max_pts_to_draw":22.0,"avg_pts_selected":7.6,"draw_odds":11.2,"point_distribution":[{"points":0,"selected":10,"not_selected":481},{"points":1,"selected":20,"not_selected":430},{"points":2,"selected":8,"not_selected":352},{"points":3,"selected":7,"not_selected":266},{"points":4,"selected":11,"not_selected":204},{"points":5,"selected":6,"not_selected":190},{"points":6,"selected":8,"not_selected":132},{"points":7,"selected":1,"not_selected":83},{"points":8,"selected":86,"not_selected":31},{"points":9,"selected":68,"not_selected":26},{"points":10,"selected":39,"not_selected":16},{"points":11,"selected":3,"not_selected":15},{"points":12,"selected":7,"not_selected":13},{"points":13,"selected":1,"not_selected":6},{"points":14,"selected":2,"not_selected":10},{"points":15,"selected":5,"not_selected":3},{"points":16,"selected":0,"not_selected":3},{"points":17,"selected":2,"not_selected":6},{"points":18,"selected":0,"not_selected":1},{"points":20,"selected":1,"not_selected":0},{"points":21,"selected":0,"not_selected":1},{"points":22,"selected":1,"not_selected":0}]},{"hunt_number":"169R","hunt_name":"Steens Mtn Bow","hunt_type":"Bow","total_applicants":196,"total_selected":39,"total_not_selected":75,"min_pts_to_draw":0.0,"max_pts_to_draw":3.0,"avg_pts_selected":0.6,"draw_odds":19.9,"point_distribution":[{"points":0,"selected":22,"not_selected":46},{"points":1,"selected":12,"not_selected":6},{"points":2,"selected":4,"not_selected":3},{"points":3,"selected":1,"not_selected":2},{"points":4,"selected":0,"not_selected":0},{"points":5,"selected":0,"not_selected":0},{"points":6,"selected":0,"not_selected":1},{"points":7,"selected":0,"not_selected":6},{"points":8,"selected":0,"not_selected":5},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":3},{"points":11,"selected":0,"not_selected":0},{"points":12,"selected":0,"not_selected":0},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":0},{"points":17,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":1}]},{"hunt_number":"169T","hunt_name":"Steens Mtn Unit Youth","hunt_type":"Youth","total_applicants":216,"total_selected":22,"total_not_selected":194,"min_pts_to_draw":0.0,"max_pts_to_draw":8.0,"avg_pts_selected":5.0,"draw_odds":10.2,"point_distribution":[{"points":0,"selected":3,"not_selected":51},{"points":1,"selected":1,"not_selected":39},{"points":2,"selected":0,"not_selected":39},{"points":3,"selected":0,"not_selected":34},{"points":4,"selected":1,"not_selected":21},{"points":5,"selected":7,"not_selected":8},{"points":6,"selected":4,"not_selected":2},{"points":7,"selected":3,"not_selected":0},{"points":8,"selected":3,"not_selected":0}]},{"hunt_number":"170A","hunt_name":"Beatys Butte","hunt_type":"Rifle","total_applicants":679,"total_selected":138,"total_not_selected":541,"min_pts_to_draw":0.0,"max_pts_to_draw":10.0,"avg_pts_selected":2.8,"draw_odds":20.3,"point_distribution":[{"points":0,"selected":11,"not_selected":135},{"points":1,"selected":23,"not_selected":174},{"points":2,"selected":22,"not_selected":115},{"points":3,"selected":49,"not_selected":29},{"points":4,"selected":20,"not_selected":27},{"points":5,"selected":7,"not_selected":11},{"points":6,"selected":0,"not_selected":4},{"points":7,"selected":2,"not_selected":15},{"points":8,"selected":1,"not_selected":5},{"points":9,"selected":0,"not_selected":7},{"points":10,"selected":3,"not_selected":6},{"points":11,"selected":0,"not_selected":2},{"points":12,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":4},{"points":20,"selected":0,"not_selected":1}]},{"hunt_number":"170R","hunt_name":"Beatys Butte Bow","hunt_type":"Bow","total_applicants":101,"total_selected":17,"total_not_selected":59,"min_pts_to_draw":0.0,"max_pts_to_draw":7.0,"avg_pts_selected":1.6,"draw_odds":16.8,"point_distribution":[{"points":0,"selected":8,"not_selected":19},{"points":1,"selected":1,"not_selected":8},{"points":2,"selected":5,"not_selected":6},{"points":3,"selected":0,"not_selected":9},{"points":4,"selected":1,"not_selected":0},{"points":5,"selected":0,"not_selected":0},{"points":6,"selected":1,"not_selected":2},{"points":7,"selected":1,"not_selected":4},{"points":8,"selected":0,"not_selected":1},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":6},{"points":11,"selected":0,"not_selected":0},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":1},{"points":19,"selected":0,"not_selected":0}]},{"hunt_number":"171A","hunt_name":"N Juniper","hunt_type":"Rifle","total_applicants":315,"total_selected":110,"total_not_selected":205,"min_pts_to_draw":0.0,"max_pts_to_draw":7.0,"avg_pts_selected":0.7,"draw_odds":34.9,"point_distribution":[{"points":0,"selected":53,"not_selected":78},{"points":1,"selected":47,"not_selected":70},{"points":2,"selected":6,"not_selected":27},{"points":3,"selected":2,"not_selected":19},{"points":4,"selected":0,"not_selected":5},{"points":5,"selected":0,"not_selected":1},{"points":7,"selected":2,"not_selected":1},{"points":10,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":1}]},{"hunt_number":"171B","hunt_name":"S Juniper","hunt_type":"Rifle","total_applicants":358,"total_selected":83,"total_not_selected":275,"min_pts_to_draw":0.0,"max_pts_to_draw":6.0,"avg_pts_selected":2.2,"draw_odds":23.2,"point_distribution":[{"points":0,"selected":8,"not_selected":91},{"points":1,"selected":15,"not_selected":103},{"points":2,"selected":31,"not_selected":29},{"points":3,"selected":19,"not_selected":24},{"points":4,"selected":3,"not_selected":9},{"points":5,"selected":3,"not_selected":7},{"points":6,"selected":4,"not_selected":3},{"points":7,"selected":0,"not_selected":2},{"points":8,"selected":0,"not_selected":4},{"points":9,"selected":0,"not_selected":1},{"points":11,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":1}]},{"hunt_number":"171R","hunt_name":"Juniper Unit Bow","hunt_type":"Bow","total_applicants":57,"total_selected":1,"total_not_selected":35,"min_pts_to_draw":1.0,"max_pts_to_draw":1.0,"avg_pts_selected":1.0,"draw_odds":1.8,"point_distribution":[{"points":0,"selected":0,"not_selected":18},{"points":1,"selected":1,"not_selected":4},{"points":2,"selected":0,"not_selected":1},{"points":3,"selected":0,"not_selected":8},{"points":5,"selected":0,"not_selected":1},{"points":6,"selected":0,"not_selected":1},{"points":8,"selected":0,"not_selected":1},{"points":9,"selected":0,"not_selected":0},{"points":13,"selected":0,"not_selected":1},{"points":20,"selected":0,"not_selected":0}]},{"hunt_number":"171T","hunt_name":"Juniper Unit Youth","hunt_type":"Youth","total_applicants":64,"total_selected":14,"total_not_selected":42,"min_pts_to_draw":0.0,"max_pts_to_draw":3.0,"avg_pts_selected":0.6,"draw_odds":21.9,"point_distribution":[{"points":0,"selected":9,"not_selected":16},{"points":1,"selected":2,"not_selected":9},{"points":2,"selected":2,"not_selected":3},{"points":3,"selected":1,"not_selected":2},{"points":4,"selected":0,"not_selected":4},{"points":5,"selected":0,"not_selected":5},{"points":6,"selected":0,"not_selected":2},{"points":8,"selected":0,"not_selected":1}]},{"hunt_number":"172M","hunt_name":"Silvies Unit Muzzleloader","hunt_type":"Muzzleloader","total_applicants":318,"total_selected":54,"total_not_selected":264,"min_pts_to_draw":0.0,"max_pts_to_draw":8.0,"avg_pts_selected":3.9,"draw_odds":17.0,"point_distribution":[{"points":0,"selected":4,"not_selected":54},{"points":1,"selected":5,"not_selected":79},{"points":2,"selected":4,"not_selected":58},{"points":3,"selected":0,"not_selected":50},{"points":4,"selected":16,"not_selected":15},{"points":5,"selected":18,"not_selected":3},{"points":6,"selected":4,"not_selected":1},{"points":7,"selected":2,"not_selected":0},{"points":8,"selected":1,"not_selected":1},{"points":10,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":1}]},{"hunt_number":"172R","hunt_name":"Silvies Unit Bow","hunt_type":"Bow","total_applicants":962,"total_selected":230,"total_not_selected":305,"min_pts_to_draw":0.0,"max_pts_to_draw":7.0,"avg_pts_selected":0.6,"draw_odds":23.9,"point_distribution":[{"points":0,"selected":143,"not_selected":117},{"points":1,"selected":59,"not_selected":50},{"points":2,"selected":14,"not_selected":32},{"points":3,"selected":11,"not_selected":39},{"points":4,"selected":2,"not_selected":27},{"points":5,"selected":0,"not_selected":21},{"points":6,"selected":0,"not_selected":5},{"points":7,"selected":1,"not_selected":0},{"points":8,"selected":0,"not_selected":4},{"points":9,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":0},{"points":11,"selected":0,"not_selected":3},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":3},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":0},{"points":18,"selected":0,"not_selected":0},{"points":19,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":0},{"points":23,"selected":0,"not_selected":0}]},{"hunt_number":"172T","hunt_name":"Silvies Unit Youth","hunt_type":"Youth","total_applicants":155,"total_selected":21,"total_not_selected":134,"min_pts_to_draw":0.0,"max_pts_to_draw":6.0,"avg_pts_selected":3.8,"draw_odds":13.5,"point_distribution":[{"points":0,"selected":3,"not_selected":55},{"points":1,"selected":2,"not_selected":27},{"points":2,"selected":0,"not_selected":31},{"points":3,"selected":1,"not_selected":15},{"points":4,"selected":5,"not_selected":3},{"points":5,"selected":5,"not_selected":3},{"points":6,"selected":5,"not_selected":0}]},{"hunt_number":"173R","hunt_name":"Wagontire Unit Bow","hunt_type":"Bow","total_applicants":78,"total_selected":12,"total_not_selected":36,"min_pts_to_draw":0.0,"max_pts_to_draw":14.0,"avg_pts_selected":2.2,"draw_odds":15.4,"point_distribution":[{"points":0,"selected":7,"not_selected":19},{"points":1,"selected":1,"not_selected":10},{"points":2,"selected":1,"not_selected":1},{"points":3,"selected":1,"not_selected":1},{"points":6,"selected":1,"not_selected":0},{"points":7,"selected":0,"not_selected":1},{"points":8,"selected":0,"not_selected":2},{"points":9,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":0},{"points":14,"selected":1,"not_selected":0},{"points":17,"selected":0,"not_selected":0},{"points":18,"selected":0,"not_selected":0}]},{"hunt_number":"174A","hunt_name":"N Warner","hunt_type":"Rifle","total_applicants":1222,"total_selected":32,"total_not_selected":1190,"min_pts_to_draw":1.0,"max_pts_to_draw":25.0,"avg_pts_selected":14.0,"draw_odds":2.6,"point_distribution":[{"points":0,"selected":0,"not_selected":202},{"points":1,"selected":1,"not_selected":188},{"points":2,"selected":2,"not_selected":166},{"points":3,"selected":1,"not_selected":112},{"points":4,"selected":2,"not_selected":82},{"points":5,"selected":0,"not_selected":79},{"points":6,"selected":0,"not_selected":44},{"points":7,"selected":2,"not_selected":52},{"points":8,"selected":0,"not_selected":48},{"points":9,"selected":0,"not_selected":48},{"points":10,"selected":0,"not_selected":19},{"points":11,"selected":0,"not_selected":21},{"points":12,"selected":0,"not_selected":31},{"points":13,"selected":0,"not_selected":19},{"points":14,"selected":0,"not_selected":16},{"points":15,"selected":0,"not_selected":22},{"points":16,"selected":0,"not_selected":21},{"points":17,"selected":20,"not_selected":9},{"points":18,"selected":3,"not_selected":1},{"points":19,"selected":0,"not_selected":1},{"points":20,"selected":0,"not_selected":4},{"points":21,"selected":0,"not_selected":2},{"points":22,"selected":0,"not_selected":1},{"points":23,"selected":0,"not_selected":1},{"points":24,"selected":0,"not_selected":1},{"points":25,"selected":1,"not_selected":0}]},{"hunt_number":"174B","hunt_name":"S Warner","hunt_type":"Rifle","total_applicants":714,"total_selected":143,"total_not_selected":571,"min_pts_to_draw":0.0,"max_pts_to_draw":10.0,"avg_pts_selected":2.4,"draw_odds":20.0,"point_distribution":[{"points":0,"selected":11,"not_selected":153},{"points":1,"selected":25,"not_selected":193},{"points":2,"selected":46,"not_selected":125},{"points":3,"selected":43,"not_selected":53},{"points":4,"selected":9,"not_selected":11},{"points":5,"selected":1,"not_selected":13},{"points":6,"selected":0,"not_selected":5},{"points":7,"selected":6,"not_selected":5},{"points":8,"selected":1,"not_selected":3},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":1,"not_selected":0},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":2},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":3},{"points":17,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":1}]},{"hunt_number":"174R1","hunt_name":"N Warner Bow","hunt_type":"Bow","total_applicants":118,"total_selected":33,"total_not_selected":85,"min_pts_to_draw":0.0,"max_pts_to_draw":9.0,"avg_pts_selected":3.2,"draw_odds":28.0,"point_distribution":[{"points":0,"selected":3,"not_selected":25},{"points":1,"selected":5,"not_selected":22},{"points":2,"selected":6,"not_selected":25},{"points":3,"selected":2,"not_selected":3},{"points":4,"selected":7,"not_selected":1},{"points":5,"selected":8,"not_selected":1},{"points":6,"selected":0,"not_selected":2},{"points":7,"selected":1,"not_selected":2},{"points":8,"selected":0,"not_selected":1},{"points":9,"selected":1,"not_selected":0},{"points":13,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":1},{"points":20,"selected":0,"not_selected":1}]},{"hunt_number":"174R2","hunt_name":"S Warner Bow","hunt_type":"Bow","total_applicants":131,"total_selected":13,"total_not_selected":76,"min_pts_to_draw":0.0,"max_pts_to_draw":3.0,"avg_pts_selected":0.6,"draw_odds":9.9,"point_distribution":[{"points":0,"selected":9,"not_selected":16},{"points":1,"selected":1,"not_selected":13},{"points":2,"selected":2,"not_selected":22},{"points":3,"selected":1,"not_selected":9},{"points":4,"selected":0,"not_selected":1},{"points":5,"selected":0,"not_selected":3},{"points":6,"selected":0,"not_selected":5},{"points":7,"selected":0,"not_selected":2},{"points":8,"selected":0,"not_selected":1},{"points":9,"selected":0,"not_selected":0},{"points":11,"selected":0,"not_selected":1},{"points":12,"selected":0,"not_selected":0},{"points":13,"selected":0,"not_selected":0},{"points":15,"selected":0,"not_selected":0},{"points":16,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":1},{"points":19,"selected":0,"not_selected":1}]},{"hunt_number":"174T","hunt_name":"Warner Unit Youth","hunt_type":"Youth","total_applicants":144,"total_selected":21,"total_not_selected":123,"min_pts_to_draw":0.0,"max_pts_to_draw":17.0,"avg_pts_selected":6.7,"draw_odds":14.6,"point_distribution":[{"points":0,"selected":1,"not_selected":34},{"points":1,"selected":1,"not_selected":24},{"points":2,"selected":0,"not_selected":14},{"points":3,"selected":2,"not_selected":18},{"points":4,"selected":1,"not_selected":15},{"points":5,"selected":2,"not_selected":14},{"points":6,"selected":4,"not_selected":3},{"points":7,"selected":5,"not_selected":0},{"points":8,"selected":1,"not_selected":1},{"points":9,"selected":1,"not_selected":0},{"points":13,"selected":1,"not_selected":0},{"points":14,"selected":1,"not_selected":0},{"points":17,"selected":1,"not_selected":0}]},{"hunt_number":"175M","hunt_name":"Interstate Unit Muzzleloader","hunt_type":"Muzzleloader","total_applicants":203,"total_selected":22,"total_not_selected":181,"min_pts_to_draw":1.0,"max_pts_to_draw":10.0,"avg_pts_selected":5.6,"draw_odds":10.8,"point_distribution":[{"points":0,"selected":0,"not_selected":42},{"points":1,"selected":4,"not_selected":32},{"points":2,"selected":0,"not_selected":45},{"points":3,"selected":1,"not_selected":31},{"points":4,"selected":0,"not_selected":12},{"points":5,"selected":2,"not_selected":6},{"points":6,"selected":4,"not_selected":1},{"points":7,"selected":8,"not_selected":4},{"points":8,"selected":2,"not_selected":3},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":1,"not_selected":0},{"points":12,"selected":0,"not_selected":3},{"points":16,"selected":0,"not_selected":1}]},{"hunt_number":"175R","hunt_name":"Interstate Unit Bow","hunt_type":"Bow","total_applicants":613,"total_selected":112,"total_not_selected":365,"min_pts_to_draw":0.0,"max_pts_to_draw":7.0,"avg_pts_selected":0.6,"draw_odds":18.3,"point_distribution":[{"points":0,"selected":68,"not_selected":117},{"points":1,"selected":27,"not_selected":75},{"points":2,"selected":12,"not_selected":59},{"points":3,"selected":3,"not_selected":47},{"points":4,"selected":0,"not_selected":15},{"points":5,"selected":1,"not_selected":14},{"points":6,"selected":0,"not_selected":7},{"points":7,"selected":1,"not_selected":4},{"points":8,"selected":0,"not_selected":0},{"points":9,"selected":0,"not_selected":5},{"points":10,"selected":0,"not_selected":5},{"points":11,"selected":0,"not_selected":4},{"points":12,"selected":0,"not_selected":3},{"points":13,"selected":0,"not_selected":2},{"points":14,"selected":0,"not_selected":0},{"points":15,"selected":0,"not_selected":3},{"points":16,"selected":0,"not_selected":1},{"points":17,"selected":0,"not_selected":1},{"points":18,"selected":0,"not_selected":1},{"points":19,"selected":0,"not_selected":2},{"points":21,"selected":0,"not_selected":0}]},{"hunt_number":"175T","hunt_name":"Interstate Unit Youth","hunt_type":"Youth","total_applicants":267,"total_selected":22,"total_not_selected":245,"min_pts_to_draw":0.0,"max_pts_to_draw":8.0,"avg_pts_selected":4.8,"draw_odds":8.2,"point_distribution":[{"points":0,"selected":2,"not_selected":86},{"points":1,"selected":0,"not_selected":42},{"points":2,"selected":1,"not_selected":37},{"points":3,"selected":2,"not_selected":37},{"points":4,"selected":0,"not_selected":20},{"points":5,"selected":8,"not_selected":17},{"points":6,"selected":7,"not_selected":2},{"points":7,"selected":1,"not_selected":1},{"points":8,"selected":1,"not_selected":1},{"points":10,"selected":0,"not_selected":2}]},{"hunt_number":"176M","hunt_name":"Silver Lake/E Ft. Rock Muzzleloader","hunt_type":"Muzzleloader","total_applicants":292,"total_selected":66,"total_not_selected":226,"min_pts_to_draw":0.0,"max_pts_to_draw":6.0,"avg_pts_selected":2.5,"draw_odds":22.6,"point_distribution":[{"points":0,"selected":9,"not_selected":93},{"points":1,"selected":7,"not_selected":72},{"points":2,"selected":13,"not_selected":48},{"points":3,"selected":23,"not_selected":5},{"points":4,"selected":10,"not_selected":3},{"points":5,"selected":0,"not_selected":1},{"points":6,"selected":4,"not_selected":0},{"points":9,"selected":0,"not_selected":1},{"points":10,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":1}]},{"hunt_number":"176R","hunt_name":"Silver Lake Unit Bow","hunt_type":"Bow","total_applicants":185,"total_selected":21,"total_not_selected":120,"min_pts_to_draw":0.0,"max_pts_to_draw":4.0,"avg_pts_selected":0.7,"draw_odds":11.4,"point_distribution":[{"points":0,"selected":12,"not_selected":69},{"points":1,"selected":5,"not_selected":28},{"points":2,"selected":3,"not_selected":3},{"points":3,"selected":0,"not_selected":9},{"points":4,"selected":1,"not_selected":0},{"points":5,"selected":0,"not_selected":1},{"points":8,"selected":0,"not_selected":0},{"points":9,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":0},{"points":12,"selected":0,"not_selected":1},{"points":13,"selected":0,"not_selected":5},{"points":14,"selected":0,"not_selected":1},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":1},{"points":20,"selected":0,"not_selected":1}]},{"hunt_number":"176T","hunt_name":"Silver Lake Unit Youth","hunt_type":"Youth","total_applicants":102,"total_selected":22,"total_not_selected":80,"min_pts_to_draw":0.0,"max_pts_to_draw":4.0,"avg_pts_selected":1.1,"draw_odds":21.6,"point_distribution":[{"points":0,"selected":5,"not_selected":45},{"points":1,"selected":12,"not_selected":19},{"points":2,"selected":3,"not_selected":10},{"points":3,"selected":1,"not_selected":2},{"points":4,"selected":1,"not_selected":1},{"points":5,"selected":0,"not_selected":2},{"points":7,"selected":0,"not_selected":1}]},{"hunt_number":"177R","hunt_name":"Fort Rock Unit Bow","hunt_type":"Bow","total_applicants":415,"total_selected":112,"total_not_selected":193,"min_pts_to_draw":0.0,"max_pts_to_draw":4.0,"avg_pts_selected":0.2,"draw_odds":27.0,"point_distribution":[{"points":0,"selected":91,"not_selected":109},{"points":1,"selected":18,"not_selected":45},{"points":2,"selected":1,"not_selected":22},{"points":3,"selected":1,"not_selected":6},{"points":4,"selected":1,"not_selected":3},{"points":5,"selected":0,"not_selected":2},{"points":7,"selected":0,"not_selected":2},{"points":8,"selected":0,"not_selected":0},{"points":9,"selected":0,"not_selected":0},{"points":10,"selected":0,"not_selected":0},{"points":12,"selected":0,"not_selected":2},{"points":13,"selected":0,"not_selected":1},{"points":14,"selected":0,"not_selected":0},{"points":15,"selected":0,"not_selected":1},{"points":16,"selected":0,"not_selected":0},{"points":18,"selected":0,"not_selected":0},{"points":20,"selected":0,"not_selected":0}]},{"hunt_number":"177T","hunt_name":"Fort Rock Unit Youth","hunt_type":"Youth","total_applicants":111,"total_selected":22,"total_not_selected":89,"min_pts_to_draw":0.0,"max_pts_to_draw":2.0,"avg_pts_selected":1.0,"draw_odds":19.8,"point_distribution":[{"points":0,"selected":5,"not_selected":59},{"points":1,"selected":13,"not_selected":14},{"points":2,"selected":4,"not_selected":4},{"points":3,"selected":0,"not_selected":6},{"points":4,"selected":0,"not_selected":3},{"points":5,"selected":0,"not_selected":3}]}]; break; }
-  }
-  if (!h) return;
-
-  var pts = getMyPoints();
-  var st = getDrawStatus(h, pts);
-  var myOdds = getMyOdds(h, pts);
-  var rec = buildRec(h, pts, st, myOdds);
-
-  var rows = h.point_distribution.map(function(row) {
-    var total = row.selected + row.not_selected;
-    var pct = total > 0 ? Math.round(row.selected / total * 100) : 0;
-    var isMe = row.points === pts;
-    return '<tr class="' + (isMe ? 'my-row' : '') + '">' +
-      '<td>' + row.points + (isMe ? ' &larr; You' : '') + '</td>' +
-      '<td>' + row.selected + '</td>' +
-      '<td>' + row.not_selected + '</td>' +
-      '<td>' + total + '</td>' +
-      '<td>' + pct + '%</td>' +
-      '</tr>';
-  }).join('');
-
-  document.getElementById('detail-content').innerHTML =
-    '<div class="detail-hero">' +
-      '<div class="detail-hero-left">' +
-        '<div class="hunt-series">HUNT #' + h.hunt_number + ' &middot; 100 SERIES BUCK DEER &middot; 2025 &middot; ' + h.hunt_type.toUpperCase() + '</div>' +
-        '<h2>' + h.hunt_name + '</h2>' +
-        '<div class="hunt-meta">' + h.total_applicants.toLocaleString() + ' applicants &middot; ' + h.total_selected.toLocaleString() + ' selected</div>' +
-      '</div>' +
-      '<div class="detail-hero-stats">' +
-        '<div class="hero-stat"><div class="hero-stat-val">' + h.draw_odds + '%</div><div class="hero-stat-lbl">Draw Odds</div></div>' +
-        '<div class="hero-stat"><div class="hero-stat-val">' + (h.min_pts_to_draw !== null ? h.min_pts_to_draw : '—') + '</div><div class="hero-stat-lbl">Min Pts Drew</div></div>' +
-        '<div class="hero-stat"><div class="hero-stat-val">' + (myOdds !== null ? myOdds + '%' : '—') + '</div><div class="hero-stat-lbl">My Odds</div></div>' +
-      '</div>' +
-    '</div>' +
-
-    '<div class="rec-box">' +
-      '<div class="rec-header"><span class="rec-icon-badge">' + rec.icon + '</span><h3>RECOMMENDATION FOR YOU (' + pts + ' POINTS)</h3></div>' +
-      '<div class="rec-body">' + rec.text + '</div>' +
-    '</div>' +
-
-    '<div class="stat-row">' +
-      '<div class="stat-card"><div class="stat-card-val">' + h.total_applicants.toLocaleString() + '</div><div class="stat-card-lbl">Total Applicants</div></div>' +
-      '<div class="stat-card"><div class="stat-card-val">' + h.total_selected.toLocaleString() + '</div><div class="stat-card-lbl">Selected</div></div>' +
-      '<div class="stat-card"><div class="stat-card-val">' + (h.min_pts_to_draw !== null ? h.min_pts_to_draw : '—') + '</div><div class="stat-card-lbl">Min Points Drew</div></div>' +
-      '<div class="stat-card"><div class="stat-card-val">' + (h.max_pts_to_draw !== null ? h.max_pts_to_draw : '—') + '</div><div class="stat-card-lbl">Max Points Drew</div></div>' +
-      '<div class="stat-card"><div class="stat-card-val">' + (h.avg_pts_selected !== null ? h.avg_pts_selected : '—') + '</div><div class="stat-card-lbl">Avg Pts Selected</div></div>' +
-      '<div class="stat-card"><div class="stat-card-val ' + oddsClass(myOdds) + '">' + (myOdds !== null ? myOdds + '%' : '—') + '</div><div class="stat-card-lbl">My Odds @ ' + pts + ' pts</div></div>' +
-    '</div>' +
-
-    '<div class="detail-grid">' +
-      '<div class="panel"><h3>APPLICANT DISTRIBUTION BY POINTS</h3><div class="chart-wrap"><canvas id="dist-chart"></canvas></div></div>' +
-      '<div class="panel"><h3>POINT DISTRIBUTION TABLE</h3><div style="overflow-y:auto;max-height:280px;"><table class="pt-table"><thead><tr><th>Pts</th><th>Selected</th><th>Not Sel.</th><th>Total</th><th>Rate</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>' +
-    '</div>';
-
-  if (detailChart) { detailChart.destroy(); detailChart = null; }
-
-  var labels = h.point_distribution.map(function(d){ return d.points; });
-  var selData = h.point_distribution.map(function(d){ return d.selected; });
-  var notSelData = h.point_distribution.map(function(d){ return d.not_selected; });
-  var myIdx = labels.indexOf(pts);
-
-  var bgSel = labels.map(function(_, i){ return i === myIdx ? '#005288' : 'rgba(0,82,136,0.55)'; });
-  var bgNot = labels.map(function(_, i){ return i === myIdx ? '#c8a84b' : 'rgba(200,168,75,0.35)'; });
-
-  var ctx = document.getElementById('dist-chart').getContext('2d');
-  detailChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [
-        { label: 'Selected', data: selData, backgroundColor: bgSel, stack: 's' },
-        { label: 'Not Selected', data: notSelData, backgroundColor: bgNot, stack: 's' }
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { labels: { color: '#4a5f6e', font: { family: 'Source Sans 3', size: 12 } } },
-        tooltip: { callbacks: { title: function(ctx){ return 'Points: ' + ctx[0].label + (ctx[0].label == pts ? ' ← You' : ''); } } }
-      },
-      scales: {
-        x: { stacked: true, ticks: { color: '#7a909e' }, grid: { color: 'rgba(200,191,170,0.4)' }, title: { display: true, text: 'Average Points', color: '#7a909e', font: { size: 11 } } },
-        y: { stacked: true, ticks: { color: '#7a909e' }, grid: { color: 'rgba(200,191,170,0.4)' }, title: { display: true, text: 'Applicants', color: '#7a909e', font: { size: 11 } } }
-      }
-    }
-  });
-
-  document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
-  document.getElementById('view-detail').classList.add('active');
-  window.scrollTo(0, 0);
-}
-
-function buildRec(h, pts, st, myOdds) {
-  var min = h.min_pts_to_draw;
-  var avg = h.avg_pts_selected;
-  if (st === 'drawable') {
-    if (myOdds >= 50) return { icon: 'STRONG', text: '<strong>Excellent draw candidate.</strong> With ' + pts + ' points you have approximately a ' + myOdds + '% chance at this unit. The minimum drawn in 2025 was ' + min + ' pts and the average was ' + avg + ' pts — you are well-positioned. <strong>This should be a top priority choice.</strong>' };
-    if (myOdds >= 20) return { icon: 'GOOD', text: '<strong>Good draw candidate.</strong> With ' + pts + ' points your estimated odds are ~' + myOdds + '%. You meet the minimum of ' + min + ' pts (avg drawn: ' + avg + ' pts). Worth applying — consider this a primary or strong secondary choice.' };
-    return { icon: 'CAUTION', text: 'You meet the ' + min + '-point minimum, but draw odds at your point level are around ' + myOdds + '%. The average selected was ' + avg + ' pts. Apply as a secondary choice and understand it may be a long shot.' };
-  }
-  if (st === 'close') {
-    var need = min - pts;
-    return { icon: 'BANK', text: '<strong>Bank your points.</strong> You are ' + need + ' point(s) short of the minimum drawn in 2025 (' + min + ' pts, avg ' + avg + ' pts). If you skip the draw this year your points will increase and you will be competitive much sooner. <strong>Do not apply here yet.</strong>' };
-  }
-  if (st === 'no') {
-    var need2 = min - pts;
-    return { icon: 'NOT YET', text: '<strong>Not competitive yet.</strong> You need ' + need2 + ' more preference points before this hunt becomes realistic (min drawn: ' + min + ' pts, avg drawn: ' + avg + ' pts). Focus on units with lower point requirements for now and continue banking points.' };
-  }
-  return { icon: 'INFO', text: 'Insufficient historical draw data to generate a recommendation for this hunt.' };
-}
-
-// ── SETTINGS ─────────────────────────────────────────────────────────
-function populateSettings() {
-  var total = activeData.reduce(function(s, h){ return s + h.total_applicants; }, 0);
-  document.getElementById('ds-apps').textContent = total.toLocaleString();
-}
-
-function evDragOver(e) { e.preventDefault(); document.getElementById('drop-zone').classList.add('drag'); }
-function evDragLeave(e) { document.getElementById('drop-zone').classList.remove('drag'); }
-function evDrop(e) {
-  e.preventDefault();
-  document.getElementById('drop-zone').classList.remove('drag');
-  var file = e.dataTransfer.files[0];
-  if (file) handleFile(file);
-}
-function handleFile(file) {
-  var msg = document.getElementById('upload-msg');
-  if (!file || file.name.indexOf('.xlsx') < 0) {
-    msg.className = 'upload-msg err';
-    msg.textContent = 'Please upload a valid .xlsx file downloaded from ODFW.';
-    return;
-  }
-  msg.className = 'upload-msg ok';
-  msg.textContent = 'File "' + file.name + '" received. Full in-browser XLSX parsing requires a local server. The 2025 data is pre-loaded and fully functional.';
-}
-
-function updateAll() { if (currentView === 'dashboard') renderTable(); }
-
-// ── INIT ──────────────────────────────────────────────────────────────
-renderTable();
-</script>
-
+            analysisDiv.innerHTML = `
+                <h3>Strategy & Analysis:</h3>
+                <p><strong>Historical Trend:</strong> ${trendText}</p>
+                <p><strong>Projected Requirement Next Year:</strong> ~${projectedPointsNeeded.toFixed(1)} points.</p>
+                <p><strong>What to do with your points:</strong> ${recommendation}</p>
+            `;
+        }
+    </script>
 </body>
 </html>
