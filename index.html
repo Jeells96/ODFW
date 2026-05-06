@@ -93,16 +93,50 @@ margin-top: 2px;
 .subnav {
 background: var(–odfw-green-dark);
 color: #fff;
-font-size: 13px;
-letter-spacing: 0.3px;
+border-top: 1px solid rgba(255,255,255,0.1);
 }
 .subnav-inner {
 max-width: 1200px;
 margin: 0 auto;
-padding: 8px 20px;
+padding: 0 20px;
 font-family: ‘Helvetica Neue’, Arial, sans-serif;
+display: flex;
 }
-.subnav-inner span { opacity: 0.8; }
+.nav-link {
+background: transparent;
+border: none;
+border-bottom: 3px solid transparent;
+color: rgba(255,255,255,0.75);
+font-family: inherit;
+font-size: 13px;
+font-weight: 600;
+letter-spacing: 0.7px;
+text-transform: uppercase;
+padding: 12px 18px;
+cursor: pointer;
+-webkit-appearance: none;
+appearance: none;
+}
+.nav-link:hover { color: #fff; }
+.nav-link.active {
+color: #fff;
+border-bottom-color: var(–odfw-gold);
+background: rgba(0,0,0,0.2);
+}
+.nav-link .badge {
+display: inline-block;
+margin-left: 6px;
+padding: 1px 6px;
+font-size: 10px;
+background: var(–odfw-gold);
+color: var(–odfw-green-dark);
+border-radius: 2px;
+font-weight: 700;
+letter-spacing: 0;
+}
+
+.page { display: none; }
+.page.active { display: block; }
 
 /* ========== MAIN ========== */
 main {
@@ -171,9 +205,12 @@ background: #c9c2ad;
 
 .upload-grid {
 display: grid;
-grid-template-columns: 1fr 1fr;
+grid-template-columns: 1fr 1fr 1fr;
 gap: 12px;
 margin-top: 14px;
+}
+@media (max-width: 900px) {
+.upload-grid { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 600px) {
 .upload-grid { grid-template-columns: 1fr; }
@@ -218,20 +255,34 @@ word-break: break-all;
 }
 .upload-zone input[type=file] { display: none; }
 
-.src-link {
+.src-btn {
 display: block;
-margin-top: 6px;
+margin-top: 8px;
 font-family: ‘Helvetica Neue’, Arial, sans-serif;
 font-size: 12px;
-color: var(–odfw-green);
+font-weight: 600;
+letter-spacing: 0.5px;
+text-transform: uppercase;
+color: var(–odfw-green-dark);
+background: #fff;
+border: 1px solid var(–odfw-green-dark);
 text-decoration: none;
 text-align: center;
-padding: 4px 0;
-letter-spacing: 0.3px;
+padding: 9px 12px;
+transition: background 0.15s ease;
 }
-.src-link:hover {
-color: var(–odfw-green-dark);
-text-decoration: underline;
+.src-btn:hover {
+background: var(–odfw-green);
+color: #fff;
+}
+.src-btn::after {
+content: ’ \2197’;
+font-weight: normal;
+}
+
+.upload-cell {
+display: flex;
+flex-direction: column;
 }
 
 .actions-row {
@@ -602,159 +653,218 @@ display: none;
 
 <div class="subnav">
   <div class="subnav-inner">
-    <span>Personal hunt-decision reference. Source: Oregon Department of Fish &amp; Wildlife public reports.</span>
+    <button class="nav-link active" data-page="database">Hunt Database</button>
+    <button class="nav-link" data-page="data">Data Manager <span class="badge" id="navBadge" style="display:none;">!</span></button>
   </div>
 </div>
 
 <main>
-  <h2 class="page-title">Hunt Database</h2>
-  <p class="page-lede">Upload the latest ODFW Preference Point Draw Reports and Harvest Summaries below. Data is parsed locally in your browser and saved to this device.</p>
-
-  <!-- ========== DATA PANEL ========== -->
-
-  <section class="panel">
-    <div class="panel-head">Data Sources</div>
-    <div class="panel-body">
+  <!-- ===================== DATABASE PAGE ===================== -->
+  <div class="page active" data-page="database">
+    <h2 class="page-title">Hunt Database</h2>
+    <p class="page-lede">Browse and filter Oregon controlled hunts by draw odds, points needed, and success rates. Click any row for full details. Tap column headers to sort.</p>
 
 ```
-  <div class="data-status">
-    <div>
-      <div class="status-light"><span id="statusDot" class="status-dot"></span> <strong id="statusText">No data loaded</strong></div>
-      <div id="statusDetail" style="font-size:12px;color:var(--text-muted);margin-top:4px;font-family:'Helvetica Neue',Arial,sans-serif;"></div>
+<div id="emptyDataPrompt" style="display:none;">
+  <section class="panel" style="border-left:4px solid var(--odfw-gold);">
+    <div class="panel-body" style="text-align:center;">
+      <p style="margin:0 0 14px;font-family:'Helvetica Neue',Arial,sans-serif;color:var(--text-secondary);">
+        No data has been loaded yet. Visit the Data Manager page to upload ODFW reports.
+      </p>
+      <button class="btn" id="btnGoToData">Go to Data Manager</button>
     </div>
-    <div style="font-size:12px;color:var(--text-muted);font-family:'Helvetica Neue',Arial,sans-serif;">
-      Last loaded: <span id="lastLoaded">—</span>
+  </section>
+</div>
+
+<!-- ========== FILTERS ========== -->
+<section class="panel">
+  <div class="panel-head">Filter</div>
+  <div class="panel-body">
+    <div class="filters">
+      <div class="field">
+        <label for="fSpecies">Species</label>
+        <select id="fSpecies">
+          <option value="all">All</option>
+          <option value="elk">Elk</option>
+          <option value="deer">Buck Deer</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="fWeapon">Weapon / Type</label>
+        <select id="fWeapon">
+          <option value="all">All</option>
+          <option value="rifle">Rifle (Any Legal)</option>
+          <option value="archery">Archery</option>
+          <option value="muzz">Muzzleloader</option>
+          <option value="youth">Youth</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="fMyPoints">My Points</label>
+        <input type="number" id="fMyPoints" min="0" max="30" placeholder="e.g. 5" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label for="fDrawability">Show Hunts</label>
+        <select id="fDrawability">
+          <option value="all">All</option>
+          <option value="canDraw">I have enough points</option>
+          <option value="oneAway">One point away</option>
+          <option value="reachable">Within 3 points</option>
+        </select>
+      </div>
+      <div class="field" style="grid-column: span 2;">
+        <label for="fSearch">Search Unit / Hunt Name</label>
+        <input type="text" id="fSearch" placeholder="e.g. Murderers Cr, Wenaha, 230X">
+      </div>
     </div>
   </div>
+</section>
 
-  <div class="upload-grid">
+<!-- ========== RESULTS ========== -->
+<div class="results-meta">
+  <h2>Results</h2>
+  <div class="results-count" id="resultsCount">—</div>
+</div>
 
-    <div class="upload-cell">
-      <label class="upload-zone" id="uzElkPoints" data-key="elkPoints">
-        <input type="file" accept=".xlsx,.xls" data-target="elkPoints">
-        <div class="uz-label">Elk &mdash; Preference Points</div>
-        <div class="uz-hint">e.g. 2025_Elk_Preference_Points_Draw_Report.xlsx</div>
-        <div class="uz-file" data-file="elkPoints"></div>
-      </label>
-      <a class="src-link" href="https://odfw.huntfishoregon.com/reportdownloads" target="_blank" rel="noopener">Get this file from ODFW &rarr;</a>
-    </div>
-
-    <div class="upload-cell">
-      <label class="upload-zone" id="uzDeerPoints" data-key="deerPoints">
-        <input type="file" accept=".xlsx,.xls" data-target="deerPoints">
-        <div class="uz-label">Buck Deer &mdash; Preference Points</div>
-        <div class="uz-hint">e.g. 2025_buck_points.xlsx</div>
-        <div class="uz-file" data-file="deerPoints"></div>
-      </label>
-      <a class="src-link" href="https://odfw.huntfishoregon.com/reportdownloads" target="_blank" rel="noopener">Get this file from ODFW &rarr;</a>
-    </div>
-
-    <div class="upload-cell">
-      <label class="upload-zone" id="uzElkHarvest" data-key="elkHarvest">
-        <input type="file" accept=".pdf,.xlsx,.xls" data-target="elkHarvest">
-        <div class="uz-label">Elk &mdash; Harvest Summary</div>
-        <div class="uz-hint">PDF or XLSX from ODFW</div>
-        <div class="uz-file" data-file="elkHarvest"></div>
-      </label>
-      <a class="src-link" href="https://myodfw.com/articles/big-game-hunting-harvest-statistics" target="_blank" rel="noopener">Get this file from ODFW &rarr;</a>
-    </div>
-
-    <div class="upload-cell">
-      <label class="upload-zone" id="uzDeerHarvest" data-key="deerHarvest">
-        <input type="file" accept=".pdf,.xlsx,.xls" data-target="deerHarvest">
-        <div class="uz-label">Buck Deer &mdash; Harvest Summary</div>
-        <div class="uz-hint">PDF or XLSX from ODFW</div>
-        <div class="uz-file" data-file="deerHarvest"></div>
-      </label>
-      <a class="src-link" href="https://myodfw.com/articles/big-game-hunting-harvest-statistics" target="_blank" rel="noopener">Get this file from ODFW &rarr;</a>
-    </div>
-
-  </div>
-
-  <div class="actions-row">
-    <button class="btn danger" id="btnClear">Clear All Data</button>
-    <span style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;color:var(--text-muted);margin-left:auto;">Data persists on this device.</span>
-  </div>
-
-  <p class="help-text">
-    On iPhone, tap a box above to open the Files picker (iCloud Drive, Downloads, etc.). The Preference Points reports drive draw odds and points-needed; the Harvest Summaries drive success rates. Loading just one file works &mdash; the other columns will show "&mdash;".
-  </p>
-
+<div class="table-wrap">
+  <table class="hunts" id="huntsTable">
+    <thead>
+      <tr>
+        <th data-sort="huntNum">Hunt No. <span class="sort-arrow">▾</span></th>
+        <th data-sort="huntName">Hunt Name <span class="sort-arrow">▾</span></th>
+        <th data-sort="weapon">Type <span class="sort-arrow">▾</span></th>
+        <th data-sort="tags" class="num-th">Tags <span class="sort-arrow">▾</span></th>
+        <th data-sort="apps" class="num-th">Applicants <span class="sort-arrow">▾</span></th>
+        <th data-sort="minPts" class="num-th">Min. Pts to Draw <span class="sort-arrow">▾</span></th>
+        <th data-sort="firstChoiceOdds" class="num-th">1st-Choice Odds <span class="sort-arrow">▾</span></th>
+        <th data-sort="success" class="num-th">Success Rate <span class="sort-arrow">▾</span></th>
+        <th data-sort="hunters" class="num-th">Hunters <span class="sort-arrow">▾</span></th>
+        <th data-sort="harvest" class="num-th">Harvest <span class="sort-arrow">▾</span></th>
+      </tr>
+    </thead>
+    <tbody id="huntsBody">
+      <tr><td colspan="10" class="empty-state">Upload an ODFW Preference Points report to begin.</td></tr>
+    </tbody>
+  </table>
 </div>
 ```
 
-  </section>
-
-  <!-- ========== FILTERS ========== -->
-
-  <section class="panel">
-    <div class="panel-head">Filter</div>
-    <div class="panel-body">
-      <div class="filters">
-        <div class="field">
-          <label for="fSpecies">Species</label>
-          <select id="fSpecies">
-            <option value="all">All</option>
-            <option value="elk">Elk</option>
-            <option value="deer">Buck Deer</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="fWeapon">Weapon / Type</label>
-          <select id="fWeapon">
-            <option value="all">All</option>
-            <option value="rifle">Rifle (Any Legal)</option>
-            <option value="archery">Archery</option>
-            <option value="muzz">Muzzleloader</option>
-            <option value="youth">Youth</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="fMyPoints">My Points</label>
-          <input type="number" id="fMyPoints" min="0" max="30" placeholder="e.g. 5" inputmode="numeric">
-        </div>
-        <div class="field">
-          <label for="fDrawability">Show Hunts</label>
-          <select id="fDrawability">
-            <option value="all">All</option>
-            <option value="canDraw">I have enough points</option>
-            <option value="oneAway">One point away</option>
-            <option value="reachable">Within 3 points</option>
-          </select>
-        </div>
-        <div class="field" style="grid-column: span 2;">
-          <label for="fSearch">Search Unit / Hunt Name</label>
-          <input type="text" id="fSearch" placeholder="e.g. Murderers Cr, Wenaha, 230X">
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ========== RESULTS ========== -->
-
-  <div class="results-meta">
-    <h2>Results</h2>
-    <div class="results-count" id="resultsCount">—</div>
   </div>
 
-  <div class="table-wrap">
-    <table class="hunts" id="huntsTable">
-      <thead>
-        <tr>
-          <th data-sort="huntNum">Hunt No. <span class="sort-arrow">▾</span></th>
-          <th data-sort="huntName">Hunt Name <span class="sort-arrow">▾</span></th>
-          <th data-sort="weapon">Type <span class="sort-arrow">▾</span></th>
-          <th data-sort="tags" class="num-th">Tags <span class="sort-arrow">▾</span></th>
-          <th data-sort="apps" class="num-th">Applicants <span class="sort-arrow">▾</span></th>
-          <th data-sort="minPts" class="num-th">Min. Pts to Draw <span class="sort-arrow">▾</span></th>
-          <th data-sort="firstChoiceOdds" class="num-th">1st-Choice Odds <span class="sort-arrow">▾</span></th>
-          <th data-sort="success" class="num-th">Success Rate <span class="sort-arrow">▾</span></th>
-        </tr>
-      </thead>
-      <tbody id="huntsBody">
-        <tr><td colspan="8" class="empty-state">Upload an ODFW Preference Points report to begin.</td></tr>
-      </tbody>
-    </table>
+  <!-- ===================== DATA MANAGER PAGE ===================== -->
+
+  <div class="page" data-page="data">
+    <h2 class="page-title">Data Manager</h2>
+    <p class="page-lede">Download the latest reports from ODFW using the buttons below, then upload them here. Files are parsed locally in your browser and saved to this device — nothing is sent over the internet.</p>
+
+```
+<section class="panel">
+  <div class="panel-head">Status</div>
+  <div class="panel-body">
+    <div class="data-status">
+      <div>
+        <div class="status-light"><span id="statusDot" class="status-dot"></span> <strong id="statusText">No data loaded</strong></div>
+        <div id="statusDetail" style="font-size:12px;color:var(--text-muted);margin-top:4px;font-family:'Helvetica Neue',Arial,sans-serif;"></div>
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);font-family:'Helvetica Neue',Arial,sans-serif;">
+        Last loaded: <span id="lastLoaded">—</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">Step 1 &mdash; Download from ODFW</div>
+  <div class="panel-body">
+    <p style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;margin:0 0 14px;color:var(--text-secondary);">
+      Open these in a new tab, find the year you want, and save the files to your device.
+    </p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <a class="src-btn" href="https://odfw.huntfishoregon.com/reportdownloads" target="_blank" rel="noopener">Point Summary Link</a>
+      <a class="src-btn" href="https://myodfw.com/articles/big-game-hunting-harvest-statistics" target="_blank" rel="noopener">Harvest Summary Link</a>
+    </div>
+    <p class="help-text" style="margin-top:12px;">
+      On iPhone: tap the link, then tap the file name on the ODFW page, then choose <em>Save to Files</em> from the share menu. On desktop, files download automatically.
+    </p>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">Step 2 &mdash; Upload Files</div>
+  <div class="panel-body">
+
+    <div class="upload-grid">
+
+      <div class="upload-cell">
+        <label class="upload-zone" id="uzElkPoints" data-key="elkPoints">
+          <input type="file" accept=".xlsx,.xls" data-target="elkPoints">
+          <div class="uz-label">Elk &mdash; Preference Points</div>
+          <div class="uz-hint">Draw report XLSX</div>
+          <div class="uz-file" data-file="elkPoints"></div>
+        </label>
+      </div>
+
+      <div class="upload-cell">
+        <label class="upload-zone" id="uzDeerPoints" data-key="deerPoints">
+          <input type="file" accept=".xlsx,.xls" data-target="deerPoints">
+          <div class="uz-label">Buck Deer &mdash; Preference Points</div>
+          <div class="uz-hint">Draw report XLSX</div>
+          <div class="uz-file" data-file="deerPoints"></div>
+        </label>
+      </div>
+
+      <div class="upload-cell">
+        <label class="upload-zone" id="uzElkRifleHarvest" data-key="elkRifleHarvest">
+          <input type="file" accept=".pdf,.xlsx,.xls" data-target="elkRifleHarvest">
+          <div class="uz-label">Elk &mdash; Rifle Harvest</div>
+          <div class="uz-hint">"Any Legal Weapon" PDF / XLSX</div>
+          <div class="uz-file" data-file="elkRifleHarvest"></div>
+        </label>
+      </div>
+
+      <div class="upload-cell">
+        <label class="upload-zone" id="uzElkArcheryHarvest" data-key="elkArcheryHarvest">
+          <input type="file" accept=".pdf,.xlsx,.xls" data-target="elkArcheryHarvest">
+          <div class="uz-label">Elk &mdash; Archery Harvest</div>
+          <div class="uz-hint">Archery PDF / XLSX</div>
+          <div class="uz-file" data-file="elkArcheryHarvest"></div>
+        </label>
+      </div>
+
+      <div class="upload-cell">
+        <label class="upload-zone" id="uzDeerRifleHarvest" data-key="deerRifleHarvest">
+          <input type="file" accept=".pdf,.xlsx,.xls" data-target="deerRifleHarvest">
+          <div class="uz-label">Buck Deer &mdash; Rifle Harvest</div>
+          <div class="uz-hint">"Any Legal Weapon" PDF / XLSX</div>
+          <div class="uz-file" data-file="deerRifleHarvest"></div>
+        </label>
+      </div>
+
+      <div class="upload-cell">
+        <label class="upload-zone" id="uzDeerArcheryHarvest" data-key="deerArcheryHarvest">
+          <input type="file" accept=".pdf,.xlsx,.xls" data-target="deerArcheryHarvest">
+          <div class="uz-label">Buck Deer &mdash; Archery Harvest</div>
+          <div class="uz-hint">Archery PDF / XLSX</div>
+          <div class="uz-file" data-file="deerArcheryHarvest"></div>
+        </label>
+      </div>
+
+    </div>
+
+    <div class="actions-row">
+      <button class="btn" id="btnViewDatabase">View Hunt Database</button>
+      <button class="btn danger" id="btnClear">Clear All Data</button>
+      <span style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;color:var(--text-muted);margin-left:auto;">Data persists on this device.</span>
+    </div>
+
+    <p class="help-text">
+      The Preference Points reports drive the points-needed and draw-odds columns. The Rifle and Archery Harvest reports drive the Hunters, Harvest, and Success Rate columns &mdash; rifle harvest data is matched to rifle hunts, and archery harvest data is matched to archery hunts. Loading only some files is fine; missing columns show "&mdash;".
+    </p>
+
+  </div>
+</section>
+```
+
   </div>
 
   <!-- ========== DETAIL MODAL ========== -->
@@ -796,9 +906,30 @@ const STORAGE_KEY = 'odfw_planner_v1';
 const state = {
   hunts: [],            // unified array of all hunts (elk + deer)
   files: {},            // {elkPoints: {name, loadedAt}, ...}
+  harvestData: {},      // {elkRifleHarvest: {huntNum: {...}}, elkArcheryHarvest: {...}, ...}
   sortKey: 'huntNum',
   sortDir: 'asc'
 };
+
+// Re-apply all stored harvest data to hunts (called after points reload, or after new harvest upload)
+function applyAllHarvest() {
+  // Clear existing harvest fields
+  state.hunts.forEach(h => { h.harvest = null; });
+
+  Object.entries(state.harvestData).forEach(([key, data]) => {
+    if (!data) return;
+    const species = key.startsWith('elk') ? 'elk' : 'deer';
+    const isArchery = key.endsWith('ArcheryHarvest');
+    const matchWeapons = isArchery ? ['archery'] : ['rifle', 'youth', 'muzz'];
+    let matched = 0;
+    state.hunts.forEach(h => {
+      if (h.species !== species) return;
+      if (!matchWeapons.includes(h.weapon)) return;
+      if (data[h.huntNum]) { h.harvest = data[h.huntNum]; matched++; }
+    });
+    if (state.files[key]) state.files[key].matched = matched;
+  });
+}
 
 // ============================================================
 // HELPERS
@@ -962,70 +1093,83 @@ async function parseHarvestPdf(arrayBuffer) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const harvest = {};  // huntNum -> {hunters, success, harvest}
+  const harvest = {};
 
-  // Pattern: hunt number = digits + optional letters/digits suffix (e.g. 230X, 210A1, 200M)
-  const huntNumRe = /^\d{3}[A-Z]?\d*$/;
+  // A hunt number is exactly 3 digits, optionally followed by ONE letter,
+  // optionally followed by 1-2 more digits. Examples: 218A, 210, 200M, 254X, 218T, 210A1
+  const huntNumRe = /^\d{3}[A-Z]?\d{0,2}$/;
+  // Trailing percent or NA%
+  const pctRe = /(\d+)%$/;
 
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const tc = await page.getTextContent();
 
-    // Group text items by Y position into rows
-    const rowsMap = new Map();
+    // Group items by Y position (rounded) into lines.
+    const linesMap = new Map();
     tc.items.forEach(it => {
+      if (!it.str || !it.str.trim()) return;
       const y = Math.round(it.transform[5]);
-      if (!rowsMap.has(y)) rowsMap.set(y, []);
-      rowsMap.get(y).push({ x: it.transform[4], str: it.str });
+      // Allow tiny Y variations (PDF kerning) by snapping to nearest 2pt
+      const yKey = Math.round(y / 2) * 2;
+      if (!linesMap.has(yKey)) linesMap.set(yKey, []);
+      linesMap.get(yKey).push({ x: it.transform[4], str: it.str.trim() });
     });
-    const rows = [...rowsMap.entries()]
-      .sort((a, b) => b[0] - a[0])
-      .map(([_, items]) => items.sort((a, b) => a.x - b.x).map(i => i.str.trim()).filter(s => s));
 
-    rows.forEach(tokens => {
-      // Find a hunt number in the row
+    const lines = [...linesMap.entries()]
+      .sort((a, b) => b[0] - a[0])  // top of page first
+      .map(([_, items]) => items.sort((a, b) => a.x - b.x));
+
+    lines.forEach(items => {
+      const tokens = items.map(i => i.str).filter(s => s);
+      if (tokens.length < 8) return;  // data rows have 12+ tokens
+
+      // Find the first token that matches a hunt number
       let huntIdx = -1;
       for (let i = 0; i < tokens.length; i++) {
-        if (huntNumRe.test(tokens[i])) { huntIdx = i; break; }
+        if (huntNumRe.test(tokens[i])) {
+          // Skip tokens that look like they're part of hunt name (e.g. just "210" alone is a hunt num)
+          // but make sure there's a numeric token following somewhere (the data)
+          huntIdx = i;
+          break;
+        }
       }
       if (huntIdx < 0) return;
-      const huntNum = tokens[huntIdx];
 
-      // Last token should be a percentage like "46%" or "NA%"
+      // Last token must be a percentage
       const lastTok = tokens[tokens.length - 1];
-      const pctMatch = lastTok && lastTok.match(/^(\d+)%$/);
+      const pctMatch = lastTok && lastTok.match(pctRe);
       if (!pctMatch) return;
       const successPct = Number(pctMatch[1]);
 
-      // Extract numeric tail: between hunt name and percent are 11 numeric columns:
-      // TotalHunters, DaysHunted, Antlerless, TotalBullHarvest, TotalSpike, 2pt, 3pt, 4pt, 5pt, 6pt+ (10 numbers + the success%)
-      // Actually the columns from PDF are: Hunters Days Antlerless TotalBull Total Spike 2pt 3pt 4pt 5pt 6pt+ Success%
-      // We just grab the numeric tail before the percent.
-      const tail = tokens.slice(huntIdx + 1);
-      // Find name (everything until first numeric token)
+      // Count numeric tokens — real data rows have many
+      const numericCount = tokens.filter(t => /^-?\d+$/.test(t)).length;
+      if (numericCount < 7) return;
+
+      const huntNum = tokens[huntIdx];
+      // First instance wins (Controlled section comes before General)
+      if (harvest[huntNum]) return;
+
+      // Extract structure: huntNum [name words...] hunters days antlerless totalBull totalHarvest spike 2pt 3pt 4pt 5pt 6pt+ pct
+      const tail = tokens.slice(huntIdx + 1, tokens.length - 1);
+      // Split tail into name (leading non-numeric tokens) and numbers
       let nameEnd = 0;
       while (nameEnd < tail.length && !/^-?\d+$/.test(tail[nameEnd])) nameEnd++;
       const name = tail.slice(0, nameEnd).join(' ').trim();
-      const nums = tail.slice(nameEnd, tail.length - 1).map(Number).filter(n => !isNaN(n));
+      const nums = tail.slice(nameEnd).map(Number).filter(n => !isNaN(n));
 
-      const hunters = nums[0] || 0;
-      const days = nums[1] || 0;
-      const antlerless = nums[2] || 0;
-      const totalBull = nums[3] || 0;
+      if (nums.length < 5) return;  // need at least hunters/days/antlerless/totalBull/totalHarvest
 
-      // First instance wins (Controlled section comes before General)
-      if (!harvest[huntNum]) {
-        harvest[huntNum] = {
-          huntNum,
-          name,
-          hunters,
-          days,
-          antlerless,
-          totalBull,
-          totalHarvest: antlerless + totalBull,
-          successPct
-        };
-      }
+      harvest[huntNum] = {
+        huntNum,
+        name,
+        hunters: nums[0] || 0,
+        days: nums[1] || 0,
+        antlerless: nums[2] || 0,
+        totalBull: nums[3] || 0,
+        totalHarvest: (nums[2] || 0) + (nums[3] || 0),
+        successPct
+      };
     });
   }
   return harvest;
@@ -1090,27 +1234,26 @@ async function handleFile(target, file) {
       state.hunts = state.hunts.filter(h => h.species !== species);
       state.hunts.push(...hunts);
       state.files[target] = { name: file.name, loadedAt: Date.now(), count: hunts.length };
+      // Re-apply any previously loaded harvest data so we don't lose those columns
+      applyAllHarvest();
       toast(`Loaded ${hunts.length} ${species} hunts from ${file.name}`);
 
-    } else if (target === 'elkHarvest' || target === 'deerHarvest') {
+    } else if (target === 'elkRifleHarvest' || target === 'deerRifleHarvest' ||
+               target === 'elkArcheryHarvest' || target === 'deerArcheryHarvest') {
       let harvest;
       if (ext === 'pdf') {
         harvest = await parseHarvestPdf(buf);
       } else {
         harvest = parseHarvestXlsx(buf);
       }
-      const species = target === 'elkHarvest' ? 'elk' : 'deer';
-      // Merge into state.hunts by huntNum
-      let matched = 0;
-      state.hunts.forEach(h => {
-        if (h.species !== species) return;
-        if (harvest[h.huntNum]) {
-          h.harvest = harvest[h.huntNum];
-          matched++;
-        }
-      });
-      state.files[target] = { name: file.name, loadedAt: Date.now(), count: Object.keys(harvest).length, matched };
-      toast(`Loaded harvest data for ${Object.keys(harvest).length} hunts (${matched} matched)`);
+      state.harvestData[target] = harvest;
+      state.files[target] = { name: file.name, loadedAt: Date.now(), count: Object.keys(harvest).length, matched: 0 };
+      applyAllHarvest();
+      const matched = state.files[target].matched;
+      const species = target.startsWith('elk') ? 'elk' : 'deer';
+      const isArchery = target.endsWith('ArcheryHarvest');
+      const label = isArchery ? 'archery' : 'rifle';
+      toast(`Loaded ${species} ${label} harvest: ${Object.keys(harvest).length} hunts in file, ${matched} matched`);
     }
 
     saveState();
@@ -1130,6 +1273,7 @@ function saveState() {
     const payload = {
       hunts: state.hunts,
       files: state.files,
+      harvestData: state.harvestData,
       savedAt: Date.now()
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -1145,6 +1289,7 @@ function loadState() {
     const data = JSON.parse(raw);
     state.hunts = data.hunts || [];
     state.files = data.files || {};
+    state.harvestData = data.harvestData || {};
     return true;
   } catch (e) {
     console.warn('Could not load:', e);
@@ -1155,6 +1300,7 @@ function loadState() {
 function clearAll() {
   state.hunts = [];
   state.files = {};
+  state.harvestData = {};
   try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
   render();
   toast('All data cleared');
@@ -1200,7 +1346,7 @@ function applyFilters(hunts) {
 function sortHunts(hunts) {
   const dir = state.sortDir === 'asc' ? 1 : -1;
   const k = state.sortKey;
-  const numKey = ['tags','apps','minPts','firstChoiceOdds','success'].includes(k);
+  const numKey = ['tags','apps','minPts','firstChoiceOdds','success','hunters','harvest'].includes(k);
   return [...hunts].sort((a, b) => {
     let av, bv;
     if (k === 'huntNum')      { av = a.huntNum; bv = b.huntNum; }
@@ -1211,6 +1357,8 @@ function sortHunts(hunts) {
     else if (k === 'minPts')  { av = a.minPointsToDraw; bv = b.minPointsToDraw; }
     else if (k === 'firstChoiceOdds') { av = a.firstChoiceOdds; bv = b.firstChoiceOdds; }
     else if (k === 'success') { av = a.harvest?.successPct; bv = b.harvest?.successPct; }
+    else if (k === 'hunters') { av = a.harvest?.hunters; bv = b.harvest?.hunters; }
+    else if (k === 'harvest') { av = a.harvest?.totalHarvest; bv = b.harvest?.totalHarvest; }
 
     // Nulls last regardless of dir
     const aNull = av === null || av === undefined;
@@ -1225,28 +1373,29 @@ function sortHunts(hunts) {
 }
 
 function renderStatus() {
-  const elk = state.files.elkPoints;
-  const deer = state.files.deerPoints;
-  const elkH = state.files.elkHarvest;
-  const deerH = state.files.deerHarvest;
-
+  const f = state.files;
   const dot = $('#statusDot');
   const txt = $('#statusText');
   const det = $('#statusDetail');
   const last = $('#lastLoaded');
 
   const parts = [];
-  if (elk) parts.push(`Elk points: ${elk.count}`);
-  if (deer) parts.push(`Deer points: ${deer.count}`);
-  if (elkH) parts.push(`Elk harvest: ${elkH.matched ?? elkH.count} matched`);
-  if (deerH) parts.push(`Deer harvest: ${deerH.matched ?? deerH.count} matched`);
+  if (f.elkPoints) parts.push(`Elk points: ${f.elkPoints.count}`);
+  if (f.deerPoints) parts.push(`Deer points: ${f.deerPoints.count}`);
+  if (f.elkRifleHarvest) parts.push(`Elk rifle harvest: ${f.elkRifleHarvest.matched ?? 0} matched`);
+  if (f.elkArcheryHarvest) parts.push(`Elk archery harvest: ${f.elkArcheryHarvest.matched ?? 0} matched`);
+  if (f.deerRifleHarvest) parts.push(`Deer rifle harvest: ${f.deerRifleHarvest.matched ?? 0} matched`);
+  if (f.deerArcheryHarvest) parts.push(`Deer archery harvest: ${f.deerArcheryHarvest.matched ?? 0} matched`);
+
+  const hasPoints = f.elkPoints || f.deerPoints;
+  const hasHarvest = f.elkRifleHarvest || f.elkArcheryHarvest || f.deerRifleHarvest || f.deerArcheryHarvest;
 
   if (state.hunts.length === 0) {
     dot.className = 'status-dot';
     txt.textContent = 'No data loaded';
     det.textContent = '';
     last.textContent = '—';
-  } else if (parts.length >= 2 && (elk || deer) && (elkH || deerH)) {
+  } else if (hasPoints && hasHarvest) {
     dot.className = 'status-dot loaded';
     txt.textContent = 'Data loaded';
     det.textContent = parts.join(' · ');
@@ -1264,9 +1413,10 @@ function renderStatus() {
   }
 
   // Per-zone file labels
-  ['elkPoints','deerPoints','elkHarvest','deerHarvest'].forEach(k => {
+  ['elkPoints','deerPoints','elkRifleHarvest','elkArcheryHarvest','deerRifleHarvest','deerArcheryHarvest'].forEach(k => {
     const el = document.querySelector(`[data-file="${k}"]`);
     const zone = document.querySelector(`[data-key="${k}"]`);
+    if (!el || !zone) return;
     if (state.files[k]) {
       el.textContent = '✓ ' + state.files[k].name;
       zone.classList.add('has-file');
@@ -1287,11 +1437,11 @@ function renderTable() {
     : `${sorted.length} of ${state.hunts.length} hunts`;
 
   if (state.hunts.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Upload an ODFW Preference Points report to begin.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">Visit the Data Manager to upload an ODFW Preference Points report.</td></tr>';
     return;
   }
   if (sorted.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No hunts match the current filters.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No hunts match the current filters.</td></tr>';
     return;
   }
 
@@ -1314,6 +1464,8 @@ function renderTable() {
     const odds = h.firstChoiceOdds;
     const success = h.harvest?.successPct;
     const successWidth = success != null ? Math.min(100, success) : 0;
+    const hunters = h.harvest?.hunters;
+    const harvestTotal = h.harvest?.totalHarvest;
 
     return `
       <tr data-hunt="${h.huntNum}_${h.species}">
@@ -1329,6 +1481,8 @@ function renderTable() {
             `<span class="success-cell">${fmtPct(success)}</span>
              <div class="success-bar"><div class="success-bar-fill" style="width:${successWidth}%"></div></div>`}
         </td>
+        <td class="num">${hunters == null ? '—' : fmt(hunters)}</td>
+        <td class="num">${harvestTotal == null ? '—' : fmt(harvestTotal)}</td>
       </tr>
     `;
   }).join('');
@@ -1434,9 +1588,30 @@ function showDetail(id) {
   $('#modal').classList.add('open');
 }
 
+function switchPage(pageName) {
+  document.querySelectorAll('.page').forEach(p => {
+    p.classList.toggle('active', p.dataset.page === pageName);
+  });
+  document.querySelectorAll('.nav-link').forEach(b => {
+    b.classList.toggle('active', b.dataset.page === pageName);
+  });
+  // Scroll to top on page change for clarity
+  window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+}
+
+function renderEmptyPrompt() {
+  const prompt = document.getElementById('emptyDataPrompt');
+  const badge = document.getElementById('navBadge');
+  if (!prompt || !badge) return;
+  const empty = state.hunts.length === 0;
+  prompt.style.display = empty ? 'block' : 'none';
+  badge.style.display = empty ? 'inline-block' : 'none';
+}
+
 function render() {
   renderStatus();
   renderTable();
+  renderEmptyPrompt();
 }
 
 // ============================================================
@@ -1445,6 +1620,16 @@ function render() {
 function init() {
   loadState();
   render();
+
+  // Page navigation
+  document.querySelectorAll('.nav-link').forEach(btn => {
+    btn.addEventListener('click', () => switchPage(btn.dataset.page));
+  });
+  // Inter-page buttons
+  const goData = document.getElementById('btnGoToData');
+  if (goData) goData.addEventListener('click', () => switchPage('data'));
+  const goDb = document.getElementById('btnViewDatabase');
+  if (goDb) goDb.addEventListener('click', () => switchPage('database'));
 
   // File inputs
   $$('input[type=file]').forEach(inp => {
