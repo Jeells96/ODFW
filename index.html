@@ -4,39 +4,40 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="color-scheme" content="light only">
-<meta name="supported-color-schemes" content="light">
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
 <title>Oregon Controlled Hunt Planner</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 :root {
-  color-scheme: light only;
-  --odfw-green: #1f4e2a;
-  --odfw-green-dark: #163a1f;
-  --odfw-green-light: #2d6b3c;
-  --odfw-tan: #e8e0cc;
-  --odfw-tan-light: #f5f0e1;
-  --odfw-cream: #faf7ed;
-  --odfw-gold: #b08a3e;
-  --text-primary: #1a1a1a;
-  --text-secondary: #4a4a4a;
-  --text-muted: #707070;
-  --border: #c9c2ad;
-  --border-light: #ddd6c2;
-  --warn: #8b4513;
-  --warn-bg: #fdf4e3;
-  --good: #2d6b3c;
-  --good-bg: #e8f0e3;
-  --bad: #8b2e2e;
-  --bad-bg: #f5e3e3;
+  color-scheme: dark;
+  --odfw-green: #4a8f5e;
+  --odfw-green-dark: #6bb582;
+  --odfw-green-light: #4a8f5e;
+  --odfw-tan: #2a2a2a;
+  --odfw-tan-light: #1f1f1f;
+  --odfw-cream: #000000;
+  --odfw-gold: #d4a04a;
+  --text-primary: #f0f0f0;
+  --text-secondary: #c5c5c5;
+  --text-muted: #8a8a8a;
+  --border: #3a3a3a;
+  --border-light: #2a2a2a;
+  --warn: #d4a04a;
+  --warn-bg: #2a2418;
+  --good: #6bb582;
+  --good-bg: #1a2a1f;
+  --bad: #d46b6b;
+  --bad-bg: #2a1818;
+  --panel-bg: #141414;
 }
 
 html, body, div, section, header, footer, main, nav, article, aside, h1, h2, h3, h4, h5, h6, p, ul, ol, li, table, thead, tbody, tr, th, td, label, input, select, button, span, a, img, form, textarea { box-sizing: border-box; }
 
 html {
 -webkit-text-size-adjust: 100%;
-background: #faf7ed;
+background: #000000;
 }
 
 body {
@@ -44,8 +45,8 @@ margin: 0;
 font-family: ‘Georgia’, ‘Cambria’, ‘Times New Roman’, serif;
 font-size: 16px;
 line-height: 1.5;
-color: #1a1a1a !important;
-background: #faf7ed !important;
+color: #f0f0f0 !important;
+background: #000000 !important;
 -webkit-font-smoothing: antialiased;
 }
 
@@ -86,6 +87,20 @@ font-size: 22px;
 font-weight: 600;
 letter-spacing: 0.3px;
 line-height: 1.15;
+}
+.site-version {
+display: inline-block;
+margin-left: 8px;
+padding: 1px 7px;
+font-family: ‘Helvetica Neue’, Arial, sans-serif;
+font-size: 11px;
+font-weight: 600;
+letter-spacing: 0.5px;
+vertical-align: middle;
+color: #d4a04a;
+border: 1px solid #d4a04a;
+border-radius: 2px;
+background: rgba(0,0,0,0.3);
 }
 .site-subtitle {
 font-size: 12px;
@@ -169,20 +184,20 @@ font-size: 15px;
 
 /* UPLOAD PANEL */
 .panel {
-background: #fff;
+background: #141414;
 border: 1px solid var(–border);
 margin-bottom: 24px;
 }
 .panel-head {
-background: var(–odfw-tan);
-border-bottom: 1px solid var(–border);
+background: #1f1f1f;
+border-bottom: 1px solid #3a3a3a;
 padding: 10px 16px;
 font-family: ‘Helvetica Neue’, Arial, sans-serif;
 font-size: 13px;
 font-weight: 600;
 text-transform: uppercase;
 letter-spacing: 0.6px;
-color: var(–odfw-green-dark);
+color: #d4a04a;
 }
 .panel-body { padding: 18px 16px; }
 
@@ -270,7 +285,7 @@ font-weight: 600;
 letter-spacing: 0.5px;
 text-transform: uppercase;
 color: var(–odfw-green-dark);
-background: #fff;
+background: #141414;
 border: 1px solid var(–odfw-green-dark);
 text-decoration: none;
 text-align: center;
@@ -315,10 +330,10 @@ border-radius: 0;
 }
 .btn:hover { background: var(–odfw-green-dark); }
 .btn:disabled { background: #999; border-color: #999; cursor: not-allowed; }
-.btn.secondary { background: #fff; color: var(–odfw-green-dark); }
-.btn.secondary:hover { background: var(–odfw-tan); }
-.btn.danger { background: #fff; color: var(–bad); border-color: var(–bad); }
-.btn.danger:hover { background: var(–bad-bg); }
+.btn.secondary { background: #1f1f1f; color: #6bb582; border-color: #6bb582; }
+.btn.secondary:hover { background: #2a2a2a; }
+.btn.danger { background: #1f1f1f; color: #d46b6b; border-color: #d46b6b; }
+.btn.danger:hover { background: #2a1818; }
 
 .help-text {
 font-family: ‘Helvetica Neue’, Arial, sans-serif;
@@ -348,26 +363,29 @@ margin-bottom: 4px;
 .field input, .field select {
 width: 100%;
 padding: 7px 9px;
-border: 1px solid #c9c2ad;
-background: #ffffff;
+border: 1px solid #3a3a3a;
+background: #141414;
 font-family: inherit;
 font-size: 14px;
-color: #1a1a1a;
--webkit-text-fill-color: #1a1a1a;
-color-scheme: light;
+color: #f0f0f0;
+-webkit-text-fill-color: #f0f0f0;
+color-scheme: dark;
 border-radius: 0;
 -webkit-appearance: none;
 appearance: none;
 }
 .field input:focus, .field select:focus {
-outline: 2px solid var(–odfw-gold);
+outline: 2px solid #d4a04a;
 outline-offset: -1px;
 }
 .field select {
-background-image: url(“data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%231f4e2a' stroke-width='1.5' fill='none'/></svg>”);
+background-image: url(“data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%236bb582' stroke-width='1.5' fill='none'/></svg>”);
 background-repeat: no-repeat;
 background-position: right 8px center;
 padding-right: 28px;
+}
+.field input::placeholder {
+color: #707070;
 }
 
 /* RESULTS TABLE */
@@ -393,7 +411,7 @@ color: var(–text-muted);
 }
 
 .table-wrap {
-background: #fff;
+background: #141414;
 border: 1px solid var(–border);
 overflow-x: auto;
 -webkit-overflow-scrolling: touch;
@@ -449,12 +467,12 @@ font-weight: 600;
 text-transform: uppercase;
 letter-spacing: 0.4px;
 border: 1px solid var(–border);
-background: #fff;
+background: #141414;
 }
-.tag.archery { border-color: #6b5b3a; color: #6b5b3a; }
-.tag.muzz { border-color: #8b4513; color: #8b4513; }
-.tag.rifle { border-color: var(–odfw-green-dark); color: var(–odfw-green-dark); }
-.tag.youth { border-color: #4a6b8b; color: #4a6b8b; }
+.tag.archery { border-color: #c4a96a; color: #c4a96a; }
+.tag.muzz { border-color: #d48b58; color: #d48b58; }
+.tag.rifle { border-color: #6bb582; color: #6bb582; }
+.tag.youth { border-color: #7da9d4; color: #7da9d4; }
 
 .draw-cell {
 font-weight: 600;
@@ -509,7 +527,7 @@ overflow-y: auto;
 }
 .modal-backdrop.open { display: flex; }
 .modal {
-background: #fff;
+background: #141414;
 border: 1px solid var(–border);
 max-width: 720px;
 width: 100%;
@@ -653,7 +671,7 @@ display: none;
   <div class="site-header-inner">
     <div class="crest">ODFW</div>
     <div>
-      <h1 class="site-title">Oregon Controlled Hunt Planner</h1>
+      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="site-version">v1.1</span></h1>
       <div class="site-subtitle">Buck Deer &amp; Elk &mdash; Draw Odds &amp; Harvest Statistics</div>
     </div>
   </div>
