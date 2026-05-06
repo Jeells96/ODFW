@@ -4,11 +4,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light only">
+<meta name="supported-color-schemes" content="light">
 <title>Oregon Controlled Hunt Planner</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 :root {
+  color-scheme: light only;
   --odfw-green: #1f4e2a;
   --odfw-green-dark: #163a1f;
   --odfw-green-light: #2d6b3c;
@@ -31,15 +34,18 @@
 
 - { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+html {
+-webkit-text-size-adjust: 100%;
+background: #faf7ed;
+}
 
 body {
 margin: 0;
 font-family: ‘Georgia’, ‘Cambria’, ‘Times New Roman’, serif;
 font-size: 16px;
 line-height: 1.5;
-color: var(–text-primary);
-background: var(–odfw-cream);
+color: #1a1a1a !important;
+background: #faf7ed !important;
 -webkit-font-smoothing: antialiased;
 }
 
