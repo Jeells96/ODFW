@@ -1095,81 +1095,82 @@ async function parseHarvestPdf(arrayBuffer) {
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const harvest = {};
 
-  // A hunt number is exactly 3 digits, optionally followed by ONE letter,
-  // optionally followed by 1-2 more digits. Examples: 218A, 210, 200M, 254X, 218T, 210A1
-  const huntNumRe = /^\d{3}[A-Z]?\d{0,2}$/;
-  // Trailing percent or NA%
-  const pctRe = /(\d+)%$/;
+  // Hunt number: 3 digits, optionally followed by 1 letter and optional 1-2 digits
+  // e.g. 210, 210A1, 254X, 200M, 247D2
+  const huntInLineRe = /\b(\d{3}[A-Z]\d{0,2}|\d{3})\b/g;
 
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const tc = await page.getTextContent();
 
-    // Group items by Y position (rounded) into lines.
-    const linesMap = new Map();
-    tc.items.forEach(it => {
-      if (!it.str || !it.str.trim()) return;
-      const y = Math.round(it.transform[5]);
-      // Allow tiny Y variations (PDF kerning) by snapping to nearest 2pt
-      const yKey = Math.round(y / 2) * 2;
-      if (!linesMap.has(yKey)) linesMap.set(yKey, []);
-      linesMap.get(yKey).push({ x: it.transform[4], str: it.str.trim() });
+    // Group items into lines by Y position. PDF.js gives transform[5] = baseline Y.
+    // Use a tolerance-based bucket: items within ~3 units of each other are same line.
+    const items = tc.items
+      .filter(it => it.str && it.str.trim())
+      .map(it => ({ x: it.transform[4], y: it.transform[5], str: it.str }))
+      .sort((a, b) => b.y - a.y || a.x - b.x);
+
+    const lines = [];
+    let curLine = null;
+    items.forEach(it => {
+      if (!curLine || Math.abs(curLine.y - it.y) > 3) {
+        curLine = { y: it.y, items: [] };
+        lines.push(curLine);
+      }
+      curLine.items.push(it);
     });
 
-    const lines = [...linesMap.entries()]
-      .sort((a, b) => b[0] - a[0])  // top of page first
-      .map(([_, items]) => items.sort((a, b) => a.x - b.x));
+    lines.forEach(line => {
+      // Reconstruct line text with single spaces between items (PDF.js often
+      // splits adjacent text, so we just join with a space and let regex handle).
+      const text = line.items.map(i => i.str).join(' ').replace(/\s+/g, ' ').trim();
 
-    lines.forEach(items => {
-      const tokens = items.map(i => i.str).filter(s => s);
-      if (tokens.length < 8) return;  // data rows have 12+ tokens
-
-      // Find the first token that matches a hunt number
-      let huntIdx = -1;
-      for (let i = 0; i < tokens.length; i++) {
-        if (huntNumRe.test(tokens[i])) {
-          // Skip tokens that look like they're part of hunt name (e.g. just "210" alone is a hunt num)
-          // but make sure there's a numeric token following somewhere (the data)
-          huntIdx = i;
-          break;
-        }
-      }
-      if (huntIdx < 0) return;
-
-      // Last token must be a percentage
-      const lastTok = tokens[tokens.length - 1];
-      const pctMatch = lastTok && lastTok.match(pctRe);
+      // Must end with NN% or NA%
+      const pctMatch = text.match(/(\d+|NA)%\s*$/);
       if (!pctMatch) return;
-      const successPct = Number(pctMatch[1]);
+      const pct = pctMatch[1] === 'NA' ? null : Number(pctMatch[1]);
+      if (pct === null) return;
 
-      // Count numeric tokens — real data rows have many
-      const numericCount = tokens.filter(t => /^-?\d+$/.test(t)).length;
-      if (numericCount < 7) return;
+      // Extract hunt number(s) from the line — there may be multiple if the
+      // zone label and hunt number both look numeric. We want the FIRST one
+      // that is followed by a hunt name, then a stream of numbers.
+      const huntMatches = [...text.matchAll(huntInLineRe)];
+      if (!huntMatches.length) return;
 
-      const huntNum = tokens[huntIdx];
-      // First instance wins (Controlled section comes before General)
-      if (harvest[huntNum]) return;
+      // Try each hunt-num candidate; accept the first where the rest of the
+      // line has the expected shape: name (non-numeric words) then ~10 numbers then pct
+      for (const m of huntMatches) {
+        const huntNum = m[1];
+        const after = text.slice(m.index + huntNum.length).trim();
+        // After the hunt num: name words, then stream of numbers, then NN%
+        // Strip trailing "NN%" before counting numbers
+        const afterNoPct = after.replace(/(\d+|NA)%\s*$/, '').trim();
+        // Tokenize
+        const tokens = afterNoPct.split(/\s+/);
+        // Find where numbers start
+        let nameEnd = 0;
+        while (nameEnd < tokens.length && !/^-?\d+$/.test(tokens[nameEnd])) nameEnd++;
+        if (nameEnd === 0) continue; // hunt number with no name following — skip
+        const name = tokens.slice(0, nameEnd).join(' ').trim();
+        const nums = tokens.slice(nameEnd).filter(t => /^-?\d+$/.test(t)).map(Number);
+        // Real harvest data row has at least 10 numeric columns
+        if (nums.length < 8) continue;
 
-      // Extract structure: huntNum [name words...] hunters days antlerless totalBull totalHarvest spike 2pt 3pt 4pt 5pt 6pt+ pct
-      const tail = tokens.slice(huntIdx + 1, tokens.length - 1);
-      // Split tail into name (leading non-numeric tokens) and numbers
-      let nameEnd = 0;
-      while (nameEnd < tail.length && !/^-?\d+$/.test(tail[nameEnd])) nameEnd++;
-      const name = tail.slice(0, nameEnd).join(' ').trim();
-      const nums = tail.slice(nameEnd).map(Number).filter(n => !isNaN(n));
+        // First match wins (Controlled section before General)
+        if (harvest[huntNum]) break;
 
-      if (nums.length < 5) return;  // need at least hunters/days/antlerless/totalBull/totalHarvest
-
-      harvest[huntNum] = {
-        huntNum,
-        name,
-        hunters: nums[0] || 0,
-        days: nums[1] || 0,
-        antlerless: nums[2] || 0,
-        totalBull: nums[3] || 0,
-        totalHarvest: (nums[2] || 0) + (nums[3] || 0),
-        successPct
-      };
+        harvest[huntNum] = {
+          huntNum,
+          name,
+          hunters: nums[0] || 0,
+          days: nums[1] || 0,
+          antlerless: nums[2] || 0,
+          totalBull: nums[3] || 0,
+          totalHarvest: (nums[2] || 0) + (nums[3] || 0),
+          successPct: pct
+        };
+        break;
+      }
     });
   }
   return harvest;
