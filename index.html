@@ -8,99 +8,93 @@
 <title>Oregon Controlled Hunt Planner</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<!-- Firebase -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getFirestore, doc, setDoc, getDoc, collection, getDocs, serverTimestamp }
-    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-const firebaseConfig = {
-apiKey: “AIzaSyCqbU875vWyWS0dQWr0hoqVRscH2AtU_v4”,
-authDomain: “oregon-hunting.firebaseapp.com”,
-projectId: “oregon-hunting”,
-storageBucket: “oregon-hunting.firebasestorage.app”,
-messagingSenderId: “84034970737”,
-appId: “1:84034970737:web:d470b1daca7b56ce6227d0”
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-// Expose helpers on window so the main script can call them
-window.__fb = {
-// Save a full year’s data to Firestore
-async saveYear(year, hunts, harvestData) {
-try {
-// Firestore docs have a 1MB limit — split hunts into chunks of 200
-const CHUNK = 200;
-const chunks = [];
-for (let i = 0; i < hunts.length; i += CHUNK) chunks.push(hunts.slice(i, i + CHUNK));
+<!-- Firebase compat (non-module, no race condition) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+  (function() {
+    try {
+      const app = firebase.initializeApp({
+        apiKey: "AIzaSyCqbU875vWyWS0dQWr0hoqVRscH2AtU_v4",
+        authDomain: "oregon-hunting.firebaseapp.com",
+        projectId: "oregon-hunting",
+        storageBucket: "oregon-hunting.firebasestorage.app",
+        messagingSenderId: "84034970737",
+        appId: "1:84034970737:web:d470b1daca7b56ce6227d0"
+      });
+      const db = firebase.firestore();
 
 ```
-    // Write metadata doc
-    await setDoc(doc(db, 'years', String(year)), {
-      year: String(year),
-      huntCount: hunts.length,
-      chunkCount: chunks.length,
-      updatedAt: serverTimestamp()
-    });
+  window.__fb = {
+    async saveYear(year, hunts, harvestData) {
+      try {
+        const CHUNK = 200;
+        const chunks = [];
+        for (let i = 0; i < hunts.length; i += CHUNK) chunks.push(hunts.slice(i, i + CHUNK));
 
-    // Write each hunt chunk
-    for (let ci = 0; ci < chunks.length; ci++) {
-      await setDoc(doc(db, 'years', String(year), 'chunks', String(ci)), {
-        hunts: JSON.stringify(chunks[ci])
-      });
-    }
+        await db.collection('years').doc(String(year)).set({
+          year: String(year),
+          huntCount: hunts.length,
+          chunkCount: chunks.length,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
 
-    // Write harvest data (keyed by species/weapon)
-    await setDoc(doc(db, 'years', String(year), 'harvest', 'all'), {
-      data: JSON.stringify(harvestData),
-      updatedAt: serverTimestamp()
-    });
-
-    console.log('[Firebase] Saved year', year);
-    return true;
-  } catch (e) {
-    console.warn('[Firebase] Save failed:', e);
-    return false;
-  }
-},
-
-// Load all available years from Firestore
-async loadAllYears() {
-  try {
-    const snapshot = await getDocs(collection(db, 'years'));
-    const result = {};
-    for (const yearDoc of snapshot.docs) {
-      const meta = yearDoc.data();
-      const year = meta.year;
-      // Load hunt chunks
-      let hunts = [];
-      for (let ci = 0; ci < (meta.chunkCount || 1); ci++) {
-        const chunkDoc = await getDoc(doc(db, 'years', year, 'chunks', String(ci)));
-        if (chunkDoc.exists()) {
-          const chunk = JSON.parse(chunkDoc.data().hunts || '[]');
-          hunts = hunts.concat(chunk);
+        for (let ci = 0; ci < chunks.length; ci++) {
+          await db.collection('years').doc(String(year))
+            .collection('chunks').doc(String(ci))
+            .set({ hunts: JSON.stringify(chunks[ci]) });
         }
+
+        await db.collection('years').doc(String(year))
+          .collection('harvest').doc('all')
+          .set({ data: JSON.stringify(harvestData),
+                 updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+
+        console.log('[Firebase] Saved year', year);
+        return true;
+      } catch (e) {
+        console.warn('[Firebase] Save failed:', e);
+        return false;
       }
-      // Load harvest
-      const harvestDoc = await getDoc(doc(db, 'years', year, 'harvest', 'all'));
-      const harvestData = harvestDoc.exists() ? JSON.parse(harvestDoc.data().data || '{}') : {};
-      result[year] = { hunts, harvestData, files: {} };
+    },
+
+    async loadAllYears() {
+      try {
+        const snapshot = await db.collection('years').get();
+        const result = {};
+        for (const yearDoc of snapshot.docs) {
+          const meta = yearDoc.data();
+          const year = meta.year;
+          let hunts = [];
+          for (let ci = 0; ci < (meta.chunkCount || 1); ci++) {
+            const chunkDoc = await db.collection('years').doc(year)
+              .collection('chunks').doc(String(ci)).get();
+            if (chunkDoc.exists) {
+              hunts = hunts.concat(JSON.parse(chunkDoc.data().hunts || '[]'));
+            }
+          }
+          const harvestDoc = await db.collection('years').doc(year)
+            .collection('harvest').doc('all').get();
+          const harvestData = harvestDoc.exists ? JSON.parse(harvestDoc.data().data || '{}') : {};
+          result[year] = { hunts, harvestData, files: {} };
+        }
+        return result;
+      } catch (e) {
+        console.warn('[Firebase] Load failed:', e);
+        return null;
+      }
     }
-    return result;
-  } catch (e) {
-    console.warn('[Firebase] Load failed:', e);
-    return null;
-  }
+  };
+
+  window.__fbReady = true;
+  console.log('[Firebase] Ready');
+} catch(e) {
+  console.warn('[Firebase] Init failed:', e);
+  window.__fbReady = false;
 }
 ```
 
-};
-
-// Signal to main script that Firebase is ready
-window.__fbReady = true;
-document.dispatchEvent(new Event(‘fbReady’));
+})();
 </script>
 
 <style>
@@ -1614,25 +1608,14 @@ function init() {
   }
   render();
 
-  // Try auto-loading from Firebase if no local data
-  const tryAutoLoad = () => {
-    if (getHunts().length === 0 && window.__fbReady) {
-      updateFbBanner('', 'No local data — loading from cloud…');
-      fbLoadAll();
-    } else if (getHunts().length === 0) {
-      updateFbBanner('', 'Connecting to cloud…');
-    } else {
-      updateFbBanner('success', 'Local data loaded. Use "Save to Cloud" to share your uploads.');
-    }
-  };
-
-  if (window.__fbReady) {
-    tryAutoLoad();
+  // Firebase compat SDK loads synchronously — __fbReady is already set by now
+  if (getHunts().length === 0 && window.__fbReady) {
+    updateFbBanner('', 'No local data — loading from cloud…');
+    fbLoadAll();
+  } else if (getHunts().length === 0) {
+    updateFbBanner('error', 'Firebase failed to load. Try refreshing or upload files locally.');
   } else {
-    document.addEventListener('fbReady', tryAutoLoad, { once: true });
-    setTimeout(() => {
-      if (!window.__fbReady) updateFbBanner('error', 'Could not connect to cloud. Upload files locally.');
-    }, 8000);
+    updateFbBanner('success', 'Local data loaded. Use "Save to Cloud" to share your uploads.');
   }
 
   // Nav
