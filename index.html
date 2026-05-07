@@ -167,7 +167,7 @@ footer a{color:#000}
   <div class="site-header-inner">
     <div class="crest">ODFW</div>
     <div>
-      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v1.4</span></h1>
+      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v1.5</span></h1>
       <div class="site-subtitle">Buck Deer &amp; Elk &mdash; Draw Odds &amp; Harvest Statistics</div>
     </div>
   </div>
@@ -213,8 +213,10 @@ footer a{color:#000}
         <select id="fSpecies"><option value="all">All</option><option value="elk">Elk</option><option value="deer">Buck Deer</option></select></div>
       <div class="field"><label>Weapon / Type</label>
         <select id="fWeapon"><option value="all">All</option><option value="rifle">Rifle (Any Legal)</option><option value="archery">Archery</option><option value="muzz">Muzzleloader</option><option value="youth">Youth</option></select></div>
-      <div class="field"><label>My Points</label>
-        <input type="number" id="fMyPoints" min="0" max="30" inputmode="numeric"></div>
+      <div class="field"><label>My Elk Points</label>
+        <input type="number" id="fElkPts" min="0" max="30" inputmode="numeric"></div>
+      <div class="field"><label>My Deer Points</label>
+        <input type="number" id="fDeerPts" min="0" max="30" inputmode="numeric"></div>
       <div class="field"><label>Show Hunts</label>
         <select id="fDrawability"><option value="all">All</option><option value="canDraw">I can draw (100% tier)</option><option value="oneAway">One point away from 100%</option><option value="reachable">Within 3 points of 100%</option></select></div>
       <div class="field" style="grid-column:span 2"><label>Search Unit / Hunt Name</label>
@@ -224,6 +226,44 @@ footer a{color:#000}
 </section>
 
 <div class="rmeta"><h2>Results</h2><div class="rcount" id="rcount">—</div></div>
+<div id="sortPanel" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:10px;font-family:sans-serif;font-size:12px;">
+  <div>
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gl);margin-bottom:3px">Then by</div>
+    <select id="sort2Key" style="padding:6px 28px 6px 8px;border:1px solid var(--bor);background:#141414;color:#f0f0f0;-webkit-text-fill-color:#f0f0f0;color-scheme:dark;font-family:sans-serif;font-size:13px;border-radius:0;-webkit-appearance:none;appearance:none;background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 12 12%22><path d=%22M2 4 L6 8 L10 4%22 stroke=%22%236bb582%22 stroke-width=%221.5%22 fill=%22none%22/></svg>');background-repeat:no-repeat;background-position:right 6px center;">
+      <option value="">— none —</option>
+      <option value="myOdds">My Draw Odds</option>
+      <option value="pts100">Pts for 100% Draw</option>
+      <option value="success">Success Rate</option>
+      <option value="tags">Tags</option>
+      <option value="apps">Applicants</option>
+    </select>
+  </div>
+  <div id="sort2DirWrap" style="display:none">
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gl);margin-bottom:3px">Order</div>
+    <select id="sort2Dir" style="padding:6px 28px 6px 8px;border:1px solid var(--bor);background:#141414;color:#f0f0f0;-webkit-text-fill-color:#f0f0f0;color-scheme:dark;font-family:sans-serif;font-size:13px;border-radius:0;-webkit-appearance:none;appearance:none;background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 12 12%22><path d=%22M2 4 L6 8 L10 4%22 stroke=%22%236bb582%22 stroke-width=%221.5%22 fill=%22none%22/></svg>');background-repeat:no-repeat;background-position:right 6px center;">
+      <option value="desc">High → Low</option>
+      <option value="asc">Low → High</option>
+    </select>
+  </div>
+  <div>
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gl);margin-bottom:3px">Then by</div>
+    <select id="sort3Key" style="padding:6px 28px 6px 8px;border:1px solid var(--bor);background:#141414;color:#f0f0f0;-webkit-text-fill-color:#f0f0f0;color-scheme:dark;font-family:sans-serif;font-size:13px;border-radius:0;-webkit-appearance:none;appearance:none;background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 12 12%22><path d=%22M2 4 L6 8 L10 4%22 stroke=%22%236bb582%22 stroke-width=%221.5%22 fill=%22none%22/></svg>');background-repeat:no-repeat;background-position:right 6px center;">
+      <option value="">— none —</option>
+      <option value="myOdds">My Draw Odds</option>
+      <option value="pts100">Pts for 100% Draw</option>
+      <option value="success">Success Rate</option>
+      <option value="tags">Tags</option>
+      <option value="apps">Applicants</option>
+    </select>
+  </div>
+  <div id="sort3DirWrap" style="display:none">
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gl);margin-bottom:3px">Order</div>
+    <select id="sort3Dir" style="padding:6px 28px 6px 8px;border:1px solid var(--bor);background:#141414;color:#f0f0f0;-webkit-text-fill-color:#f0f0f0;color-scheme:dark;font-family:sans-serif;font-size:13px;border-radius:0;-webkit-appearance:none;appearance:none;background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 12 12%22><path d=%22M2 4 L6 8 L10 4%22 stroke=%22%236bb582%22 stroke-width=%221.5%22 fill=%22none%22/></svg>');background-repeat:no-repeat;background-position:right 6px center;">
+      <option value="desc">High → Low</option>
+      <option value="asc">Low → High</option>
+    </select>
+  </div>
+</div>
 <div class="twrap">
   <table class="hunts" id="huntsTable">
     <thead><tr>
@@ -381,6 +421,22 @@ async function fbSave(year, hunts, harvestData) {
   } catch(e) { console.warn('[FB] Save error:', e); return false; }
 }
 
+async function fbDeleteYear(year) {
+  if (!db) return false;
+  try {
+    // Delete chunks
+    const chunksSnap = await db.collection('years').doc(String(year)).collection('chunks').get();
+    for (const d of chunksSnap.docs) await d.ref.delete();
+    // Delete harvest
+    const harvestSnap = await db.collection('years').doc(String(year)).collection('harvest').get();
+    for (const d of harvestSnap.docs) await d.ref.delete();
+    // Delete year doc
+    await db.collection('years').doc(String(year)).delete();
+    console.log('[FB] Deleted year', year);
+    return true;
+  } catch(e) { console.warn('[FB] Delete error:', e); return false; }
+}
+
 async function fbLoad() {
   if (!db) return null;
   try {
@@ -402,7 +458,7 @@ async function fbLoad() {
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 const SK = 'odfw_v4';
-const S = { years:{}, selectedYear:null, compareYear:null, pendingYear:null, sortKey:'huntNum', sortDir:'asc' };
+const S = { years:{}, selectedYear:null, compareYear:null, pendingYear:null, sortKey:'huntNum', sortDir:'asc', sort2Key:null, sort2Dir:'asc', sort3Key:null, sort3Dir:'asc', elkPts:null, deerPts:null };
 
 const curYD  = () => S.selectedYear ? S.years[S.selectedYear] : null;
 const getH   = () => { const y = curYD(); return y ? y.hunts : []; };
@@ -523,7 +579,10 @@ async function parsePdf(buf) {
   if (!window.pdfjsLib) throw new Error('PDF.js not loaded');
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   const pdf = await pdfjsLib.getDocument({data:buf}).promise;
-  const out = {}, re = /\b(\d{3}[A-Z]\d{0,2}|\d{3})\b/g;
+  const out = {};
+  // Only match proper hunt codes: 3 digits + letter + optional digit(s), e.g. 254R1, 246R, 252R
+  const huntRe = /\b(\d{3}[A-Z]\d{0,2})\b/g;
+
   for (let p=1; p<=pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const tc   = await page.getTextContent();
@@ -531,30 +590,58 @@ async function parsePdf(buf) {
       .map(it=>({x:it.transform[4],y:it.transform[5],str:it.str.trim()}))
       .sort((a,b)=>b.y-a.y||a.x-b.x);
     const lines=[]; let cl=null;
-    items.forEach(it=>{if(!cl||Math.abs(cl.y-it.y)>3){cl={y:it.y,items:[]};lines.push(cl);}cl.items.push(it);});
+    items.forEach(it=>{if(!cl||Math.abs(cl.y-it.y)>4){cl={y:it.y,items:[]};lines.push(cl);}cl.items.push(it);});
+
     lines.forEach(line=>{
       const text=line.items.map(i=>i.str).join(' ').replace(/\s+/g,' ').trim();
+      // Must end with NN%
       const pm=text.match(/(\d+)%\s*$/); if(!pm) return;
       const pct=Number(pm[1]);
-      const hms=[...text.matchAll(re)]; if(!hms.length) return;
+      const hms=[...text.matchAll(huntRe)]; if(!hms.length) return;
+
       for (const m of hms) {
         const num=m[1]; if(out[num]) break;
-        const after=text.slice(m.index+num.length).trim().replace(/\d+%\s*$/,'').trim();
-        const tokens=after.split(/\s+/);
-        let ne=0; while(ne<tokens.length&&!/^-?\d+$/.test(tokens[ne])) ne++;
-        if(!ne) continue;
-        const name=tokens.slice(0,ne).join(' ');
-        const nums=tokens.slice(ne).filter(t=>/^-?\d+$/.test(t)).map(Number);
-        if(nums.length<8) continue;
+
+        // Extract ALL integers from the line after the hunt number, excluding trailing %
+        const afterHunt = text.slice(m.index + num.length);
+        const lineNoPct = afterHunt.replace(/(\d+)%\s*$/, '');
+        // Collect all integers in order
+        const allInts = [...lineNoPct.matchAll(/\b(\d+)\b/g)].map(x=>Number(x[1]));
+
+        // We need at least 8 data cols. The last 6 are always the antler classes
+        // (spike, 2pt, 3pt, 4pt, 5pt, 6pt+) in that order.
+        // Before them: harvestTotal, totalBull, antlerless, daysHunted, totalHunters
+        // So minimum useful = 5 (hunters through harvest) + 6 antler = 11
+        // But harvest col is sometimes omitted giving 10.
+        if(allInts.length < 8) continue;
+
         let hu,da,al,tb,th,sp,t2,t3,t4,t5,t6;
-        if(nums.length>=11)      [hu,da,al,tb,th,sp,t2,t3,t4,t5,t6]=nums;
-        else if(nums.length===10){[hu,da,al,tb,sp,t2,t3,t4,t5,t6]=nums;th=(al||0)+(tb||0);}
-        else                     {[hu,da,al,tb]=nums;th=(al||0)+(tb||0);[sp,t2,t3,t4,t5,t6]=[nums[4]||0,nums[5]||0,nums[6]||0,nums[7]||0,nums[8]||0,nums[9]||0];}
-        const as=(sp||0)+(t2||0)+(t3||0)+(t4||0)+(t5||0)+(t6||0);
-        const av=tb>0&&as>0&&as<=tb*1.05;
-        out[num]={huntNum:num,name,hunters:hu||0,days:da||0,antlerless:al||0,totalBull:tb||0,
-          totalHarvest:th||(al+tb),successPct:pct,
-          spike:av?sp:0,twoPt:av?t2:0,threePt:av?t3:0,fourPt:av?t4:0,fivePt:av?t5:0,sixPlusPt:av?t6:0,antlerValid:av};
+        const n = allInts;
+
+        if(n.length >= 11) {
+          // Take last 11: hunters,days,antlerless,totalBull,harvestTotal,spike,2pt,3pt,4pt,5pt,6pt+
+          const d = n.slice(n.length - 11);
+          [hu,da,al,tb,th,sp,t2,t3,t4,t5,t6] = d;
+        } else if(n.length === 10) {
+          // No harvestTotal column
+          const d = n.slice(n.length - 10);
+          [hu,da,al,tb,sp,t2,t3,t4,t5,t6] = d;
+          th = (al||0)+(tb||0);
+        } else {
+          // 8-9 cols — do best effort
+          [hu,da,al,tb] = n;
+          th=(al||0)+(tb||0);
+          [sp,t2,t3,t4,t5,t6]=[n[4]||0,n[5]||0,n[6]||0,n[7]||0,n[8]||0,n[9]||0];
+        }
+
+        // Validate antler data: sum should be within 10% of totalBull
+        const antlerSum=(sp||0)+(t2||0)+(t3||0)+(t4||0)+(t5||0)+(t6||0);
+        const av = tb>0 && antlerSum>0 && antlerSum>=tb*0.85 && antlerSum<=tb*1.15;
+
+        out[num]={huntNum:num, hunters:hu||0, days:da||0, antlerless:al||0,
+          totalBull:tb||0, totalHarvest:th||0, successPct:pct,
+          spike:sp||0, twoPt:t2||0, threePt:t3||0, fourPt:t4||0, fivePt:t5||0, sixPlusPt:t6||0,
+          antlerValid:av};
         break;
       }
     });
@@ -642,13 +729,29 @@ function clearYear(year) {
 
 // ─── FILTERS + SORT ───────────────────────────────────────────────────────────
 function getFilters() {
+  const elkRaw  = $('#fElkPts').value;
+  const deerRaw = $('#fDeerPts').value;
   return {
-    sp:   $('#fSpecies').value,
-    wep:  $('#fWeapon').value,
-    pts:  $('#fMyPoints').value===''?null:Number($('#fMyPoints').value),
+    sp:      $('#fSpecies').value,
+    wep:     $('#fWeapon').value,
+    elkPts:  elkRaw  === '' ? null : Number(elkRaw),
+    deerPts: deerRaw === '' ? null : Number(deerRaw),
+    // pts = whichever is relevant given current species filter; used for generic myOdds calls
+    pts: (function(){
+      const sp = $('#fSpecies').value;
+      if (sp === 'elk')  return elkRaw  === '' ? null : Number(elkRaw);
+      if (sp === 'deer') return deerRaw === '' ? null : Number(deerRaw);
+      return null; // mixed — myOdds will use species-specific per-row
+    })(),
     draw: $('#fDrawability').value,
     srch: $('#fSearch').value.trim().toLowerCase()
   };
+}
+// Return the right points for a given hunt based on its species
+function ptsForHunt(h, f) {
+  if (h.species === 'elk')  return f.elkPts;
+  if (h.species === 'deer') return f.deerPts;
+  return null;
 }
 function applyFilters(hunts) {
   const f=getFilters();
@@ -656,31 +759,44 @@ function applyFilters(hunts) {
     if(f.sp!=='all'&&h.species!==f.sp) return false;
     if(f.wep!=='all'&&h.weapon!==f.wep) return false;
     if(f.srch&&!(h.huntNum+' '+h.huntName).toLowerCase().includes(f.srch)) return false;
-    if(f.pts!==null&&f.draw!=='all'){
-      const p=h.pts100;
-      if(f.draw==='canDraw'&&(p===null||f.pts<p)) return false;
-      if(f.draw==='oneAway'&&(p===null||f.pts!==p-1)) return false;
-      if(f.draw==='reachable'&&(p===null||f.pts<p-3)) return false;
+    if(f.draw!=='all'){
+      const myP = ptsForHunt(h, f);
+      if(myP !== null) {
+        const p=h.pts100;
+        if(f.draw==='canDraw'&&(p===null||myP<p)) return false;
+        if(f.draw==='oneAway'&&(p===null||myP!==p-1)) return false;
+        if(f.draw==='reachable'&&(p===null||myP<p-3)) return false;
+      }
     }
     return true;
   });
 }
+function getVal(h, k, f) {
+  if(k==='huntNum')  return h.huntNum;
+  if(k==='huntName') return h.huntName;
+  if(k==='weapon')   return h.weapon;
+  if(k==='tags')     return h.tags;
+  if(k==='apps')     return h.residentApps;
+  if(k==='pts100')   return h.pts100;
+  if(k==='success')  return h.harvest?.successPct;
+  if(k==='myOdds')   return myOdds(h, ptsForHunt(h, f));
+  return null;
+}
+function cmpKey(a, b, k, dir, f) {
+  const av=getVal(a,k,f), bv=getVal(b,k,f);
+  const an=av==null, bn=bv==null;
+  if(an&&bn) return 0; if(an) return 1; if(bn) return -1;
+  const d = dir==='asc'?1:-1;
+  const num=['tags','apps','pts100','success','myOdds'].includes(k);
+  return num ? (av-bv)*d : String(av).localeCompare(String(bv),undefined,{numeric:true})*d;
+}
 function sortHunts(hunts) {
-  const dir=S.sortDir==='asc'?1:-1, k=S.sortKey, f=getFilters();
+  const f=getFilters();
   return [...hunts].sort((a,b)=>{
-    let av,bv;
-    if(k==='huntNum')  {av=a.huntNum;bv=b.huntNum;}
-    else if(k==='huntName'){av=a.huntName;bv=b.huntName;}
-    else if(k==='weapon')  {av=a.weapon;bv=b.weapon;}
-    else if(k==='tags')    {av=a.tags;bv=b.tags;}
-    else if(k==='apps')    {av=a.residentApps;bv=b.residentApps;}
-    else if(k==='pts100')  {av=a.pts100;bv=b.pts100;}
-    else if(k==='success') {av=a.harvest?.successPct;bv=b.harvest?.successPct;}
-    else if(k==='myOdds')  {av=myOdds(a,f.pts);bv=myOdds(b,f.pts);}
-    const an=av==null,bn=bv==null;
-    if(an&&bn)return 0; if(an)return 1; if(bn)return -1;
-    const num=['tags','apps','pts100','success','myOdds'].includes(k);
-    return num?(av-bv)*dir:String(av).localeCompare(String(bv),undefined,{numeric:true})*dir;
+    let r = cmpKey(a,b,S.sortKey,S.sortDir,f);
+    if(r===0 && S.sort2Key) r = cmpKey(a,b,S.sort2Key,S.sort2Dir,f);
+    if(r===0 && S.sort3Key) r = cmpKey(a,b,S.sort3Key,S.sort3Dir,f);
+    return r;
   });
 }
 
@@ -699,7 +815,7 @@ function topBull(harv) {
 }
 
 function renderTable() {
-  const all=getH(), f=getFilters(), myPts=f.pts;
+  const all=getH(), f=getFilters();
   const filtered=applyFilters(all), sorted=sortHunts(filtered);
   const tb=$('#huntsBody'), prev=S.compareYear||prevYr(S.selectedYear);
   $('#rcount').textContent=all.length===0?'—':`${sorted.length} of ${all.length} hunts`;
@@ -714,6 +830,7 @@ function renderTable() {
   });
 
   const rows=sorted.map(h=>{
+    const myPts = ptsForHunt(h, f);
     const p100=h.pts100;
     const ptCls = p100===null?'ce': myPts===null?'cn': myPts>=p100?'ce': p100<=3?'ce': p100<=8?'cm':'ch';
     const ptTxt = p100===null?'Random only':String(p100);
@@ -789,13 +906,23 @@ function renderYears() {
       <div class="yra">
         ${!isSel?`<button class="bmini" data-vy="${y}">View</button>`:''}
         ${!isPend?`<button class="bmini" data-ey="${y}">Edit</button>`:''}
-        <button class="bmini dan" data-dy="${y}">Delete</button>
+        <button class="bmini dan" data-dy="${y}">Delete Local</button>
+        <button class="bmini dan" data-fby="${y}">Delete Cloud</button>
       </div>
     </div>`;
   }).join('');
   list.querySelectorAll('[data-vy]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();S.selectedYear=b.dataset.vy;saveLocal();render();}));
   list.querySelectorAll('[data-ey]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();S.pendingYear=b.dataset.ey;saveLocal();render();}));
-  list.querySelectorAll('[data-dy]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();confirm2(`Delete ${b.dataset.dy}?`,()=>clearYear(b.dataset.dy));}));
+  list.querySelectorAll('[data-dy]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();confirm2(`Delete ${b.dataset.dy} locally?`,()=>clearYear(b.dataset.dy));}));
+  list.querySelectorAll('[data-fby]').forEach(b=>b.addEventListener('click',async e=>{
+    e.stopPropagation();
+    confirm2(`Delete ${b.dataset.fby} from cloud? This affects all users.`, async ()=>{
+      b.textContent='Deleting…'; b.disabled=true;
+      const ok = await fbDeleteYear(b.dataset.fby);
+      toast(ok ? `Year ${b.dataset.fby} deleted from cloud` : 'Cloud delete failed', !ok);
+      renderYears();
+    });
+  }));
 }
 
 // ─── MODAL ────────────────────────────────────────────────────────────────────
@@ -804,7 +931,8 @@ function showDetail(id) {
   const h=getH().find(x=>x.huntNum===num&&x.species===sp); if(!h) return;
   $('#mTitle').textContent=`${h.huntNum} — ${h.huntName}`;
   $('#mSub').textContent=`${S.selectedYear} · ${h.species==='elk'?'Elk':'Buck Deer'} · ${wLabel(h.weapon)}`;
-  const myPts=$('#fMyPoints').value===''?null:Number($('#fMyPoints').value);
+  const f2=getFilters();
+  const myPts=ptsForHunt(h,f2);
   const mo=myOdds(h,myPts);
   const prev=S.compareYear||prevYr(S.selectedYear);
   const prevH=prev?findH(prev,num,sp):null;
@@ -842,11 +970,16 @@ function showDetail(id) {
       <div class="kv"><div class="k">Success Rate</div><div class="v">${fmtP(hv.successPct)}${ph?delta(hv.successPct,ph.successPct,true,'%'):''}</div></div>
       <div class="kv"><div class="k">Days in Field</div><div class="v">${fmt(hv.days)}</div></div>
     </div></div>`;
-    if(hv.totalBull>0&&hv.antlerValid){
+    if(hv.totalBull>0){
       const cls=[['Spike',hv.spike||0],['2-point',hv.twoPt||0],['3-point',hv.threePt||0],['4-point',hv.fourPt||0],['5-point',hv.fivePt||0],['6-point+',hv.sixPlusPt||0]];
-      body+=`<div class="msec"><h4>Bull Size Breakdown</h4><table class="pts"><thead><tr><th>Class</th><th>Harvested</th><th>% of Bulls</th></tr></thead><tbody>
-        ${cls.map(([l,c])=>`<tr><td>${l}</td><td>${fmt(c)}</td><td>${fmtP(hv.totalBull>0?(c/hv.totalBull)*100:0)}</td></tr>`).join('')}
-      </tbody></table></div>`;
+      const anyAntler = cls.some(([,c])=>c>0);
+      if(anyAntler){
+        body+=`<div class="msec"><h4>Bull / Buck Size Breakdown</h4><table class="pts"><thead><tr><th>Class</th><th>Harvested</th><th>% of Bulls/Bucks</th></tr></thead><tbody>
+          ${cls.map(([l,c])=>`<tr${c>0&&c===Math.max(...cls.map(([,x])=>x))?' class="drew"':''}><td>${l}</td><td>${fmt(c)}</td><td>${fmtP(hv.totalBull>0?(c/hv.totalBull)*100:0)}</td></tr>`).join('')}
+        </tbody></table>${!hv.antlerValid?'<p style="font-size:11px;color:var(--tmut);margin-top:4px">⚠ Antler counts may be approximate — PDF column alignment uncertain.</p>':''}</div>`;
+      } else {
+        body+=`<div class="msec"><h4>Bull / Buck Size Breakdown</h4><p style="font-size:13px;color:var(--tmut)">Antler size data not parsed from this file.</p></div>`;
+      }
     }
   }
 
@@ -964,7 +1097,19 @@ async function init() {
   });
 
   // Filters
-  ['fSpecies','fWeapon','fMyPoints','fDrawability','fSearch'].forEach(id=>$('#'+id).addEventListener('input',()=>render()));
+  ['fSpecies','fWeapon','fElkPts','fDeerPts','fDrawability','fSearch'].forEach(id=>$('#'+id).addEventListener('input',()=>render()));
+
+  // Multi-sort selects
+  function wireSort2(){
+    const k2=$('#sort2Key'), d2=$('#sort2Dir'), w2=$('#sort2DirWrap');
+    const k3=$('#sort3Key'), d3=$('#sort3Dir'), w3=$('#sort3DirWrap');
+    if(!k2||!k3) return;
+    k2.addEventListener('change',()=>{S.sort2Key=k2.value||null;S.sort2Dir=d2.value;w2.style.display=k2.value?'block':'none';render();});
+    d2.addEventListener('change',()=>{S.sort2Dir=d2.value;render();});
+    k3.addEventListener('change',()=>{S.sort3Key=k3.value||null;S.sort3Dir=d3.value;w3.style.display=k3.value?'block':'none';render();});
+    d3.addEventListener('change',()=>{S.sort3Dir=d3.value;render();});
+  }
+  wireSort2();
 
   // Sort
   $$('#huntsTable thead th').forEach(th=>{
