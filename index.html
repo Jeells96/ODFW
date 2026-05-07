@@ -661,6 +661,161 @@ max-width: 90%;
 display: none;
 }
 .toast.error { background: var(–bad); border-left-color: #fff; }
+
+/* TREND INDICATORS (multi-year compare) */
+.trend {
+display: inline-block;
+margin-left: 6px;
+font-size: 11px;
+font-weight: 600;
+font-family: ‘Helvetica Neue’, Arial, sans-serif;
+letter-spacing: 0.3px;
+font-variant-numeric: tabular-nums;
+}
+.trend-up { color: #6bb582; }
+.trend-down { color: #d46b6b; }
+
+/* YEAR CONTROLS on Database page */
+.year-controls {
+display: flex;
+gap: 14px;
+flex-wrap: wrap;
+background: #141414;
+border: 1px solid #3a3a3a;
+padding: 12px 16px;
+margin: 0 0 20px 0;
+align-items: flex-end;
+}
+.year-control-field {
+flex: 1 1 180px;
+min-width: 160px;
+}
+.year-control-field label {
+display: block;
+font-family: ‘Helvetica Neue’, Arial, sans-serif;
+font-size: 11px;
+font-weight: 600;
+text-transform: uppercase;
+letter-spacing: 0.5px;
+color: #d4a04a;
+margin-bottom: 4px;
+}
+.year-control-field select {
+width: 100%;
+padding: 7px 9px;
+border: 1px solid #3a3a3a;
+background: #141414;
+color: #f0f0f0;
+-webkit-text-fill-color: #f0f0f0;
+color-scheme: dark;
+font-family: ‘Helvetica Neue’, Arial, sans-serif;
+font-size: 14px;
+border-radius: 0;
+-webkit-appearance: none;
+appearance: none;
+background-image: url(“data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%236bb582' stroke-width='1.5' fill='none'/></svg>”);
+background-repeat: no-repeat;
+background-position: right 8px center;
+padding-right: 28px;
+}
+
+/* YEARS LIST in Data Manager */
+.years-list {
+border: 1px solid #3a3a3a;
+}
+.year-row {
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding: 10px 14px;
+border-bottom: 1px solid #2a2a2a;
+font-family: ‘Helvetica Neue’, Arial, sans-serif;
+background: #141414;
+}
+.year-row:last-child { border-bottom: none; }
+.year-row.selected { background: #1a2418; border-left: 3px solid #d4a04a; }
+.year-row-main { flex: 1; min-width: 0; }
+.year-label {
+font-size: 16px;
+font-family: ‘Georgia’, serif;
+color: #f0f0f0;
+font-weight: 600;
+}
+.year-meta {
+font-size: 12px;
+color: #8a8a8a;
+margin-top: 2px;
+}
+.year-row-actions {
+display: flex;
+gap: 6px;
+flex-shrink: 0;
+}
+.btn-mini {
+font-family: ‘Helvetica Neue’, Arial, sans-serif;
+font-size: 11px;
+font-weight: 600;
+letter-spacing: 0.4px;
+text-transform: uppercase;
+padding: 5px 10px;
+background: #1f1f1f;
+color: #6bb582;
+border: 1px solid #6bb582;
+cursor: pointer;
+border-radius: 0;
+-webkit-appearance: none;
+appearance: none;
+}
+.btn-mini:hover { background: #2a2a2a; }
+.btn-mini.danger { color: #d46b6b; border-color: #d46b6b; }
+.btn-mini.danger:hover { background: #2a1818; }
+
+.badge-sm {
+display: inline-block;
+margin-left: 6px;
+padding: 1px 6px;
+font-family: ‘Helvetica Neue’, Arial, sans-serif;
+font-size: 10px;
+font-weight: 700;
+letter-spacing: 0.5px;
+text-transform: uppercase;
+background: #d4a04a;
+color: #000;
+border-radius: 2px;
+vertical-align: middle;
+}
+.badge-sm-alt {
+display: inline-block;
+margin-left: 6px;
+padding: 1px 6px;
+font-family: ‘Helvetica Neue’, Arial, sans-serif;
+font-size: 10px;
+font-weight: 700;
+letter-spacing: 0.5px;
+text-transform: uppercase;
+background: #1f1f1f;
+color: #6bb582;
+border: 1px solid #6bb582;
+border-radius: 2px;
+vertical-align: middle;
+}
+
+/* MODAL CALLOUTS */
+.callout {
+padding: 10px 14px;
+margin: 0 0 16px 0;
+border-left: 3px solid #d4a04a;
+background: #2a2418;
+font-family: ‘Helvetica Neue’, Arial, sans-serif;
+font-size: 14px;
+color: #f0f0f0;
+}
+.callout.good { background: #1a2a1f; border-left-color: #6bb582; }
+.callout.warn { background: #2a2418; border-left-color: #d4a04a; }
+
+/* SECOND-CHOICE INDICATOR */
+.sc-yes { color: #6bb582; font-weight: 600; }
+.sc-no { color: #707070; }
 .toast.show { display: block; }
 </style>
 
@@ -671,7 +826,7 @@ display: none;
   <div class="site-header-inner">
     <div class="crest">ODFW</div>
     <div>
-      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="site-version">v1.1</span></h1>
+      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="site-version">v1.2</span></h1>
       <div class="site-subtitle">Buck Deer &amp; Elk &mdash; Draw Odds &amp; Harvest Statistics</div>
     </div>
   </div>
@@ -688,9 +843,20 @@ display: none;
   <!-- ===================== DATABASE PAGE ===================== -->
   <div class="page active" data-page="database">
     <h2 class="page-title">Hunt Database</h2>
-    <p class="page-lede">Browse and filter Oregon controlled hunts by draw odds, points needed, and success rates. Click any row for full details. Tap column headers to sort.</p>
+    <p class="page-lede">Browse and filter Oregon controlled hunts. When more than one year is loaded, trends compare your selected year to the prior year — green means easier to draw / better success, red means worse.</p>
 
 ```
+<div id="yearControls" class="year-controls" style="display:none;">
+  <div class="year-control-field">
+    <label>Viewing</label>
+    <select id="ySelView"></select>
+  </div>
+  <div class="year-control-field">
+    <label>Compare To</label>
+    <select id="ySelCompare"></select>
+  </div>
+</div>
+
 <div id="emptyDataPrompt" style="display:none;">
   <section class="panel" style="border-left:4px solid var(--odfw-gold);">
     <div class="panel-body" style="text-align:center;">
@@ -763,13 +929,14 @@ display: none;
         <th data-sort="apps" class="num-th">Applicants <span class="sort-arrow">▾</span></th>
         <th data-sort="minPts" class="num-th">Min. Pts to Draw <span class="sort-arrow">▾</span></th>
         <th data-sort="firstChoiceOdds" class="num-th">1st-Choice Odds <span class="sort-arrow">▾</span></th>
+        <th data-sort="secondChoice" class="num-th">2nd-Choice Tags <span class="sort-arrow">▾</span></th>
         <th data-sort="success" class="num-th">Success Rate <span class="sort-arrow">▾</span></th>
         <th data-sort="hunters" class="num-th">Hunters <span class="sort-arrow">▾</span></th>
-        <th data-sort="harvest" class="num-th">Harvest <span class="sort-arrow">▾</span></th>
+        <th class="num-th">Most Common Bull</th>
       </tr>
     </thead>
     <tbody id="huntsBody">
-      <tr><td colspan="10" class="empty-state">Upload an ODFW Preference Points report to begin.</td></tr>
+      <tr><td colspan="11" class="empty-state">Upload an ODFW Preference Points report to begin.</td></tr>
     </tbody>
   </table>
 </div>
@@ -800,7 +967,28 @@ display: none;
 </section>
 
 <section class="panel">
-  <div class="panel-head">Step 1 &mdash; Download from ODFW</div>
+  <div class="panel-head">Step 1 &mdash; Choose Year</div>
+  <div class="panel-body">
+    <p style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;margin:0 0 12px;color:var(--text-secondary);">
+      Enter the year of the reports you're about to upload. Each year is stored separately so you can compare across years.
+    </p>
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+      <div class="field" style="flex:0 0 140px;">
+        <label for="pendingYearInput">Year</label>
+        <input type="number" id="pendingYearInput" min="2000" max="2100" placeholder="e.g. 2025" inputmode="numeric">
+      </div>
+      <button class="btn" id="btnSetYear">Use This Year</button>
+      <span style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;color:var(--text-secondary);">
+        Currently editing: <strong id="pendingYearDisplay" style="color:#d4a04a;">none</strong>
+      </span>
+    </div>
+
+    <div id="yearsList" class="years-list" style="margin-top:18px;"></div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">Step 2 &mdash; Download from ODFW</div>
   <div class="panel-body">
     <p style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;margin:0 0 14px;color:var(--text-secondary);">
       Open these in a new tab, find the year you want, and save the files to your device.
@@ -816,7 +1004,7 @@ display: none;
 </section>
 
 <section class="panel">
-  <div class="panel-head">Step 2 &mdash; Upload Files</div>
+  <div class="panel-head">Step 3 &mdash; Upload Files</div>
   <div class="panel-body">
 
     <div class="upload-grid">
@@ -926,32 +1114,57 @@ display: none;
 'use strict';
 
 // STATE
-const STORAGE_KEY = 'odfw_planner_v1';
+const STORAGE_KEY = 'odfw_planner_v2';
 const state = {
-  hunts: [],            // unified array of all hunts (elk + deer)
-  files: {},            // {elkPoints: {name, loadedAt}, ...}
-  harvestData: {},      // {elkRifleHarvest: {huntNum: {...}}, elkArcheryHarvest: {...}, ...}
+  // Multi-year storage: years[yearStr] = { hunts: [...], files: {...}, harvestData: {...} }
+  years: {},                  // e.g. { "2025": {hunts, files, harvestData}, "2024": {...} }
+  selectedYear: null,         // currently displayed year
+  compareYear: null,          // year to compare against (auto = previous available)
+  pendingYear: null,          // year being uploaded in the Data Manager
   sortKey: 'huntNum',
   sortDir: 'asc'
 };
 
-// Re-apply all stored harvest data to hunts (called after points reload, or after new harvest upload)
-function applyAllHarvest() {
-  // Clear existing harvest fields
-  state.hunts.forEach(h => { h.harvest = null; });
+// Helpers to access current year data
+function curYear() {
+  if (!state.selectedYear) return null;
+  return state.years[state.selectedYear];
+}
+function getHunts() {
+  const y = curYear();
+  return y ? y.hunts : [];
+}
+function getYearList() {
+  return Object.keys(state.years).sort().reverse(); // newest first
+}
+function priorYear(year) {
+  const all = getYearList();
+  const idx = all.indexOf(year);
+  return idx >= 0 && idx < all.length - 1 ? all[idx + 1] : null;
+}
+function findHuntInYear(year, huntNum, species) {
+  const y = state.years[year];
+  if (!y) return null;
+  return y.hunts.find(h => h.huntNum === huntNum && h.species === species);
+}
 
-  Object.entries(state.harvestData).forEach(([key, data]) => {
+// Re-apply harvest data to a specific year's hunts
+function applyHarvestForYear(year) {
+  const y = state.years[year];
+  if (!y) return;
+  y.hunts.forEach(h => { h.harvest = null; });
+  Object.entries(y.harvestData || {}).forEach(([key, data]) => {
     if (!data) return;
     const species = key.startsWith('elk') ? 'elk' : 'deer';
     const isArchery = key.endsWith('ArcheryHarvest');
     const matchWeapons = isArchery ? ['archery'] : ['rifle', 'youth', 'muzz'];
     let matched = 0;
-    state.hunts.forEach(h => {
+    y.hunts.forEach(h => {
       if (h.species !== species) return;
       if (!matchWeapons.includes(h.weapon)) return;
       if (data[h.huntNum]) { h.harvest = data[h.huntNum]; matched++; }
     });
-    if (state.files[key]) state.files[key].matched = matched;
+    if (y.files[key]) y.files[key].matched = matched;
   });
 }
 
@@ -977,18 +1190,24 @@ function fmtPct(n) {
   return Math.round(n) + '%';
 }
 
-// Detect weapon type from hunt number suffix
-// Per ODFW conventions: M = Muzzleloader, R/X/Y often archery for some series, T = Youth
-// Hunt numbers ending in letters indicate special types; pure numeric = rifle
-// Looking at sample: 200M = Cascade Muzzleloader, 200R = Oregon Youth Bow
-// 210, 210A1, 210A2 = rifle controlled in unit
-// X/Y = often archery in unit
+// ODFW hunt-number suffix conventions for big game:
+//   M  = Muzzleloader
+//   T  = Youth
+//   R  = Bow / Archery (e.g. 200R Oregon Youth Bow, 254R1 Mt Emily Bow)
+//   X, Y = Rifle, multi-season "No. 1 / No. 2" splits in same unit
+//   A,B,C,D,E (with optional digit) = Rifle, sub-area splits within unit
+//   no suffix (e.g. 210, 247) = Rifle, base controlled hunt
 function classifyHunt(huntNum, huntName) {
   const num = String(huntNum || '').toUpperCase();
   const name = String(huntName || '').toLowerCase();
-  if (name.includes('youth') || /T\d*$/.test(num) || /T$/.test(num)) return 'youth';
-  if (name.includes('muzzleload') || num.endsWith('M')) return 'muzz';
-  if (name.includes('archery') || name.includes('bow') || /[XY]\d*$/.test(num) || /[XY]$/.test(num)) return 'archery';
+  // Name-based classification wins first when explicit
+  if (name.includes('youth')) return 'youth';
+  if (name.includes('muzzleload')) return 'muzz';
+  if (name.includes('archery') || name.includes('bow') || name.includes('trad')) return 'archery';
+  // Suffix-based fallback
+  if (/T\d*$/.test(num)) return 'youth';
+  if (/M$/.test(num)) return 'muzz';
+  if (/R\d*$/.test(num)) return 'archery';
   return 'rifle';
 }
 
@@ -1093,6 +1312,11 @@ function parsePointsXlsx(arrayBuffer, speciesOverride) {
     }
     h.minPointsToDraw = minPts;
     h.firstChoiceOdds = h.totalApps > 0 ? (h.totalDrawn / h.totalApps) * 100 : null;
+    // 2nd-choice availability: how many tags were left over for 2nd-choice draw
+    // p2Drawn = tags awarded in the 2nd preference phase (after all 1st-choice apps processed)
+    h.tagsLeftFor2nd = Math.max(0, (h.tags || 0) - (h.totalDrawn - (h.p2Drawn || 0)));
+    h.has2ndChance = (h.p2Drawn || 0) > 0;
+    h.secondChoiceTags = h.p2Drawn || 0;
     h.species = speciesOverride || classifySpecies(h.huntNum);
     h.weapon = classifyHunt(h.huntNum, h.huntName);
   });
@@ -1171,21 +1395,31 @@ async function parseHarvestPdf(arrayBuffer) {
         if (nameEnd === 0) continue; // hunt number with no name following — skip
         const name = tokens.slice(0, nameEnd).join(' ').trim();
         const nums = tokens.slice(nameEnd).filter(t => /^-?\d+$/.test(t)).map(Number);
-        // Real harvest data row has at least 10 numeric columns
+        // Real harvest data row has 11 numeric columns:
+        // [0]=Hunters [1]=Days [2]=Antlerless [3]=TotalBull [4]=TotalHarvest
+        // [5]=Spike [6]=2pt [7]=3pt [8]=4pt [9]=5pt [10]=6pt+
         if (nums.length < 8) continue;
 
         // First match wins (Controlled section before General)
         if (harvest[huntNum]) break;
 
+        const totalBull = nums[3] || 0;
         harvest[huntNum] = {
           huntNum,
           name,
           hunters: nums[0] || 0,
           days: nums[1] || 0,
           antlerless: nums[2] || 0,
-          totalBull: nums[3] || 0,
-          totalHarvest: (nums[2] || 0) + (nums[3] || 0),
-          successPct: pct
+          totalBull: totalBull,
+          totalHarvest: nums[4] != null ? nums[4] : (nums[2] || 0) + totalBull,
+          successPct: pct,
+          // Antler breakdown (counts of bulls harvested by point class)
+          spike: nums[5] || 0,
+          twoPt: nums[6] || 0,
+          threePt: nums[7] || 0,
+          fourPt: nums[8] || 0,
+          fivePt: nums[9] || 0,
+          sixPlusPt: nums[10] || 0
         };
         break;
       }
@@ -1240,20 +1474,29 @@ function readArrayBuffer(file) {
 
 async function handleFile(target, file) {
   if (!file) return;
+  if (!state.pendingYear) {
+    toast('Pick a year first (top of Data Manager).', true);
+    return;
+  }
+  const year = state.pendingYear;
+  // Ensure year bucket exists
+  if (!state.years[year]) {
+    state.years[year] = { hunts: [], files: {}, harvestData: {} };
+  }
+  const yearData = state.years[year];
   const ext = file.name.split('.').pop().toLowerCase();
+
   try {
     const buf = await readArrayBuffer(file);
 
     if (target === 'elkPoints' || target === 'deerPoints') {
       const species = target === 'elkPoints' ? 'elk' : 'deer';
       const hunts = parsePointsXlsx(buf, species);
-      // Replace existing data for that species
-      state.hunts = state.hunts.filter(h => h.species !== species);
-      state.hunts.push(...hunts);
-      state.files[target] = { name: file.name, loadedAt: Date.now(), count: hunts.length };
-      // Re-apply any previously loaded harvest data so we don't lose those columns
-      applyAllHarvest();
-      toast(`Loaded ${hunts.length} ${species} hunts from ${file.name}`);
+      yearData.hunts = yearData.hunts.filter(h => h.species !== species);
+      yearData.hunts.push(...hunts);
+      yearData.files[target] = { name: file.name, loadedAt: Date.now(), count: hunts.length };
+      applyHarvestForYear(year);
+      toast(`[${year}] Loaded ${hunts.length} ${species} hunts from ${file.name}`);
 
     } else if (target === 'elkRifleHarvest' || target === 'deerRifleHarvest' ||
                target === 'elkArcheryHarvest' || target === 'deerArcheryHarvest') {
@@ -1263,16 +1506,18 @@ async function handleFile(target, file) {
       } else {
         harvest = parseHarvestXlsx(buf);
       }
-      state.harvestData[target] = harvest;
-      state.files[target] = { name: file.name, loadedAt: Date.now(), count: Object.keys(harvest).length, matched: 0 };
-      applyAllHarvest();
-      const matched = state.files[target].matched;
+      yearData.harvestData[target] = harvest;
+      yearData.files[target] = { name: file.name, loadedAt: Date.now(), count: Object.keys(harvest).length, matched: 0 };
+      applyHarvestForYear(year);
+      const matched = yearData.files[target].matched;
       const species = target.startsWith('elk') ? 'elk' : 'deer';
       const isArchery = target.endsWith('ArcheryHarvest');
       const label = isArchery ? 'archery' : 'rifle';
-      toast(`Loaded ${species} ${label} harvest: ${Object.keys(harvest).length} hunts in file, ${matched} matched`);
+      toast(`[${year}] Loaded ${species} ${label} harvest: ${Object.keys(harvest).length} hunts, ${matched} matched`);
     }
 
+    // Auto-select this year if nothing's selected
+    if (!state.selectedYear) state.selectedYear = year;
     saveState();
     render();
   } catch (e) {
@@ -1286,9 +1531,9 @@ async function handleFile(target, file) {
 function saveState() {
   try {
     const payload = {
-      hunts: state.hunts,
-      files: state.files,
-      harvestData: state.harvestData,
+      years: state.years,
+      selectedYear: state.selectedYear,
+      pendingYear: state.pendingYear,
       savedAt: Date.now()
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -1302,9 +1547,9 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return false;
     const data = JSON.parse(raw);
-    state.hunts = data.hunts || [];
-    state.files = data.files || {};
-    state.harvestData = data.harvestData || {};
+    state.years = data.years || {};
+    state.selectedYear = data.selectedYear || getYearList()[0] || null;
+    state.pendingYear = data.pendingYear || state.selectedYear || null;
     return true;
   } catch (e) {
     console.warn('Could not load:', e);
@@ -1313,12 +1558,21 @@ function loadState() {
 }
 
 function clearAll() {
-  state.hunts = [];
-  state.files = {};
-  state.harvestData = {};
+  state.years = {};
+  state.selectedYear = null;
+  state.pendingYear = null;
   try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
   render();
   toast('All data cleared');
+}
+
+function clearYear(year) {
+  delete state.years[year];
+  if (state.selectedYear === year) state.selectedYear = getYearList()[0] || null;
+  if (state.pendingYear === year) state.pendingYear = state.selectedYear;
+  saveState();
+  render();
+  toast(`Year ${year} cleared`);
 }
 
 // RENDER
@@ -1359,7 +1613,7 @@ function applyFilters(hunts) {
 function sortHunts(hunts) {
   const dir = state.sortDir === 'asc' ? 1 : -1;
   const k = state.sortKey;
-  const numKey = ['tags','apps','minPts','firstChoiceOdds','success','hunters','harvest'].includes(k);
+  const numKey = ['tags','apps','minPts','firstChoiceOdds','secondChoice','success','hunters','harvest'].includes(k);
   return [...hunts].sort((a, b) => {
     let av, bv;
     if (k === 'huntNum')      { av = a.huntNum; bv = b.huntNum; }
@@ -1369,6 +1623,7 @@ function sortHunts(hunts) {
     else if (k === 'apps')    { av = a.totalApps; bv = b.totalApps; }
     else if (k === 'minPts')  { av = a.minPointsToDraw; bv = b.minPointsToDraw; }
     else if (k === 'firstChoiceOdds') { av = a.firstChoiceOdds; bv = b.firstChoiceOdds; }
+    else if (k === 'secondChoice') { av = a.secondChoiceTags; bv = b.secondChoiceTags; }
     else if (k === 'success') { av = a.harvest?.successPct; bv = b.harvest?.successPct; }
     else if (k === 'hunters') { av = a.harvest?.hunters; bv = b.harvest?.hunters; }
     else if (k === 'harvest') { av = a.harvest?.totalHarvest; bv = b.harvest?.totalHarvest; }
@@ -1386,11 +1641,14 @@ function sortHunts(hunts) {
 }
 
 function renderStatus() {
-  const f = state.files;
   const dot = $('#statusDot');
   const txt = $('#statusText');
   const det = $('#statusDetail');
   const last = $('#lastLoaded');
+
+  const yearsList = getYearList();
+  const pyData = state.pendingYear ? state.years[state.pendingYear] : null;
+  const f = pyData?.files || {};
 
   const parts = [];
   if (f.elkPoints) parts.push(`Elk points: ${f.elkPoints.count}`);
@@ -1402,59 +1660,116 @@ function renderStatus() {
 
   const hasPoints = f.elkPoints || f.deerPoints;
   const hasHarvest = f.elkRifleHarvest || f.elkArcheryHarvest || f.deerRifleHarvest || f.deerArcheryHarvest;
+  const totalHunts = pyData ? pyData.hunts.length : 0;
 
-  if (state.hunts.length === 0) {
+  if (yearsList.length === 0) {
     dot.className = 'status-dot';
     txt.textContent = 'No data loaded';
-    det.textContent = '';
+    det.textContent = 'Years loaded: none';
     last.textContent = '—';
+  } else if (totalHunts === 0) {
+    dot.className = 'status-dot';
+    txt.textContent = `No data for ${state.pendingYear}`;
+    det.textContent = `Years loaded: ${yearsList.join(', ')}`;
   } else if (hasPoints && hasHarvest) {
     dot.className = 'status-dot loaded';
-    txt.textContent = 'Data loaded';
+    txt.textContent = `[${state.pendingYear}] Data loaded`;
     det.textContent = parts.join(' · ');
   } else {
     dot.className = 'status-dot partial';
-    txt.textContent = 'Partial data';
+    txt.textContent = `[${state.pendingYear}] Partial data`;
     det.textContent = parts.join(' · ') + ' · upload remaining files for full results';
   }
 
-  // Latest load timestamp
-  const all = Object.values(state.files);
-  if (all.length) {
-    const max = Math.max(...all.map(f => f.loadedAt));
+  // Latest load timestamp across pending year
+  const allFiles = Object.values(f);
+  if (allFiles.length) {
+    const max = Math.max(...allFiles.map(x => x.loadedAt));
     last.textContent = new Date(max).toLocaleString();
+  } else {
+    last.textContent = '—';
   }
 
-  // Per-zone file labels
+  // Per-zone file labels (showing the pending year's files)
   ['elkPoints','deerPoints','elkRifleHarvest','elkArcheryHarvest','deerRifleHarvest','deerArcheryHarvest'].forEach(k => {
     const el = document.querySelector(`[data-file="${k}"]`);
     const zone = document.querySelector(`[data-key="${k}"]`);
     if (!el || !zone) return;
-    if (state.files[k]) {
-      el.textContent = '✓ ' + state.files[k].name;
+    if (f[k]) {
+      el.textContent = '✓ ' + f[k].name;
       zone.classList.add('has-file');
     } else {
       el.textContent = '';
       zone.classList.remove('has-file');
     }
   });
+
+  // Render years list panel
+  renderYearsPanel();
+}
+
+function renderYearsPanel() {
+  const list = document.getElementById('yearsList');
+  if (!list) return;
+  const years = getYearList();
+  if (years.length === 0) {
+    list.innerHTML = '<div class="empty-state" style="padding:20px;">No years loaded yet. Enter a year above and upload your first report.</div>';
+    return;
+  }
+  list.innerHTML = years.map(y => {
+    const yd = state.years[y];
+    const isSelected = y === state.selectedYear;
+    const isPending = y === state.pendingYear;
+    const huntCount = yd.hunts.length;
+    const harvestMatched = Object.values(yd.harvestData || {})
+      .reduce((s, h) => s + Object.keys(h || {}).length, 0);
+    return `
+      <div class="year-row ${isSelected ? 'selected' : ''}">
+        <div class="year-row-main">
+          <div class="year-label">${y}${isSelected ? ' <span class="badge-sm">Viewing</span>' : ''}${isPending && !isSelected ? ' <span class="badge-sm-alt">Editing</span>' : ''}</div>
+          <div class="year-meta">${huntCount} hunts · ${harvestMatched} harvest records</div>
+        </div>
+        <div class="year-row-actions">
+          ${!isSelected ? `<button class="btn-mini" data-view-year="${y}">View</button>` : ''}
+          ${!isPending ? `<button class="btn-mini" data-edit-year="${y}">Edit</button>` : ''}
+          <button class="btn-mini danger" data-del-year="${y}">Delete</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Wire buttons
+  list.querySelectorAll('[data-view-year]').forEach(b => {
+    b.addEventListener('click', e => { e.stopPropagation(); state.selectedYear = b.dataset.viewYear; saveState(); render(); });
+  });
+  list.querySelectorAll('[data-edit-year]').forEach(b => {
+    b.addEventListener('click', e => { e.stopPropagation(); state.pendingYear = b.dataset.editYear; saveState(); render(); });
+  });
+  list.querySelectorAll('[data-del-year]').forEach(b => {
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      const y = b.dataset.delYear;
+      showConfirm(`Delete ${y}?`, `Removes all data for ${y} from this device.`, () => clearYear(y));
+    });
+  });
 }
 
 function renderTable() {
-  const filtered = applyFilters(state.hunts);
+  const allHunts = getHunts();
+  const filtered = applyFilters(allHunts);
   const sorted = sortHunts(filtered);
   const tbody = $('#huntsBody');
 
-  $('#resultsCount').textContent = state.hunts.length === 0
+  $('#resultsCount').textContent = allHunts.length === 0
     ? '—'
-    : `${sorted.length} of ${state.hunts.length} hunts`;
+    : `${sorted.length} of ${allHunts.length} hunts`;
 
-  if (state.hunts.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">Visit the Data Manager to upload an ODFW Preference Points report.</td></tr>';
+  if (allHunts.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="11" class="empty-state">Visit the Data Manager to upload an ODFW Preference Points report.</td></tr>';
     return;
   }
   if (sorted.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No hunts match the current filters.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="empty-state">No hunts match the current filters.</td></tr>';
     return;
   }
 
@@ -1470,6 +1785,37 @@ function renderTable() {
   });
 
   const myPts = $('#fMyPoints').value === '' ? null : Number($('#fMyPoints').value);
+  const prevYr = state.compareYear || priorYear(state.selectedYear);
+
+  // Helper: trend HTML — green if "better" for hunter, red if "worse"
+  // Direction parameter says if HIGHER value = better (true) or LOWER = better (false)
+  function trend(curVal, prevVal, higherIsBetter, fmtFn) {
+    if (curVal == null || prevVal == null || curVal === prevVal) return '';
+    const delta = curVal - prevVal;
+    const better = higherIsBetter ? delta > 0 : delta < 0;
+    const cls = better ? 'trend-up' : 'trend-down';
+    const sign = delta > 0 ? '+' : '';
+    const formatted = fmtFn ? fmtFn(Math.abs(delta)) : Math.abs(delta);
+    const arrow = better ? '▲' : '▼';
+    return `<span class="trend ${cls}">${arrow} ${sign}${fmtFn ? fmtFn(delta) : delta}</span>`;
+  }
+
+  // Helper: pick the dominant antler class from harvest
+  function dominantBull(harv) {
+    if (!harv || !harv.totalBull) return null;
+    const classes = [
+      ['Spike', harv.spike || 0],
+      ['2pt', harv.twoPt || 0],
+      ['3pt', harv.threePt || 0],
+      ['4pt', harv.fourPt || 0],
+      ['5pt', harv.fivePt || 0],
+      ['6pt+', harv.sixPlusPt || 0],
+    ];
+    const top = classes.slice().sort((a, b) => b[1] - a[1])[0];
+    if (!top || !top[1]) return null;
+    const pct = harv.totalBull > 0 ? Math.round((top[1] / harv.totalBull) * 100) : 0;
+    return { label: top[0], pct };
+  }
 
   const html = sorted.map(h => {
     const minPts = h.minPointsToDraw;
@@ -1479,6 +1825,23 @@ function renderTable() {
     const successWidth = success != null ? Math.min(100, success) : 0;
     const hunters = h.harvest?.hunters;
     const harvestTotal = h.harvest?.totalHarvest;
+    const bull = dominantBull(h.harvest);
+
+    // Pull prior year for trends
+    let prevH = null;
+    if (prevYr) prevH = findHuntInYear(prevYr, h.huntNum, h.species);
+
+    // Trend HTML for several columns. Use small triangles + numeric delta.
+    // For "Min Pts to Draw": LOWER is better (easier to draw)
+    // For "1st-Choice Odds": HIGHER is better
+    // For "Success Rate": HIGHER is better
+    const minPtsTrend = prevH ? trend(minPts, prevH.minPointsToDraw, false) : '';
+    const oddsTrend = prevH ? trend(odds, prevH.firstChoiceOdds, true, v => Math.round(v) + '%') : '';
+    const successTrend = (prevH && prevH.harvest) ? trend(success, prevH.harvest.successPct, true, v => Math.round(v) + '%') : '';
+
+    const secondChoice = h.has2ndChance
+      ? `<span class="sc-yes">${h.secondChoiceTags} tag${h.secondChoiceTags===1?'':'s'}</span>`
+      : `<span class="sc-no">None</span>`;
 
     return `
       <tr data-hunt="${h.huntNum}_${h.species}">
@@ -1487,15 +1850,16 @@ function renderTable() {
         <td><span class="tag ${h.weapon}">${weaponLabel(h.weapon)}</span></td>
         <td class="num">${fmt(h.tags)}</td>
         <td class="num">${fmt(h.totalApps)}</td>
-        <td class="num"><span class="draw-cell ${drawClass}">${minPts === null ? '—' : minPts}</span></td>
-        <td class="num">${odds === null ? '—' : fmtPct(odds)}<span class="sub">${fmt(h.totalDrawn)} drawn</span></td>
+        <td class="num"><span class="draw-cell ${drawClass}">${minPts === null ? '—' : minPts}</span>${minPtsTrend}</td>
+        <td class="num">${odds === null ? '—' : fmtPct(odds)} ${oddsTrend}<span class="sub">${fmt(h.totalDrawn)} drawn</span></td>
+        <td class="num">${secondChoice}</td>
         <td class="num">
           ${success == null ? '—' :
-            `<span class="success-cell">${fmtPct(success)}</span>
+            `<span class="success-cell">${fmtPct(success)}</span> ${successTrend}
              <div class="success-bar"><div class="success-bar-fill" style="width:${successWidth}%"></div></div>`}
         </td>
         <td class="num">${hunters == null ? '—' : fmt(hunters)}</td>
-        <td class="num">${harvestTotal == null ? '—' : fmt(harvestTotal)}</td>
+        <td class="num">${bull ? `${bull.label} <span class="sub">${bull.pct}% of bulls</span>` : '—'}</td>
       </tr>
     `;
   }).join('');
@@ -1517,59 +1881,111 @@ function escapeHtml(s) {
 
 function showDetail(id) {
   const [huntNum, species] = id.split('_');
-  const h = state.hunts.find(x => x.huntNum === huntNum && x.species === species);
+  const h = getHunts().find(x => x.huntNum === huntNum && x.species === species);
   if (!h) return;
 
   $('#mTitle').textContent = `${h.huntNum} — ${h.huntName}`;
-  $('#mSub').textContent = `${h.species === 'elk' ? 'Elk' : 'Buck Deer'} · ${weaponLabel(h.weapon)}`;
+  $('#mSub').textContent = `${state.selectedYear} · ${h.species === 'elk' ? 'Elk' : 'Buck Deer'} · ${weaponLabel(h.weapon)}`;
 
   const breakdown = [...h.pointBreakdown].sort((a,b) => b.points - a.points);
   const minPts = h.minPointsToDraw;
-
   const myPtsRaw = $('#fMyPoints').value;
   const myPts = myPtsRaw === '' ? null : Number(myPtsRaw);
+
+  // Find prior year same hunt
+  const prevYr = state.compareYear || priorYear(state.selectedYear);
+  const prevH = prevYr ? findHuntInYear(prevYr, h.huntNum, h.species) : null;
+
+  function delta(cur, prev, higherIsBetter, suffix) {
+    if (cur == null || prev == null || cur === prev) return '';
+    const better = higherIsBetter ? cur > prev : cur < prev;
+    const cls = better ? 'trend-up' : 'trend-down';
+    const arrow = better ? '▲' : '▼';
+    const sign = (cur - prev) > 0 ? '+' : '';
+    return ` <span class="trend ${cls}">${arrow} ${sign}${(cur - prev).toFixed(suffix === '%' ? 0 : 1)}${suffix || ''} vs ${prevYr}</span>`;
+  }
 
   let yourTake = '';
   if (myPts !== null) {
     if (minPts === null) {
-      yourTake = `<p style="background:var(--warn-bg);padding:10px;border-left:3px solid var(--odfw-gold);"><strong>With ${myPts} point${myPts===1?'':'s'}:</strong> No tags drew in the preference phase last year — your only chance is the 25% random draw.</p>`;
+      yourTake = `<p class="callout warn"><strong>With ${myPts} point${myPts===1?'':'s'}:</strong> No tags drew in the preference phase last year — your only chance is the 25% random draw.</p>`;
     } else if (myPts >= minPts) {
-      yourTake = `<p style="background:var(--good-bg);padding:10px;border-left:3px solid var(--good);"><strong>With ${myPts} point${myPts===1?'':'s'}:</strong> You would have drawn last year (minimum was ${minPts}).</p>`;
+      yourTake = `<p class="callout good"><strong>With ${myPts} point${myPts===1?'':'s'}:</strong> You would have drawn last year (minimum was ${minPts}).</p>`;
     } else {
       const away = minPts - myPts;
-      yourTake = `<p style="background:var(--warn-bg);padding:10px;border-left:3px solid var(--odfw-gold);"><strong>With ${myPts} point${myPts===1?'':'s'}:</strong> ${away} point${away===1?'':'s'} short of last year's minimum (${minPts}). You can still draw via the 25% random phase.</p>`;
+      yourTake = `<p class="callout warn"><strong>With ${myPts} point${myPts===1?'':'s'}:</strong> ${away} point${away===1?'':'s'} short of last year's minimum (${minPts}). You can still draw via the 25% random phase.</p>`;
     }
   }
 
   let body = `
     ${yourTake}
     <div class="modal-section">
-      <h4>Last Year's Draw</h4>
+      <h4>${state.selectedYear} Draw Results</h4>
       <div class="kv-grid">
         <div class="kv"><div class="k">Tags Authorized</div><div class="v">${fmt(h.tags)}</div></div>
-        <div class="kv"><div class="k">Total Applicants</div><div class="v">${fmt(h.totalApps)}</div></div>
+        <div class="kv"><div class="k">Total Applicants</div><div class="v">${fmt(h.totalApps)}${prevH ? delta(h.totalApps, prevH.totalApps, false) : ''}</div></div>
         <div class="kv"><div class="k">Total Drawn</div><div class="v">${fmt(h.totalDrawn)}</div></div>
-        <div class="kv"><div class="k">1st-Choice Odds</div><div class="v">${h.firstChoiceOdds === null ? '—' : fmtPct(h.firstChoiceOdds)}</div></div>
-        <div class="kv"><div class="k">Min. Points to Draw</div><div class="v">${minPts === null ? 'Random only' : minPts}</div></div>
+        <div class="kv"><div class="k">1st-Choice Odds</div><div class="v">${h.firstChoiceOdds === null ? '—' : fmtPct(h.firstChoiceOdds)}${prevH ? delta(h.firstChoiceOdds, prevH.firstChoiceOdds, true, '%') : ''}</div></div>
+        <div class="kv"><div class="k">Min. Points to Draw</div><div class="v">${minPts === null ? 'Random only' : minPts}${prevH ? delta(minPts, prevH.minPointsToDraw, false) : ''}</div></div>
+        <div class="kv"><div class="k">2nd-Choice Tags Available</div><div class="v">${h.has2ndChance ? `${h.secondChoiceTags} tag${h.secondChoiceTags===1?'':'s'}` : 'None'}</div></div>
         <div class="kv"><div class="k">Resident / Non-Res Apps</div><div class="v">${fmt(h.residentApps)} / ${fmt(h.nonResidentApps)}</div></div>
       </div>
     </div>
   `;
 
   if (h.harvest) {
+    const harv = h.harvest;
+    const prevHarv = prevH?.harvest;
     body += `
       <div class="modal-section">
-        <h4>Last Year's Harvest</h4>
+        <h4>${state.selectedYear} Harvest</h4>
         <div class="kv-grid">
-          <div class="kv"><div class="k">Hunters Afield</div><div class="v">${fmt(h.harvest.hunters)}</div></div>
-          <div class="kv"><div class="k">Total Harvest</div><div class="v">${fmt(h.harvest.totalHarvest)}</div></div>
-          <div class="kv"><div class="k">Bulls / Bucks</div><div class="v">${fmt(h.harvest.totalBull)}</div></div>
-          <div class="kv"><div class="k">Antlerless</div><div class="v">${fmt(h.harvest.antlerless)}</div></div>
-          <div class="kv"><div class="k">Days in Field</div><div class="v">${fmt(h.harvest.days)}</div></div>
-          <div class="kv"><div class="k">Success Rate</div><div class="v">${fmtPct(h.harvest.successPct)}</div></div>
+          <div class="kv"><div class="k">Hunters Afield</div><div class="v">${fmt(harv.hunters)}${prevHarv ? delta(harv.hunters, prevHarv.hunters, true) : ''}</div></div>
+          <div class="kv"><div class="k">Total Harvest</div><div class="v">${fmt(harv.totalHarvest)}${prevHarv ? delta(harv.totalHarvest, prevHarv.totalHarvest, true) : ''}</div></div>
+          <div class="kv"><div class="k">Bulls / Bucks</div><div class="v">${fmt(harv.totalBull)}</div></div>
+          <div class="kv"><div class="k">Antlerless</div><div class="v">${fmt(harv.antlerless)}</div></div>
+          <div class="kv"><div class="k">Success Rate</div><div class="v">${fmtPct(harv.successPct)}${prevHarv ? delta(harv.successPct, prevHarv.successPct, true, '%') : ''}</div></div>
+          <div class="kv"><div class="k">Days in Field</div><div class="v">${fmt(harv.days)}</div></div>
         </div>
       </div>
     `;
+
+    // Antler-class breakdown — only meaningful if there were any bulls
+    if (harv.totalBull > 0) {
+      const classes = [
+        ['Spike', harv.spike || 0],
+        ['2-point', harv.twoPt || 0],
+        ['3-point', harv.threePt || 0],
+        ['4-point', harv.fourPt || 0],
+        ['5-point', harv.fivePt || 0],
+        ['6-point or better', harv.sixPlusPt || 0],
+      ];
+      const totalCounted = classes.reduce((s, c) => s + c[1], 0);
+      // Probability of getting class X if you tag a bull = count_X / totalBull
+      // Probability of getting class X if you draw the tag = count_X / hunters (assumes drawn = hunted; close enough)
+      const rows = classes.map(([label, count]) => {
+        const pctOfBulls = harv.totalBull > 0 ? (count / harv.totalBull) * 100 : 0;
+        const pctOfHunters = harv.hunters > 0 ? (count / harv.hunters) * 100 : 0;
+        return `<tr>
+          <td>${label}</td>
+          <td>${fmt(count)}</td>
+          <td>${fmtPct(pctOfBulls)}</td>
+          <td>${fmtPct(pctOfHunters)}</td>
+        </tr>`;
+      }).join('');
+      body += `
+        <div class="modal-section">
+          <h4>Bull Size Breakdown</h4>
+          <table class="points">
+            <thead><tr>
+              <th>Antler Class</th><th>Harvested</th><th>% of Bulls</th><th>Odds Per Tag</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">"% of Bulls" shows what fraction of harvested bulls were this class. "Odds Per Tag" is your probability of taking this class if you draw the tag (count ÷ total hunters).</p>
+        </div>
+      `;
+    }
   }
 
   if (breakdown.length) {
@@ -1616,12 +2032,35 @@ function renderEmptyPrompt() {
   const prompt = document.getElementById('emptyDataPrompt');
   const badge = document.getElementById('navBadge');
   if (!prompt || !badge) return;
-  const empty = state.hunts.length === 0;
+  const empty = getHunts().length === 0;
   prompt.style.display = empty ? 'block' : 'none';
   badge.style.display = empty ? 'inline-block' : 'none';
 }
 
 function render() {
+  // Update pending year display
+  const pyDisp = document.getElementById('pendingYearDisplay');
+  if (pyDisp) pyDisp.textContent = state.pendingYear || 'none';
+
+  // Populate Database page year selectors
+  const ySelView = document.getElementById('ySelView');
+  const ySelCompare = document.getElementById('ySelCompare');
+  const yearControls = document.getElementById('yearControls');
+  const years = getYearList();
+  if (ySelView) {
+    ySelView.innerHTML = years.map(y =>
+      `<option value="${y}" ${y === state.selectedYear ? 'selected' : ''}>${y}</option>`).join('');
+  }
+  if (ySelCompare) {
+    const compareOptions = ['<option value="auto">Prior year (auto)</option>',
+      ...years.filter(y => y !== state.selectedYear).map(y =>
+        `<option value="${y}" ${y === state.compareYear ? 'selected' : ''}>${y}</option>`)];
+    ySelCompare.innerHTML = compareOptions.join('');
+  }
+  if (yearControls) {
+    yearControls.style.display = years.length > 0 ? 'flex' : 'none';
+  }
+
   renderStatus();
   renderTable();
   renderEmptyPrompt();
@@ -1630,6 +2069,12 @@ function render() {
 // EVENT WIRING
 function init() {
   loadState();
+  // Default pendingYear input to current year if nothing set
+  const yearInput = document.getElementById('pendingYearInput');
+  if (yearInput) {
+    yearInput.value = state.pendingYear || new Date().getFullYear();
+    if (!state.pendingYear) state.pendingYear = String(new Date().getFullYear());
+  }
   render();
 
   // Page navigation
@@ -1641,6 +2086,49 @@ function init() {
   if (goData) goData.addEventListener('click', () => switchPage('data'));
   const goDb = document.getElementById('btnViewDatabase');
   if (goDb) goDb.addEventListener('click', () => switchPage('database'));
+
+  // Year input button
+  const btnSetYear = document.getElementById('btnSetYear');
+  if (btnSetYear) {
+    btnSetYear.addEventListener('click', () => {
+      const v = (yearInput.value || '').trim();
+      if (!/^\d{4}$/.test(v)) {
+        toast('Enter a 4-digit year', true);
+        return;
+      }
+      state.pendingYear = v;
+      // If no year is selected for viewing, set this one
+      if (!state.selectedYear) state.selectedYear = v;
+      saveState();
+      render();
+      toast(`Now editing year ${v}`);
+    });
+  }
+  // Live update display as user types
+  if (yearInput) {
+    yearInput.addEventListener('input', () => {
+      const d = document.getElementById('pendingYearDisplay');
+      if (d) d.textContent = yearInput.value || 'none';
+    });
+  }
+
+  // Year-control selectors on Database page
+  const ySelView = document.getElementById('ySelView');
+  const ySelCompare = document.getElementById('ySelCompare');
+  if (ySelView) {
+    ySelView.addEventListener('change', () => {
+      state.selectedYear = ySelView.value;
+      saveState();
+      render();
+    });
+  }
+  if (ySelCompare) {
+    ySelCompare.addEventListener('change', () => {
+      state.compareYear = ySelCompare.value === 'auto' ? null : ySelCompare.value;
+      saveState();
+      render();
+    });
+  }
 
   // File inputs
   $$('input[type=file]').forEach(inp => {
@@ -1684,6 +2172,7 @@ function init() {
 
   // Sort headers
   $$('#huntsTable thead th').forEach(th => {
+    if (!th.dataset.sort) return;
     th.addEventListener('click', () => {
       const k = th.dataset.sort;
       if (state.sortKey === k) {
@@ -1698,11 +2187,11 @@ function init() {
 
   // Clear button
   $('#btnClear').addEventListener('click', () => {
-    if (state.hunts.length === 0 && Object.keys(state.files).length === 0) {
+    if (Object.keys(state.years).length === 0) {
       toast('Nothing to clear');
       return;
     }
-    showConfirm('Clear all loaded data?', 'This removes parsed hunt data from this device. Your XLSX/PDF files are untouched.', () => clearAll());
+    showConfirm('Clear ALL years of data?', 'This removes every year of parsed hunt data from this device. Your XLSX/PDF files are untouched.', () => clearAll());
   });
 
   // Detail modal close
