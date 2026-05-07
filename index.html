@@ -177,7 +177,7 @@ footer a{color:#000}
   <div class="site-header-inner">
     <div class="crest">ODFW</div>
     <div>
-      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v1.7</span></h1>
+      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v1.8</span></h1>
       <div class="site-subtitle">Buck Deer &amp; Elk &mdash; Draw Odds &amp; Harvest Statistics</div>
     </div>
   </div>
@@ -187,6 +187,7 @@ footer a{color:#000}
   <div class="subnav-inner">
     <button class="nav-link active" data-page="database">Hunt Database</button>
     <button class="nav-link" data-page="data">Data Manager <span class="nbadge" id="navBadge" style="display:none">!</span></button>
+    <button class="nav-link" data-page="debug">PDF Debug</button>
   </div>
 </div>
 
@@ -323,6 +324,23 @@ footer a{color:#000}
 </section>
 ```
 
+  </div>
+
+  <!-- DEBUG PAGE -->
+
+  <div class="page" data-page="debug">
+    <h2 class="page-title">PDF Debug</h2>
+    <p class="page-lede">After uploading a harvest PDF, use this to see exactly what numbers were extracted for each hunt. This tells us what's going wrong with antler data.</p>
+    <div class="panel">
+      <div class="panel-head">Raw PDF Parse Output</div>
+      <div class="panel-body">
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+          <input type="text" id="dbgFilter" placeholder="Filter by hunt #, e.g. 254R1" style="padding:7px 9px;border:1px solid var(--bor);background:#141414;color:#f0f0f0;-webkit-text-fill-color:#f0f0f0;color-scheme:dark;font-family:sans-serif;font-size:14px;border-radius:0;width:220px;">
+          <button class="btn" id="btnRefreshDebug">Refresh</button>
+        </div>
+        <div id="dbgOut" style="font-family:monospace;font-size:12px;color:#f0f0f0;"></div>
+      </div>
+    </div>
   </div>
 
   <!-- MODAL -->
@@ -549,25 +567,27 @@ function parseXlsx(buf, sp) {
 }
 
 // ─── PDF HARVEST ──────────────────────────────────────────────────────────────
+// Global debug log — stores raw PDF parse info for every matched row
+window._pdfDebug = {};
+
 async function parsePdf(buf) {
   if (!window.pdfjsLib) throw new Error('PDF.js not loaded');
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   const pdf = await pdfjsLib.getDocument({data:buf}).promise;
   const out = {};
   const huntRe = /\b(\d{3}[A-Z]\d{0,2})\b/g;
+  window._pdfDebug = {};
 
   for (let p=1; p<=pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const tc   = await page.getTextContent();
 
-    // Key insight: PDF text items for a single table row are separate objects.
-    // We group by Y coordinate, then use X position to separate the hunt-name
-    // text items (left side) from the numeric data items (right side).
-    // The numeric columns always start after a large X gap from the name.
+    // Sort items by Y descending (top of page first), then X ascending (left to right)
     const items = tc.items.filter(it=>it.str?.trim())
-      .map(it=>({x:it.transform[4], y:it.transform[5], str:it.str.trim()}))
+      .map(it=>({x:Math.round(it.transform[4]), y:Math.round(it.transform[5]), str:it.str.trim()}))
       .sort((a,b)=>b.y-a.y||a.x-b.x);
 
+    // Group into lines by Y proximity
     const lines=[]; let cl=null;
     items.forEach(it=>{
       if(!cl||Math.abs(cl.y-it.y)>4){cl={y:it.y,items:[]};lines.push(cl);}
@@ -583,78 +603,81 @@ async function parsePdf(buf) {
       for (const m of hms) {
         const num = m[1]; if(out[num]) break;
 
-        // Strategy: find the X position of the hunt-number item, then only
-        // collect numbers from items that are significantly to the RIGHT of it
-        // (i.e., in the numeric columns, not in the hunt name).
-        const huntItem = line.items.find(it=>it.str===num||it.str.startsWith(num));
-        const nameEndX = huntItem ? huntItem.x + 200 : 0; // 200pt gap to clear name column
+        // Log every item in this row with its X position
+        const rowItems = line.items.map(i=>({x:i.x, str:i.str}));
 
-        // Collect numeric items from the right side of the row only
-        const numericItems = line.items.filter(it => it.x > nameEndX);
-        const numericText  = numericItems.map(i=>i.str).join(' ');
+        // Find the hunt number item to get its X position
+        const huntItem = line.items.find(it=>it.str===num||it.str.includes(num));
+        const huntX = huntItem ? huntItem.x : 0;
 
-        // Extract integers from the numeric portion, excluding trailing %
-        const cleanNum = numericText.replace(/(\d+)%\s*$/,'');
-        const dataInts = [...cleanNum.matchAll(/\b(\d+)\b/g)].map(x=>Number(x[1]));
+        // APPROACH: collect items to the RIGHT of the hunt number item
+        // Use a threshold: anything more than 150pt right of hunt code is data
+        // This separates name column from numeric columns
+        const dataItems = line.items.filter(it=>it.x > huntX + 150);
+        const dataText  = dataItems.map(i=>i.str).join(' ').replace(/(\d+)%\s*$/,'').trim();
+        const dataInts  = [...dataText.matchAll(/\b(\d+)\b/g)].map(x=>Number(x[1]));
 
-        // Fallback: if X-split gave too few numbers, use full-line extraction
-        // but strip the hunt name and known name words first
+        // Log everything for debugging
+        window._pdfDebug[num] = {
+          rawText: text,
+          rowItems: rowItems,
+          huntX: huntX,
+          dataItems: dataItems.map(i=>({x:i.x, str:i.str})),
+          dataText: dataText,
+          dataInts: dataInts,
+          pct: pct
+        };
+
         let n = dataInts;
+
+        // If X-split didn't give enough, try a different threshold
         if(n.length < 8) {
-          const afterHunt = text.slice(m.index + num.length).trim();
-          // Strip leading name words (letters/punctuation) until we hit the first big number (hunters count)
-          // Hunt names: "Mt Emily Unit Bow No. 1", "Murderers Cr Unit Bow", etc.
-          // Numbers in names are always small ordinals (1,2) — data numbers start with hunter count (always >= 1)
-          // Strip by removing leading tokens that are purely alphabetic or small ordinals
-          const noPct = afterHunt.replace(/(\d+)%\s*$/,'');
-          const tokens = noPct.trim().split(/\s+/);
-          // Skip tokens until we find one that is a large number (>= 2 digits or clearly a data value)
-          // Data starts with totalHunters which is always a standalone integer >= 1
-          // Name tokens: words, "No.", "No", single digits like "1" or "2"
-          // Heuristic: skip tokens that are non-numeric OR are single digit ordinals (1-9) preceded by "No"
-          let dataStart = 0;
-          let prevWasNo = false;
-          for(let i=0; i<tokens.length; i++){
-            const t = tokens[i];
-            const isOrdinal = prevWasNo && /^\d$/.test(t);
-            const isWord = /^[A-Za-z.]+$/.test(t);
-            if(isWord){ prevWasNo = /^no\.?$/i.test(t); dataStart=i+1; continue; }
-            if(isOrdinal){ prevWasNo=false; dataStart=i+1; continue; }
-            prevWasNo=false;
-            break; // first real data token
-          }
-          const dataTokens = tokens.slice(dataStart).filter(t=>/^\d+$/.test(t)).map(Number);
-          if(dataTokens.length > n.length) n = dataTokens;
+          // Try tighter threshold — maybe name is narrower
+          const dataItems2 = line.items.filter(it=>it.x > huntX + 80);
+          const dataText2  = dataItems2.map(i=>i.str).join(' ').replace(/(\d+)%\s*$/,'').trim();
+          const dataInts2  = [...dataText2.matchAll(/\b(\d+)\b/g)].map(x=>Number(x[1]));
+          window._pdfDebug[num].dataInts80 = dataInts2;
+          if(dataInts2.length > n.length) n = dataInts2;
         }
 
-        if(n.length < 8) continue;
+        if(n.length < 8) { window._pdfDebug[num].skipped='too few nums: '+n.length; continue; }
 
         let hu,da,al,tb,th,sp,t2,t3,t4,t5,t6;
 
-        // Always take the LAST N numbers — the antler classes are fixed at the end
         if(n.length >= 11) {
           [hu,da,al,tb,th,sp,t2,t3,t4,t5,t6] = n.slice(n.length-11);
         } else if(n.length === 10) {
           [hu,da,al,tb,sp,t2,t3,t4,t5,t6] = n.slice(n.length-10);
           th = (al||0)+(tb||0);
         } else {
-          [hu,da,al,tb,th] = n;
-          sp=n[5]||0; t2=n[6]||0; t3=n[7]||0; t4=n[8]||0; t5=n[9]||0; t6=n[10]||0;
+          [hu,da,al,tb,th,sp,t2,t3,t4,t5,t6] = n;
           th = th || (al||0)+(tb||0);
         }
 
         const antlerSum = (sp||0)+(t2||0)+(t3||0)+(t4||0)+(t5||0)+(t6||0);
         const av = tb>0 && antlerSum>0 && antlerSum>=tb*0.85 && antlerSum<=tb*1.15;
 
+        window._pdfDebug[num].parsed = {hu,da,al,tb,th,sp,t2,t3,t4,t5,t6,antlerSum,av,n};
+
         out[num] = {
           huntNum:num, hunters:hu||0, days:da||0, antlerless:al||0,
           totalBull:tb||0, totalHarvest:th||0, successPct:pct,
           spike:sp||0, twoPt:t2||0, threePt:t3||0, fourPt:t4||0, fivePt:t5||0, sixPlusPt:t6||0,
-          antlerValid:av,
-          _n:n  // keep raw for debugging
+          antlerValid:av
         };
         break;
       }
+    });
+  }
+
+  // Print summary to console
+  console.log('[PDF] Parsed', Object.keys(out).length, 'hunts');
+  const badOnes = Object.values(out).filter(h=>!h.antlerValid&&h.totalBull>0);
+  if(badOnes.length) {
+    console.warn('[PDF] Antler data invalid for:', badOnes.map(h=>h.huntNum));
+    badOnes.forEach(h=>{
+      const d=window._pdfDebug[h.huntNum];
+      console.log(h.huntNum,'| dataInts:',d?.dataInts,'| n:',d?.parsed?.n,'| totalBull:',h.totalBull,'| antlerSum:',d?.parsed?.antlerSum);
     });
   }
   return out;
@@ -1233,6 +1256,34 @@ async function init() {
 
   $('#btnClear').addEventListener('click',()=>{if(!Object.keys(S.years).length){toast('Nothing to clear');return;}confirm2('Clear all local data?',()=>clearLocal());});
   $('#mClose').addEventListener('click',()=>$('#modal').classList.remove('open'));
+
+  function renderDebug(){
+    const dbg=window._pdfDebug||{}, filter=($('#dbgFilter')?.value||'').trim().toUpperCase();
+    const keys=Object.keys(dbg).filter(k=>!filter||k.includes(filter)).sort();
+    const out=$('#dbgOut'); if(!out) return;
+    if(!keys.length){out.innerHTML='<p style="color:var(--tmut)">No PDF debug data yet — upload a harvest PDF first.</p>';return;}
+    out.innerHTML=keys.map(num=>{
+      const d=dbg[num];
+      const p=d.parsed||{};
+      const ok=p.av?'<span style="color:var(--good)">✓ VALID</span>':'<span style="color:var(--bad)">✗ INVALID</span>';
+      const rows=d.rowItems.map(i=>`<span style="color:var(--tmut)">x${i.x}:</span><span style="color:#f0f0f0;margin-right:12px">${i.str}</span>`).join('');
+      return `<div style="border:1px solid var(--bor);background:#1a1a1a;padding:12px;margin-bottom:10px;">
+        <div style="font-size:14px;font-weight:700;color:var(--gl);margin-bottom:6px">${num} ${ok} &nbsp;<span style="color:var(--tmut);font-size:11px">${d.pct}% success</span></div>
+        <div style="margin-bottom:4px"><span style="color:var(--tmut)">All row items (x pos → text):</span><br>${rows}</div>
+        <div style="margin-bottom:4px"><span style="color:var(--tmut)">dataInts (x&gt;huntX+150):</span> <span style="color:var(--warn)">[${(d.dataInts||[]).join(', ')}]</span></div>
+        ${d.dataInts80?`<div style="margin-bottom:4px"><span style="color:var(--tmut)">dataInts (x&gt;huntX+80):</span> <span style="color:#7da9d4">[${d.dataInts80.join(', ')}]</span></div>`:''}
+        ${p.n?`<div style="margin-bottom:4px"><span style="color:var(--tmut)">n used:</span> <span style="color:#f0f0f0">[${p.n.join(', ')}]</span></div>`:''}
+        ${p.n?`<div style="color:var(--tmut);font-size:11px">
+          hunters=${p.hu} days=${p.da} antlerless=${p.al} totalBull=${p.tb} harvest=${p.th}<br>
+          spike=${p.sp} 2pt=${p.t2} 3pt=${p.t3} 4pt=${p.t4} 5pt=${p.t5} 6pt+=${p.t6}<br>
+          antlerSum=${p.antlerSum} vs totalBull=${p.tb} → ${ok}
+        </div>`:''}
+        ${d.skipped?`<div style="color:var(--bad)">SKIPPED: ${d.skipped}</div>`:''}
+      </div>`;
+    }).join('');
+  }
+  $('#btnRefreshDebug')?.addEventListener('click', renderDebug);
+  $('#dbgFilter')?.addEventListener('input', renderDebug);
   $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')$('#modal').classList.remove('open');});
 }
 
