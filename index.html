@@ -5,10 +5,104 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<meta name="supported-color-schemes" content="dark">
 <title>Oregon Controlled Hunt Planner</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- Firebase -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, doc, setDoc, getDoc, collection, getDocs, serverTimestamp }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+apiKey: “AIzaSyCqbU875vWyWS0dQWr0hoqVRscH2AtU_v4”,
+authDomain: “oregon-hunting.firebaseapp.com”,
+projectId: “oregon-hunting”,
+storageBucket: “oregon-hunting.firebasestorage.app”,
+messagingSenderId: “84034970737”,
+appId: “1:84034970737:web:d470b1daca7b56ce6227d0”
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// Expose helpers on window so the main script can call them
+window.__fb = {
+// Save a full year’s data to Firestore
+async saveYear(year, hunts, harvestData) {
+try {
+// Firestore docs have a 1MB limit — split hunts into chunks of 200
+const CHUNK = 200;
+const chunks = [];
+for (let i = 0; i < hunts.length; i += CHUNK) chunks.push(hunts.slice(i, i + CHUNK));
+
+```
+    // Write metadata doc
+    await setDoc(doc(db, 'years', String(year)), {
+      year: String(year),
+      huntCount: hunts.length,
+      chunkCount: chunks.length,
+      updatedAt: serverTimestamp()
+    });
+
+    // Write each hunt chunk
+    for (let ci = 0; ci < chunks.length; ci++) {
+      await setDoc(doc(db, 'years', String(year), 'chunks', String(ci)), {
+        hunts: JSON.stringify(chunks[ci])
+      });
+    }
+
+    // Write harvest data (keyed by species/weapon)
+    await setDoc(doc(db, 'years', String(year), 'harvest', 'all'), {
+      data: JSON.stringify(harvestData),
+      updatedAt: serverTimestamp()
+    });
+
+    console.log('[Firebase] Saved year', year);
+    return true;
+  } catch (e) {
+    console.warn('[Firebase] Save failed:', e);
+    return false;
+  }
+},
+
+// Load all available years from Firestore
+async loadAllYears() {
+  try {
+    const snapshot = await getDocs(collection(db, 'years'));
+    const result = {};
+    for (const yearDoc of snapshot.docs) {
+      const meta = yearDoc.data();
+      const year = meta.year;
+      // Load hunt chunks
+      let hunts = [];
+      for (let ci = 0; ci < (meta.chunkCount || 1); ci++) {
+        const chunkDoc = await getDoc(doc(db, 'years', year, 'chunks', String(ci)));
+        if (chunkDoc.exists()) {
+          const chunk = JSON.parse(chunkDoc.data().hunts || '[]');
+          hunts = hunts.concat(chunk);
+        }
+      }
+      // Load harvest
+      const harvestDoc = await getDoc(doc(db, 'years', year, 'harvest', 'all'));
+      const harvestData = harvestDoc.exists() ? JSON.parse(harvestDoc.data().data || '{}') : {};
+      result[year] = { hunts, harvestData, files: {} };
+    }
+    return result;
+  } catch (e) {
+    console.warn('[Firebase] Load failed:', e);
+    return null;
+  }
+}
+```
+
+};
+
+// Signal to main script that Firebase is ready
+window.__fbReady = true;
+document.dispatchEvent(new Event(‘fbReady’));
+</script>
+
 <style>
 :root {
   color-scheme: dark;
@@ -33,790 +127,261 @@
   --panel-bg: #141414;
 }
 
-html, body, div, section, header, footer, main, nav, article, aside, h1, h2, h3, h4, h5, h6, p, ul, ol, li, table, thead, tbody, tr, th, td, label, input, select, button, span, a, img, form, textarea { box-sizing: border-box; }
+html, body, div, section, header, footer, main, nav, article, aside,
+h1,h2,h3,h4,h5,h6,p,ul,ol,li,table,thead,tbody,tr,th,td,
+label,input,select,button,span,a,img,form,textarea { box-sizing: border-box; }
 
-html {
--webkit-text-size-adjust: 100%;
-background: #000000;
-}
-
+html { -webkit-text-size-adjust: 100%; background: #000; }
 body {
-margin: 0;
-font-family: ‘Georgia’, ‘Cambria’, ‘Times New Roman’, serif;
-font-size: 16px;
-line-height: 1.5;
-color: #f0f0f0 !important;
-background: #000000 !important;
--webkit-font-smoothing: antialiased;
+  margin: 0;
+  font-family: 'Georgia','Cambria','Times New Roman',serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #f0f0f0 !important;
+  background: #000 !important;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* HEADER */
-.site-header {
-background: var(–odfw-green);
-color: #fff;
-border-bottom: 4px solid var(–odfw-gold);
-}
-.site-header-inner {
-max-width: 1200px;
-margin: 0 auto;
-padding: 18px 20px;
-display: flex;
-align-items: center;
-gap: 16px;
-}
+.site-header { background: var(--odfw-green); color: #fff; border-bottom: 4px solid var(--odfw-gold); }
+.site-header-inner { max-width: 1300px; margin: 0 auto; padding: 18px 20px; display: flex; align-items: center; gap: 16px; }
 .crest {
-flex-shrink: 0;
-width: 52px;
-height: 52px;
-border: 2px solid var(–odfw-gold);
-border-radius: 50%;
-display: flex;
-align-items: center;
-justify-content: center;
-font-family: ‘Georgia’, serif;
-font-weight: bold;
-font-size: 12px;
-letter-spacing: 1px;
-color: var(–odfw-gold);
-background: rgba(0,0,0,0.15);
+  flex-shrink: 0; width: 52px; height: 52px; border: 2px solid var(--odfw-gold); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Georgia',serif; font-weight: bold; font-size: 12px; letter-spacing: 1px;
+  color: var(--odfw-gold); background: rgba(0,0,0,.15);
 }
-.site-title {
-font-family: ‘Georgia’, serif;
-margin: 0;
-font-size: 22px;
-font-weight: 600;
-letter-spacing: 0.3px;
-line-height: 1.15;
-}
+.site-title { font-family: 'Georgia',serif; margin: 0; font-size: 22px; font-weight: 600; letter-spacing: .3px; line-height: 1.15; }
 .site-version {
-display: inline-block;
-margin-left: 8px;
-padding: 1px 7px;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-font-size: 11px;
-font-weight: 600;
-letter-spacing: 0.5px;
-vertical-align: middle;
-color: #d4a04a;
-border: 1px solid #d4a04a;
-border-radius: 2px;
-background: rgba(0,0,0,0.3);
+  display: inline-block; margin-left: 8px; padding: 1px 7px;
+  font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 11px; font-weight: 600; letter-spacing: .5px;
+  vertical-align: middle; color: #d4a04a; border: 1px solid #d4a04a; border-radius: 2px; background: rgba(0,0,0,.3);
 }
-.site-subtitle {
-font-size: 12px;
-font-style: italic;
-opacity: 0.85;
-letter-spacing: 0.5px;
-text-transform: uppercase;
-margin-top: 2px;
-}
+.site-subtitle { font-size: 12px; font-style: italic; opacity: .85; letter-spacing: .5px; text-transform: uppercase; margin-top: 2px; }
 
-.subnav {
-background: var(–odfw-green-dark);
-color: #fff;
-border-top: 1px solid rgba(255,255,255,0.1);
-}
-.subnav-inner {
-max-width: 1200px;
-margin: 0 auto;
-padding: 0 20px;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-display: flex;
-}
+.subnav { background: var(--odfw-green-dark); color: #fff; border-top: 1px solid rgba(255,255,255,.1); }
+.subnav-inner { max-width: 1300px; margin: 0 auto; padding: 0 20px; font-family: 'Helvetica Neue',Arial,sans-serif; display: flex; }
 .nav-link {
-background: transparent;
-border: none;
-border-bottom: 3px solid transparent;
-color: rgba(255,255,255,0.75);
-font-family: inherit;
-font-size: 13px;
-font-weight: 600;
-letter-spacing: 0.7px;
-text-transform: uppercase;
-padding: 12px 18px;
-cursor: pointer;
--webkit-appearance: none;
-appearance: none;
+  background: transparent; border: none; border-bottom: 3px solid transparent;
+  color: rgba(255,255,255,.75); font-family: inherit; font-size: 13px; font-weight: 600;
+  letter-spacing: .7px; text-transform: uppercase; padding: 12px 18px; cursor: pointer;
+  -webkit-appearance: none; appearance: none;
 }
 .nav-link:hover { color: #fff; }
-.nav-link.active {
-color: #fff;
-border-bottom-color: var(–odfw-gold);
-background: rgba(0,0,0,0.2);
-}
+.nav-link.active { color: #fff; border-bottom-color: var(--odfw-gold); background: rgba(0,0,0,.2); }
 .nav-link .badge {
-display: inline-block;
-margin-left: 6px;
-padding: 1px 6px;
-font-size: 10px;
-background: var(–odfw-gold);
-color: var(–odfw-green-dark);
-border-radius: 2px;
-font-weight: 700;
-letter-spacing: 0;
+  display: inline-block; margin-left: 6px; padding: 1px 6px; font-size: 10px;
+  background: var(--odfw-gold); color: var(--odfw-green-dark); border-radius: 2px; font-weight: 700; letter-spacing: 0;
 }
 
 .page { display: none; }
 .page.active { display: block; }
 
-/* MAIN */
-main {
-max-width: 1200px;
-margin: 0 auto;
-padding: 24px 20px 60px;
-}
+main { max-width: 1300px; margin: 0 auto; padding: 24px 20px 60px; }
 
 .page-title {
-font-family: ‘Georgia’, serif;
-font-size: 28px;
-font-weight: normal;
-color: var(–odfw-green-dark);
-margin: 0 0 4px;
-border-bottom: 2px solid var(–odfw-gold);
-padding-bottom: 10px;
+  font-family: 'Georgia',serif; font-size: 28px; font-weight: normal;
+  color: var(--odfw-green-dark); margin: 0 0 4px; border-bottom: 2px solid var(--odfw-gold); padding-bottom: 10px;
 }
-.page-lede {
-font-style: italic;
-color: var(–text-secondary);
-margin: 8px 0 24px;
-font-size: 15px;
-}
+.page-lede { font-style: italic; color: var(--text-secondary); margin: 8px 0 24px; font-size: 15px; }
 
-/* UPLOAD PANEL */
-.panel {
-background: #141414;
-border: 1px solid var(–border);
-margin-bottom: 24px;
-}
+/* PANEL */
+.panel { background: #141414; border: 1px solid var(--border); margin-bottom: 24px; }
 .panel-head {
-background: #1f1f1f;
-border-bottom: 1px solid #3a3a3a;
-padding: 10px 16px;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-font-size: 13px;
-font-weight: 600;
-text-transform: uppercase;
-letter-spacing: 0.6px;
-color: #d4a04a;
+  background: #1f1f1f; border-bottom: 1px solid #3a3a3a; padding: 10px 16px;
+  font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 13px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .6px; color: #d4a04a;
 }
 .panel-body { padding: 18px 16px; }
 
+/* STATUS */
 .data-status {
-display: flex;
-align-items: center;
-justify-content: space-between;
-flex-wrap: wrap;
-gap: 12px;
-font-size: 14px;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  font-size: 14px; font-family: 'Helvetica Neue',Arial,sans-serif;
 }
-.status-light {
-display: inline-flex;
-align-items: center;
-gap: 8px;
-}
-.status-dot {
-width: 10px;
-height: 10px;
-border-radius: 50%;
-background: #c9c2ad;
-}
-.status-dot.loaded { background: var(–good); }
-.status-dot.partial { background: var(–odfw-gold); }
+.status-light { display: inline-flex; align-items: center; gap: 8px; }
+.status-dot { width: 10px; height: 10px; border-radius: 50%; background: #c9c2ad; }
+.status-dot.loaded { background: var(--good); }
+.status-dot.partial { background: var(--odfw-gold); }
 
-.upload-grid {
-display: grid;
-grid-template-columns: 1fr 1fr 1fr;
-gap: 12px;
-margin-top: 14px;
-}
-@media (max-width: 900px) {
-.upload-grid { grid-template-columns: 1fr 1fr; }
-}
-@media (max-width: 600px) {
-.upload-grid { grid-template-columns: 1fr; }
-}
+/* UPLOAD */
+.upload-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 14px; }
+@media (max-width: 900px) { .upload-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 600px) { .upload-grid { grid-template-columns: 1fr; } }
 
 .upload-zone {
-border: 2px dashed var(–border);
-background: var(–odfw-tan-light);
-padding: 18px 14px;
-text-align: center;
-cursor: pointer;
-transition: all 0.15s ease;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
+  border: 2px dashed var(--border); background: var(--odfw-tan-light); padding: 18px 14px;
+  text-align: center; cursor: pointer; transition: all .15s ease;
+  font-family: 'Helvetica Neue',Arial,sans-serif;
 }
-.upload-zone:hover, .upload-zone.dragover {
-border-color: var(–odfw-green);
-background: var(–odfw-cream);
-}
-.upload-zone.has-file {
-border-style: solid;
-border-color: var(–odfw-green);
-background: var(–good-bg);
-}
-.uz-label {
-font-size: 13px;
-font-weight: 600;
-text-transform: uppercase;
-letter-spacing: 0.5px;
-color: var(–odfw-green-dark);
-margin-bottom: 4px;
-}
-.uz-hint {
-font-size: 12px;
-color: var(–text-muted);
-}
-.uz-file {
-font-size: 12px;
-color: var(–good);
-margin-top: 6px;
-font-weight: 600;
-word-break: break-all;
-}
+.upload-zone:hover, .upload-zone.dragover { border-color: var(--odfw-green); background: var(--odfw-cream); }
+.upload-zone.has-file { border-style: solid; border-color: var(--odfw-green); background: var(--good-bg); }
+.uz-label { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--odfw-green-dark); margin-bottom: 4px; }
+.uz-hint { font-size: 12px; color: var(--text-muted); }
+.uz-file { font-size: 12px; color: var(--good); margin-top: 6px; font-weight: 600; word-break: break-all; }
 .upload-zone input[type=file] { display: none; }
 
 .src-btn {
-display: block;
-margin-top: 8px;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-font-size: 12px;
-font-weight: 600;
-letter-spacing: 0.5px;
-text-transform: uppercase;
-color: var(–odfw-green-dark);
-background: #141414;
-border: 1px solid var(–odfw-green-dark);
-text-decoration: none;
-text-align: center;
-padding: 9px 12px;
-transition: background 0.15s ease;
+  display: block; margin-top: 8px; font-family: 'Helvetica Neue',Arial,sans-serif;
+  font-size: 12px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--odfw-green-dark); background: #141414; border: 1px solid var(--odfw-green-dark);
+  text-decoration: none; text-align: center; padding: 9px 12px; transition: background .15s ease;
 }
-.src-btn:hover {
-background: var(–odfw-green);
-color: #fff;
-}
-.src-btn::after {
-content: ’ \2197’;
-font-weight: normal;
-}
+.src-btn:hover { background: var(--odfw-green); color: #fff; }
+.src-btn::after { content: ' \2197'; font-weight: normal; }
+.upload-cell { display: flex; flex-direction: column; }
 
-.upload-cell {
-display: flex;
-flex-direction: column;
-}
-
-.actions-row {
-margin-top: 14px;
-display: flex;
-flex-wrap: wrap;
-gap: 10px;
-align-items: center;
-}
+.actions-row { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .btn {
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-font-size: 13px;
-font-weight: 600;
-letter-spacing: 0.4px;
-padding: 8px 16px;
-border: 1px solid var(–odfw-green-dark);
-background: var(–odfw-green);
-color: #fff;
-cursor: pointer;
-text-transform: uppercase;
--webkit-appearance: none;
-appearance: none;
-border-radius: 0;
+  font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 13px; font-weight: 600; letter-spacing: .4px;
+  padding: 8px 16px; border: 1px solid var(--odfw-green-dark); background: var(--odfw-green);
+  color: #fff; cursor: pointer; text-transform: uppercase; -webkit-appearance: none; appearance: none; border-radius: 0;
 }
-.btn:hover { background: var(–odfw-green-dark); }
-.btn:disabled { background: #999; border-color: #999; cursor: not-allowed; }
+.btn:hover { background: var(--odfw-green-dark); }
+.btn:disabled { background: #555; border-color: #555; cursor: not-allowed; }
 .btn.secondary { background: #1f1f1f; color: #6bb582; border-color: #6bb582; }
 .btn.secondary:hover { background: #2a2a2a; }
 .btn.danger { background: #1f1f1f; color: #d46b6b; border-color: #d46b6b; }
 .btn.danger:hover { background: #2a1818; }
 
-.help-text {
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-font-size: 12px;
-color: var(–text-muted);
-margin-top: 12px;
-line-height: 1.5;
-}
-.help-text a { color: var(–odfw-green); }
+.help-text { font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 12px; color: var(--text-muted); margin-top: 12px; line-height: 1.5; }
 
 /* FILTERS */
-.filters {
-display: grid;
-grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-gap: 12px;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-}
-.field label {
-display: block;
-font-size: 11px;
-font-weight: 600;
-text-transform: uppercase;
-letter-spacing: 0.5px;
-color: var(–odfw-green-dark);
-margin-bottom: 4px;
-}
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; font-family: 'Helvetica Neue',Arial,sans-serif; }
+.field label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--odfw-green-dark); margin-bottom: 4px; }
 .field input, .field select {
-width: 100%;
-padding: 7px 9px;
-border: 1px solid #3a3a3a;
-background: #141414;
-font-family: inherit;
-font-size: 14px;
-color: #f0f0f0;
--webkit-text-fill-color: #f0f0f0;
-color-scheme: dark;
-border-radius: 0;
--webkit-appearance: none;
-appearance: none;
+  width: 100%; padding: 7px 9px; border: 1px solid #3a3a3a; background: #141414;
+  font-family: inherit; font-size: 14px; color: #f0f0f0; -webkit-text-fill-color: #f0f0f0;
+  color-scheme: dark; border-radius: 0; -webkit-appearance: none; appearance: none;
 }
-.field input:focus, .field select:focus {
-outline: 2px solid #d4a04a;
-outline-offset: -1px;
-}
+.field input:focus, .field select:focus { outline: 2px solid #d4a04a; outline-offset: -1px; }
 .field select {
-background-image: url(“data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%236bb582' stroke-width='1.5' fill='none'/></svg>”);
-background-repeat: no-repeat;
-background-position: right 8px center;
-padding-right: 28px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%236bb582' stroke-width='1.5' fill='none'/></svg>");
+  background-repeat: no-repeat; background-position: right 8px center; padding-right: 28px;
 }
-.field input::placeholder {
-color: #707070;
-}
+.field input::placeholder { color: #707070; }
 
 /* RESULTS TABLE */
-.results-meta {
-display: flex;
-justify-content: space-between;
-align-items: baseline;
-flex-wrap: wrap;
-gap: 10px;
-margin: 24px 0 8px;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-}
-.results-meta h2 {
-font-family: ‘Georgia’, serif;
-font-size: 20px;
-font-weight: normal;
-color: var(–odfw-green-dark);
-margin: 0;
-}
-.results-count {
-font-size: 13px;
-color: var(–text-muted);
-}
+.results-meta { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 10px; margin: 24px 0 8px; font-family: 'Helvetica Neue',Arial,sans-serif; }
+.results-meta h2 { font-family: 'Georgia',serif; font-size: 20px; font-weight: normal; color: var(--odfw-green-dark); margin: 0; }
+.results-count { font-size: 13px; color: var(--text-muted); }
 
-.table-wrap {
-background: #141414;
-border: 1px solid var(–border);
-overflow-x: auto;
--webkit-overflow-scrolling: touch;
-}
-table.hunts {
-width: 100%;
-border-collapse: collapse;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-font-size: 13px;
-}
+.table-wrap { background: #141414; border: 1px solid var(--border); overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table.hunts { width: 100%; border-collapse: collapse; font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 13px; }
 table.hunts thead th {
-background: var(–odfw-green);
-color: #fff;
-font-weight: 600;
-text-transform: uppercase;
-letter-spacing: 0.4px;
-font-size: 11px;
-padding: 10px 8px;
-text-align: left;
-white-space: nowrap;
-border-right: 1px solid var(–odfw-green-dark);
-cursor: pointer;
-user-select: none;
+  background: var(--odfw-green); color: #fff; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .4px; font-size: 11px; padding: 10px 8px; text-align: left; white-space: nowrap;
+  border-right: 1px solid var(--odfw-green-dark); cursor: pointer; user-select: none;
 }
 table.hunts thead th:last-child { border-right: none; }
-table.hunts thead th .sort-arrow { opacity: 0.5; margin-left: 3px; font-size: 10px; }
+table.hunts thead th .sort-arrow { opacity: .5; margin-left: 3px; font-size: 10px; }
 table.hunts thead th.sorted .sort-arrow { opacity: 1; }
-table.hunts tbody tr { border-bottom: 1px solid var(–border-light); cursor: pointer; }
-table.hunts tbody tr:nth-child(even) { background: var(–odfw-tan-light); }
-table.hunts tbody tr:hover { background: var(–odfw-tan); }
-table.hunts tbody td {
-padding: 9px 8px;
-vertical-align: top;
-}
-table.hunts tbody td.num {
-font-variant-numeric: tabular-nums;
-text-align: right;
-white-space: nowrap;
-}
-table.hunts tbody td.hunt-num {
-font-family: ‘Georgia’, serif;
-font-weight: 600;
-font-size: 14px;
-color: var(–odfw-green-dark);
-white-space: nowrap;
-}
+table.hunts tbody tr { border-bottom: 1px solid var(--border-light); cursor: pointer; }
+table.hunts tbody tr:nth-child(even) { background: var(--odfw-tan-light); }
+table.hunts tbody tr:hover { background: var(--odfw-tan); }
+table.hunts tbody td { padding: 9px 8px; vertical-align: top; }
+table.hunts tbody td.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+table.hunts tbody td.hunt-num { font-family: 'Georgia',serif; font-weight: 600; font-size: 14px; color: var(--odfw-green-dark); white-space: nowrap; }
 
-.tag {
-display: inline-block;
-padding: 1px 6px;
-font-size: 10px;
-font-weight: 600;
-text-transform: uppercase;
-letter-spacing: 0.4px;
-border: 1px solid var(–border);
-background: #141414;
-}
+.tag { display: inline-block; padding: 1px 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; border: 1px solid var(--border); background: #141414; }
 .tag.archery { border-color: #c4a96a; color: #c4a96a; }
 .tag.muzz { border-color: #d48b58; color: #d48b58; }
 .tag.rifle { border-color: #6bb582; color: #6bb582; }
 .tag.youth { border-color: #7da9d4; color: #7da9d4; }
 
-.draw-cell {
-font-weight: 600;
-font-variant-numeric: tabular-nums;
-}
-.draw-cell.easy { color: var(–good); }
-.draw-cell.med { color: var(–warn); }
-.draw-cell.hard { color: var(–bad); }
-.draw-cell .sub {
-font-weight: normal;
-font-size: 11px;
-color: var(–text-muted);
-display: block;
-margin-top: 2px;
-}
+.draw-cell { font-weight: 600; font-variant-numeric: tabular-nums; }
+.draw-cell.easy { color: var(--good); }
+.draw-cell.med { color: var(--warn); }
+.draw-cell.hard { color: var(--bad); }
+.draw-cell .sub { font-weight: normal; font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px; }
 
-.success-cell {
-font-variant-numeric: tabular-nums;
-}
-.success-bar {
-height: 4px;
-background: var(–border-light);
-margin-top: 3px;
-position: relative;
-}
-.success-bar-fill {
-position: absolute;
-top: 0; left: 0; bottom: 0;
-background: var(–odfw-green);
-}
+.success-cell { font-variant-numeric: tabular-nums; }
+.success-bar { height: 4px; background: var(--border-light); margin-top: 3px; position: relative; }
+.success-bar-fill { position: absolute; top: 0; left: 0; bottom: 0; background: var(--odfw-green); }
 
-.empty-state {
-padding: 40px 20px;
-text-align: center;
-color: var(–text-muted);
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-font-size: 14px;
-}
+.my-odds-cell { font-weight: 600; font-variant-numeric: tabular-nums; }
+.my-odds-cell.easy { color: var(--good); }
+.my-odds-cell.med  { color: var(--warn); }
+.my-odds-cell.hard { color: var(--bad); }
+.my-odds-cell.none { color: var(--text-muted); }
 
-/* DETAIL MODAL */
-.modal-backdrop {
-position: fixed;
-inset: 0;
-background: rgba(20, 30, 20, 0.6);
-display: none;
-align-items: flex-start;
-justify-content: center;
-z-index: 100;
-padding: 20px;
-overflow-y: auto;
--webkit-overflow-scrolling: touch;
-}
+.empty-state { padding: 40px 20px; text-align: center; color: var(--text-muted); font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 14px; }
+
+/* MODAL */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(20,30,20,.6); display: none; align-items: flex-start; justify-content: center; z-index: 100; padding: 20px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .modal-backdrop.open { display: flex; }
-.modal {
-background: #141414;
-border: 1px solid var(–border);
-max-width: 720px;
-width: 100%;
-margin: 20px auto;
-border-top: 4px solid var(–odfw-gold);
-}
-.modal-head {
-display: flex;
-justify-content: space-between;
-align-items: flex-start;
-padding: 16px 20px;
-background: var(–odfw-tan);
-border-bottom: 1px solid var(–border);
-}
-.modal-head h3 {
-font-family: ‘Georgia’, serif;
-font-size: 20px;
-font-weight: normal;
-color: var(–odfw-green-dark);
-margin: 0;
-}
-.modal-head .sub {
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-font-size: 12px;
-color: var(–text-secondary);
-text-transform: uppercase;
-letter-spacing: 0.5px;
-margin-top: 3px;
-}
-.modal-close {
-background: transparent;
-border: 1px solid var(–text-secondary);
-color: var(–text-secondary);
-width: 28px;
-height: 28px;
-font-size: 18px;
-line-height: 1;
-cursor: pointer;
-font-family: serif;
-flex-shrink: 0;
-}
-.modal-body { padding: 20px; font-family: ‘Helvetica Neue’, Arial, sans-serif; font-size: 14px; }
+.modal { background: #141414; border: 1px solid var(--border); max-width: 720px; width: 100%; margin: 20px auto; border-top: 4px solid var(--odfw-gold); }
+.modal-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 20px; background: var(--odfw-tan); border-bottom: 1px solid var(--border); }
+.modal-head h3 { font-family: 'Georgia',serif; font-size: 20px; font-weight: normal; color: var(--odfw-green-dark); margin: 0; }
+.modal-head .sub { font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .5px; margin-top: 3px; }
+.modal-close { background: transparent; border: 1px solid var(--text-secondary); color: var(--text-secondary); width: 28px; height: 28px; font-size: 18px; line-height: 1; cursor: pointer; font-family: serif; flex-shrink: 0; }
+.modal-body { padding: 20px; font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 14px; }
 .modal-section { margin-bottom: 20px; }
-.modal-section h4 {
-font-family: ‘Georgia’, serif;
-font-size: 15px;
-color: var(–odfw-green-dark);
-margin: 0 0 8px;
-border-bottom: 1px solid var(–border-light);
-padding-bottom: 4px;
-text-transform: uppercase;
-letter-spacing: 0.5px;
-font-weight: 600;
-}
-.kv-grid {
-display: grid;
-grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-gap: 10px 16px;
-}
-.kv .k {
-font-size: 11px;
-text-transform: uppercase;
-letter-spacing: 0.4px;
-color: var(–text-muted);
-}
-.kv .v {
-font-size: 16px;
-font-family: ‘Georgia’, serif;
-color: var(–text-primary);
-font-variant-numeric: tabular-nums;
-}
+.modal-section h4 { font-family: 'Georgia',serif; font-size: 15px; color: var(--odfw-green-dark); margin: 0 0 8px; border-bottom: 1px solid var(--border-light); padding-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+.kv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 16px; }
+.kv .k { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
+.kv .v { font-size: 16px; font-family: 'Georgia',serif; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 
-table.points {
-width: 100%;
-border-collapse: collapse;
-font-size: 13px;
-}
-table.points th, table.points td {
-padding: 6px 8px;
-border-bottom: 1px solid var(–border-light);
-text-align: right;
-font-variant-numeric: tabular-nums;
-}
-table.points th {
-background: var(–odfw-tan-light);
-text-align: right;
-font-size: 11px;
-text-transform: uppercase;
-letter-spacing: 0.4px;
-color: var(–odfw-green-dark);
-}
+table.points { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.points th, table.points td { padding: 6px 8px; border-bottom: 1px solid var(--border-light); text-align: right; font-variant-numeric: tabular-nums; }
+table.points th { background: var(--odfw-tan-light); text-align: right; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--odfw-green-dark); }
 table.points th:first-child, table.points td:first-child { text-align: left; }
-table.points tr.drew td { background: var(–good-bg); font-weight: 600; }
+table.points tr.drew td { background: var(--good-bg); font-weight: 600; }
 
-/* FOOTER */
-footer {
-background: var(–odfw-green-dark);
-color: rgba(255,255,255,0.8);
-padding: 30px 20px;
-margin-top: 40px;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-font-size: 12px;
-line-height: 1.6;
+/* FIREBASE STATUS BANNER */
+.fb-banner {
+  font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 13px; padding: 8px 14px;
+  border-left: 3px solid var(--odfw-gold); background: #1a1810; color: #f0f0f0;
+  margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
-footer .inner { max-width: 1200px; margin: 0 auto; }
-footer a { color: var(–odfw-tan); }
+.fb-banner.success { border-left-color: var(--good); background: #101a12; }
+.fb-banner.error { border-left-color: var(--bad); background: #1a1010; }
 
-.disclaimer {
-font-style: italic;
-font-size: 11px;
-opacity: 0.7;
-margin-top: 16px;
-border-top: 1px solid rgba(255,255,255,0.2);
-padding-top: 12px;
-}
-
-/* TOAST */
-.toast {
-position: fixed;
-bottom: 20px;
-left: 50%;
-transform: translateX(-50%);
-background: var(–odfw-green-dark);
-color: #fff;
-padding: 10px 18px;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-font-size: 13px;
-border-left: 3px solid var(–odfw-gold);
-z-index: 200;
-max-width: 90%;
-display: none;
-}
-.toast.error { background: var(–bad); border-left-color: #fff; }
-
-/* TREND INDICATORS (multi-year compare) */
-.trend {
-display: inline-block;
-margin-left: 6px;
-font-size: 11px;
-font-weight: 600;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-letter-spacing: 0.3px;
-font-variant-numeric: tabular-nums;
-}
-.trend-up { color: #6bb582; }
-.trend-down { color: #d46b6b; }
-
-/* YEAR CONTROLS on Database page */
-.year-controls {
-display: flex;
-gap: 14px;
-flex-wrap: wrap;
-background: #141414;
-border: 1px solid #3a3a3a;
-padding: 12px 16px;
-margin: 0 0 20px 0;
-align-items: flex-end;
-}
-.year-control-field {
-flex: 1 1 180px;
-min-width: 160px;
-}
-.year-control-field label {
-display: block;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-font-size: 11px;
-font-weight: 600;
-text-transform: uppercase;
-letter-spacing: 0.5px;
-color: #d4a04a;
-margin-bottom: 4px;
-}
+/* YEAR CONTROLS */
+.year-controls { display: flex; gap: 14px; flex-wrap: wrap; background: #141414; border: 1px solid #3a3a3a; padding: 12px 16px; margin: 0 0 20px; align-items: flex-end; }
+.year-control-field { flex: 1 1 180px; min-width: 160px; }
+.year-control-field label { display: block; font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: #d4a04a; margin-bottom: 4px; }
 .year-control-field select {
-width: 100%;
-padding: 7px 9px;
-border: 1px solid #3a3a3a;
-background: #141414;
-color: #f0f0f0;
--webkit-text-fill-color: #f0f0f0;
-color-scheme: dark;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-font-size: 14px;
-border-radius: 0;
--webkit-appearance: none;
-appearance: none;
-background-image: url(“data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%236bb582' stroke-width='1.5' fill='none'/></svg>”);
-background-repeat: no-repeat;
-background-position: right 8px center;
-padding-right: 28px;
+  width: 100%; padding: 7px 9px; border: 1px solid #3a3a3a; background: #141414; color: #f0f0f0;
+  -webkit-text-fill-color: #f0f0f0; color-scheme: dark; font-family: 'Helvetica Neue',Arial,sans-serif;
+  font-size: 14px; border-radius: 0; -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%236bb582' stroke-width='1.5' fill='none'/></svg>");
+  background-repeat: no-repeat; background-position: right 8px center; padding-right: 28px;
 }
 
-/* YEARS LIST in Data Manager */
-.years-list {
-border: 1px solid #3a3a3a;
-}
-.year-row {
-display: flex;
-justify-content: space-between;
-align-items: center;
-padding: 10px 14px;
-border-bottom: 1px solid #2a2a2a;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-background: #141414;
-}
+/* YEARS LIST */
+.years-list { border: 1px solid #3a3a3a; }
+.year-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid #2a2a2a; font-family: 'Helvetica Neue',Arial,sans-serif; background: #141414; }
 .year-row:last-child { border-bottom: none; }
 .year-row.selected { background: #1a2418; border-left: 3px solid #d4a04a; }
 .year-row-main { flex: 1; min-width: 0; }
-.year-label {
-font-size: 16px;
-font-family: ‘Georgia’, serif;
-color: #f0f0f0;
-font-weight: 600;
-}
-.year-meta {
-font-size: 12px;
-color: #8a8a8a;
-margin-top: 2px;
-}
-.year-row-actions {
-display: flex;
-gap: 6px;
-flex-shrink: 0;
-}
-.btn-mini {
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-font-size: 11px;
-font-weight: 600;
-letter-spacing: 0.4px;
-text-transform: uppercase;
-padding: 5px 10px;
-background: #1f1f1f;
-color: #6bb582;
-border: 1px solid #6bb582;
-cursor: pointer;
-border-radius: 0;
--webkit-appearance: none;
-appearance: none;
-}
+.year-label { font-size: 16px; font-family: 'Georgia',serif; color: #f0f0f0; font-weight: 600; }
+.year-meta { font-size: 12px; color: #8a8a8a; margin-top: 2px; }
+.year-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.btn-mini { font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 11px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; padding: 5px 10px; background: #1f1f1f; color: #6bb582; border: 1px solid #6bb582; cursor: pointer; border-radius: 0; -webkit-appearance: none; appearance: none; }
 .btn-mini:hover { background: #2a2a2a; }
 .btn-mini.danger { color: #d46b6b; border-color: #d46b6b; }
 .btn-mini.danger:hover { background: #2a1818; }
 
-.badge-sm {
-display: inline-block;
-margin-left: 6px;
-padding: 1px 6px;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-font-size: 10px;
-font-weight: 700;
-letter-spacing: 0.5px;
-text-transform: uppercase;
-background: #d4a04a;
-color: #000;
-border-radius: 2px;
-vertical-align: middle;
-}
-.badge-sm-alt {
-display: inline-block;
-margin-left: 6px;
-padding: 1px 6px;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-font-size: 10px;
-font-weight: 700;
-letter-spacing: 0.5px;
-text-transform: uppercase;
-background: #1f1f1f;
-color: #6bb582;
-border: 1px solid #6bb582;
-border-radius: 2px;
-vertical-align: middle;
-}
+.badge-sm { display: inline-block; margin-left: 6px; padding: 1px 6px; font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; background: #d4a04a; color: #000; border-radius: 2px; vertical-align: middle; }
+.badge-sm-alt { display: inline-block; margin-left: 6px; padding: 1px 6px; font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; background: #1f1f1f; color: #6bb582; border: 1px solid #6bb582; border-radius: 2px; vertical-align: middle; }
 
-/* MODAL CALLOUTS */
-.callout {
-padding: 10px 14px;
-margin: 0 0 16px 0;
-border-left: 3px solid #d4a04a;
-background: #2a2418;
-font-family: ‘Helvetica Neue’, Arial, sans-serif;
-font-size: 14px;
-color: #f0f0f0;
-}
+.callout { padding: 10px 14px; margin: 0 0 16px; border-left: 3px solid #d4a04a; background: #2a2418; font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 14px; color: #f0f0f0; }
 .callout.good { background: #1a2a1f; border-left-color: #6bb582; }
 .callout.warn { background: #2a2418; border-left-color: #d4a04a; }
 
-/* SECOND-CHOICE INDICATOR */
-.sc-yes { color: #6bb582; font-weight: 600; }
-.sc-no { color: #707070; }
+footer { background: var(--odfw-green-dark); color: rgba(255,255,255,.8); padding: 30px 20px; margin-top: 40px; font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 12px; line-height: 1.6; }
+footer .inner { max-width: 1300px; margin: 0 auto; }
+footer a { color: var(--odfw-tan); }
+.disclaimer { font-style: italic; font-size: 11px; opacity: .7; margin-top: 16px; border-top: 1px solid rgba(255,255,255,.2); padding-top: 12px; }
+
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--odfw-green-dark); color: #fff; padding: 10px 18px; font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 13px; border-left: 3px solid var(--odfw-gold); z-index: 200; max-width: 90%; display: none; }
+.toast.error { background: var(--bad); border-left-color: #fff; }
 .toast.show { display: block; }
+
+.trend { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 600; font-family: 'Helvetica Neue',Arial,sans-serif; letter-spacing: .3px; font-variant-numeric: tabular-nums; }
+.trend-up { color: #6bb582; }
+.trend-down { color: #d46b6b; }
 </style>
 
 </head>
@@ -826,7 +391,7 @@ color: #f0f0f0;
   <div class="site-header-inner">
     <div class="crest">ODFW</div>
     <div>
-      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="site-version">v1.2</span></h1>
+      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="site-version">v1.3</span></h1>
       <div class="site-subtitle">Buck Deer &amp; Elk &mdash; Draw Odds &amp; Harvest Statistics</div>
     </div>
   </div>
@@ -843,9 +408,14 @@ color: #f0f0f0;
   <!-- ===================== DATABASE PAGE ===================== -->
   <div class="page active" data-page="database">
     <h2 class="page-title">Hunt Database</h2>
-    <p class="page-lede">Browse and filter Oregon controlled hunts. When more than one year is loaded, trends compare your selected year to the prior year — green means easier to draw / better success, red means worse.</p>
+    <p class="page-lede">Browse Oregon controlled hunts. Draw odds and success rates use resident application data. Enter your points to see personalized draw odds.</p>
 
 ```
+<div id="fbLoadBanner" class="fb-banner" style="display:none;">
+  <span id="fbLoadMsg">Loading shared data from cloud…</span>
+  <button class="btn secondary" id="btnFbLoad" style="white-space:nowrap;">Load from Cloud</button>
+</div>
+
 <div id="yearControls" class="year-controls" style="display:none;">
   <div class="year-control-field">
     <label>Viewing</label>
@@ -861,14 +431,17 @@ color: #f0f0f0;
   <section class="panel" style="border-left:4px solid var(--odfw-gold);">
     <div class="panel-body" style="text-align:center;">
       <p style="margin:0 0 14px;font-family:'Helvetica Neue',Arial,sans-serif;color:var(--text-secondary);">
-        No data has been loaded yet. Visit the Data Manager page to upload ODFW reports.
+        No data loaded. Load from cloud or visit the Data Manager to upload ODFW reports.
       </p>
-      <button class="btn" id="btnGoToData">Go to Data Manager</button>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+        <button class="btn" id="btnLoadCloud">Load from Cloud</button>
+        <button class="btn secondary" id="btnGoToData">Upload Files</button>
+      </div>
     </div>
   </section>
 </div>
 
-<!-- ========== FILTERS ========== -->
+<!-- FILTERS -->
 <section class="panel">
   <div class="panel-head">Filter</div>
   <div class="panel-body">
@@ -904,7 +477,7 @@ color: #f0f0f0;
           <option value="reachable">Within 3 points</option>
         </select>
       </div>
-      <div class="field" style="grid-column: span 2;">
+      <div class="field" style="grid-column:span 2;">
         <label for="fSearch">Search Unit / Hunt Name</label>
         <input type="text" id="fSearch" placeholder="e.g. Murderers Cr, Wenaha, 230X">
       </div>
@@ -912,7 +485,7 @@ color: #f0f0f0;
   </div>
 </section>
 
-<!-- ========== RESULTS ========== -->
+<!-- RESULTS -->
 <div class="results-meta">
   <h2>Results</h2>
   <div class="results-count" id="resultsCount">—</div>
@@ -926,17 +499,16 @@ color: #f0f0f0;
         <th data-sort="huntName">Hunt Name <span class="sort-arrow">▾</span></th>
         <th data-sort="weapon">Type <span class="sort-arrow">▾</span></th>
         <th data-sort="tags" class="num-th">Tags <span class="sort-arrow">▾</span></th>
-        <th data-sort="apps" class="num-th">Applicants <span class="sort-arrow">▾</span></th>
         <th data-sort="minPts" class="num-th">Min. Pts to Draw <span class="sort-arrow">▾</span></th>
         <th data-sort="firstChoiceOdds" class="num-th">1st-Choice Odds <span class="sort-arrow">▾</span></th>
-        <th data-sort="secondChoice" class="num-th">2nd-Choice Tags <span class="sort-arrow">▾</span></th>
         <th data-sort="success" class="num-th">Success Rate <span class="sort-arrow">▾</span></th>
-        <th data-sort="hunters" class="num-th">Hunters <span class="sort-arrow">▾</span></th>
         <th class="num-th">Most Common Bull</th>
+        <th data-sort="myOdds" class="num-th">My Draw Odds <span class="sort-arrow">▾</span></th>
+        <th data-sort="apps" class="num-th">Applicants <span class="sort-arrow">▾</span></th>
       </tr>
     </thead>
     <tbody id="huntsBody">
-      <tr><td colspan="11" class="empty-state">Upload an ODFW Preference Points report to begin.</td></tr>
+      <tr><td colspan="10" class="empty-state">Upload an ODFW Preference Points report or load from cloud to begin.</td></tr>
     </tbody>
   </table>
 </div>
@@ -948,9 +520,23 @@ color: #f0f0f0;
 
   <div class="page" data-page="data">
     <h2 class="page-title">Data Manager</h2>
-    <p class="page-lede">Download the latest reports from ODFW using the buttons below, then upload them here. Files are parsed locally in your browser and saved to this device — nothing is sent over the internet.</p>
+    <p class="page-lede">Upload ODFW reports to parse and share data. Once uploaded, data is saved to the cloud so everyone can use it without re-uploading.</p>
 
 ```
+<section class="panel">
+  <div class="panel-head">Cloud Sync (Firebase)</div>
+  <div class="panel-body">
+    <div id="fbSyncStatus" class="fb-banner" style="margin-bottom:0;">Connecting to cloud…</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+      <button class="btn" id="btnSyncToCloud">Save to Cloud</button>
+      <button class="btn secondary" id="btnLoadFromCloud">Load from Cloud</button>
+    </div>
+    <p class="help-text" style="margin-top:10px;">
+      "Save to Cloud" pushes your locally-uploaded data so others can see it. "Load from Cloud" pulls the latest shared data onto this device.
+    </p>
+  </div>
+</section>
+
 <section class="panel">
   <div class="panel-head">Status</div>
   <div class="panel-body">
@@ -970,7 +556,7 @@ color: #f0f0f0;
   <div class="panel-head">Step 1 &mdash; Choose Year</div>
   <div class="panel-body">
     <p style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;margin:0 0 12px;color:var(--text-secondary);">
-      Enter the year of the reports you're about to upload. Each year is stored separately so you can compare across years.
+      Enter the year of the reports you're about to upload.
     </p>
     <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
       <div class="field" style="flex:0 0 140px;">
@@ -982,7 +568,6 @@ color: #f0f0f0;
         Currently editing: <strong id="pendingYearDisplay" style="color:#d4a04a;">none</strong>
       </span>
     </div>
-
     <div id="yearsList" class="years-list" style="margin-top:18px;"></div>
   </div>
 </section>
@@ -990,25 +575,17 @@ color: #f0f0f0;
 <section class="panel">
   <div class="panel-head">Step 2 &mdash; Download from ODFW</div>
   <div class="panel-body">
-    <p style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;margin:0 0 14px;color:var(--text-secondary);">
-      Open these in a new tab, find the year you want, and save the files to your device.
-    </p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <a class="src-btn" href="https://odfw.huntfishoregon.com/reportdownloads" target="_blank" rel="noopener">Point Summary Link</a>
       <a class="src-btn" href="https://myodfw.com/articles/big-game-hunting-harvest-statistics" target="_blank" rel="noopener">Harvest Summary Link</a>
     </div>
-    <p class="help-text" style="margin-top:12px;">
-      On iPhone: tap the link, then tap the file name on the ODFW page, then choose <em>Save to Files</em> from the share menu. On desktop, files download automatically.
-    </p>
   </div>
 </section>
 
 <section class="panel">
   <div class="panel-head">Step 3 &mdash; Upload Files</div>
   <div class="panel-body">
-
     <div class="upload-grid">
-
       <div class="upload-cell">
         <label class="upload-zone" id="uzElkPoints" data-key="elkPoints">
           <input type="file" accept=".xlsx,.xls" data-target="elkPoints">
@@ -1017,7 +594,6 @@ color: #f0f0f0;
           <div class="uz-file" data-file="elkPoints"></div>
         </label>
       </div>
-
       <div class="upload-cell">
         <label class="upload-zone" id="uzDeerPoints" data-key="deerPoints">
           <input type="file" accept=".xlsx,.xls" data-target="deerPoints">
@@ -1026,7 +602,6 @@ color: #f0f0f0;
           <div class="uz-file" data-file="deerPoints"></div>
         </label>
       </div>
-
       <div class="upload-cell">
         <label class="upload-zone" id="uzElkRifleHarvest" data-key="elkRifleHarvest">
           <input type="file" accept=".pdf,.xlsx,.xls" data-target="elkRifleHarvest">
@@ -1035,7 +610,6 @@ color: #f0f0f0;
           <div class="uz-file" data-file="elkRifleHarvest"></div>
         </label>
       </div>
-
       <div class="upload-cell">
         <label class="upload-zone" id="uzElkArcheryHarvest" data-key="elkArcheryHarvest">
           <input type="file" accept=".pdf,.xlsx,.xls" data-target="elkArcheryHarvest">
@@ -1044,7 +618,6 @@ color: #f0f0f0;
           <div class="uz-file" data-file="elkArcheryHarvest"></div>
         </label>
       </div>
-
       <div class="upload-cell">
         <label class="upload-zone" id="uzDeerRifleHarvest" data-key="deerRifleHarvest">
           <input type="file" accept=".pdf,.xlsx,.xls" data-target="deerRifleHarvest">
@@ -1053,7 +626,6 @@ color: #f0f0f0;
           <div class="uz-file" data-file="deerRifleHarvest"></div>
         </label>
       </div>
-
       <div class="upload-cell">
         <label class="upload-zone" id="uzDeerArcheryHarvest" data-key="deerArcheryHarvest">
           <input type="file" accept=".pdf,.xlsx,.xls" data-target="deerArcheryHarvest">
@@ -1062,26 +634,21 @@ color: #f0f0f0;
           <div class="uz-file" data-file="deerArcheryHarvest"></div>
         </label>
       </div>
-
     </div>
-
     <div class="actions-row">
       <button class="btn" id="btnViewDatabase">View Hunt Database</button>
-      <button class="btn danger" id="btnClear">Clear All Data</button>
-      <span style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;color:var(--text-muted);margin-left:auto;">Data persists on this device.</span>
+      <button class="btn danger" id="btnClear">Clear All Local Data</button>
     </div>
-
     <p class="help-text">
-      The Preference Points reports drive the points-needed and draw-odds columns. The Rifle and Archery Harvest reports drive the Hunters, Harvest, and Success Rate columns &mdash; rifle harvest data is matched to rifle hunts, and archery harvest data is matched to archery hunts. Loading only some files is fine; missing columns show "&mdash;".
+      Preference Points reports power draw-odds columns. Harvest PDFs power success rate and antler-size columns. Upload only some files is fine — missing columns show "—". After uploading, hit <strong>Save to Cloud</strong> above so others see the data.
     </p>
-
   </div>
 </section>
 ```
 
   </div>
 
-  <!-- ========== DETAIL MODAL ========== -->
+  <!-- DETAIL MODAL -->
 
   <div class="modal-backdrop" id="modal">
     <div class="modal">
@@ -1095,16 +662,13 @@ color: #f0f0f0;
       <div class="modal-body" id="mBody"></div>
     </div>
   </div>
-
 </main>
 
 <footer>
   <div class="inner">
     <div><strong>Oregon Controlled Hunt Planner</strong> &mdash; A personal reference tool.</div>
-    <div style="margin-top:6px;">All data is sourced from public Oregon Department of Fish &amp; Wildlife reports. This site is not affiliated with or endorsed by ODFW. For official information, visit <a href="https://myodfw.com" target="_blank" rel="noopener">myodfw.com</a>.</div>
-    <div class="disclaimer">
-      Always verify hunt numbers, season dates, and regulations against the current Oregon Big Game Regulations booklet before applying. Tag and applicant counts vary year to year. Premium hunts and once-in-a-lifetime hunts have separate rules. Past results do not guarantee future draw outcomes.
-    </div>
+    <div style="margin-top:6px;">Data sourced from public ODFW reports. Not affiliated with or endorsed by ODFW. <a href="https://myodfw.com" target="_blank" rel="noopener">myodfw.com</a></div>
+    <div class="disclaimer">Always verify hunt numbers, season dates, and regulations against the current Oregon Big Game Regulations booklet before applying.</div>
   </div>
 </footer>
 
@@ -1113,30 +677,20 @@ color: #f0f0f0;
 <script>
 'use strict';
 
-// STATE
-const STORAGE_KEY = 'odfw_planner_v2';
+// ─── STATE ───────────────────────────────────────────────────────────────────
+const STORAGE_KEY = 'odfw_planner_v3';
 const state = {
-  // Multi-year storage: years[yearStr] = { hunts: [...], files: {...}, harvestData: {...} }
-  years: {},                  // e.g. { "2025": {hunts, files, harvestData}, "2024": {...} }
-  selectedYear: null,         // currently displayed year
-  compareYear: null,          // year to compare against (auto = previous available)
-  pendingYear: null,          // year being uploaded in the Data Manager
+  years: {},          // { "2025": { hunts, files, harvestData } }
+  selectedYear: null,
+  compareYear: null,
+  pendingYear: null,
   sortKey: 'huntNum',
   sortDir: 'asc'
 };
 
-// Helpers to access current year data
-function curYear() {
-  if (!state.selectedYear) return null;
-  return state.years[state.selectedYear];
-}
-function getHunts() {
-  const y = curYear();
-  return y ? y.hunts : [];
-}
-function getYearList() {
-  return Object.keys(state.years).sort().reverse(); // newest first
-}
+function curYear()  { return state.selectedYear ? state.years[state.selectedYear] : null; }
+function getHunts() { const y = curYear(); return y ? y.hunts : []; }
+function getYearList() { return Object.keys(state.years).sort().reverse(); }
 function priorYear(year) {
   const all = getYearList();
   const idx = all.indexOf(year);
@@ -1148,7 +702,6 @@ function findHuntInYear(year, huntNum, species) {
   return y.hunts.find(h => h.huntNum === huntNum && h.species === species);
 }
 
-// Re-apply harvest data to a specific year's hunts
 function applyHarvestForYear(year) {
   const y = state.years[year];
   if (!y) return;
@@ -1168,7 +721,7 @@ function applyHarvestForYear(year) {
   });
 }
 
-// HELPERS
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
 function $(sel) { return document.querySelector(sel); }
 function $$(sel) { return [...document.querySelectorAll(sel)]; }
 
@@ -1179,62 +732,46 @@ function toast(msg, isError) {
   setTimeout(() => { t.className = 'toast'; }, 3500);
 }
 
-function fmt(n, dec) {
+function fmt(n) {
   if (n === null || n === undefined || isNaN(n)) return '—';
-  if (dec !== undefined) return Number(n).toFixed(dec);
   return Number(n).toLocaleString();
 }
-
 function fmtPct(n) {
   if (n === null || n === undefined || isNaN(n)) return '—';
   return Math.round(n) + '%';
 }
 
-// ODFW hunt-number suffix conventions for big game:
-//   M  = Muzzleloader
-//   T  = Youth
-//   R  = Bow / Archery (e.g. 200R Oregon Youth Bow, 254R1 Mt Emily Bow)
-//   X, Y = Rifle, multi-season "No. 1 / No. 2" splits in same unit
-//   A,B,C,D,E (with optional digit) = Rifle, sub-area splits within unit
-//   no suffix (e.g. 210, 247) = Rifle, base controlled hunt
+// ─── CLASSIFICATION ───────────────────────────────────────────────────────────
 function classifyHunt(huntNum, huntName) {
   const num = String(huntNum || '').toUpperCase();
   const name = String(huntName || '').toLowerCase();
-  // Name-based classification wins first when explicit
   if (name.includes('youth')) return 'youth';
   if (name.includes('muzzleload')) return 'muzz';
   if (name.includes('archery') || name.includes('bow') || name.includes('trad')) return 'archery';
-  // Suffix-based fallback
   if (/T\d*$/.test(num)) return 'youth';
   if (/M$/.test(num)) return 'muzz';
   if (/R\d*$/.test(num)) return 'archery';
   return 'rifle';
 }
-
 function classifySpecies(huntNum) {
-  // Fallback only — primary species assignment comes from which upload slot the file went into.
   const n = parseInt(String(huntNum).match(/^\d+/)?.[0] || '0', 10);
   if (n >= 100 && n < 200) return 'deer';
   if (n >= 200 && n < 300) return 'elk';
   return 'other';
 }
-
 function weaponLabel(w) {
   return { rifle: 'Rifle', archery: 'Archery', muzz: 'Muzz.', youth: 'Youth' }[w] || w;
 }
 
-// XLSX PARSING — Preference Points Draw Report
-// Layout (zero-indexed columns):
-//  0: Hunt Number   1: Hunt Name   2: Tags Authorized
-//  3: Resident Apps 4: Resident Drawn 5: Non-Resident Apps 6: Non-Resident Drawn
-//  7: Total Apps    8: Total Drawn  9: Total Points-Apps
-// 10: Total Points Drawn P1   11: Total Points Drawn P2
-// Per-point rows on subsequent rows in cols 12..17:
-// 12: Points  13: Applicants  14: Resident Apps  15: Resident Drawn
-// 16: Non Resident Apps  17: Non Resident Drawn
+// ─── XLSX PARSING — Preference Points ────────────────────────────────────────
+// Column layout (0-indexed):
+// 0:HuntNum  1:HuntName  2:Tags
+// 3:ResApps  4:ResDrawn  5:NRApps  6:NRDrawn
+// 7:TotalApps  8:TotalDrawn  9:TotalPtApps
+// 10:TotalPtDrawnP1  11:TotalPtDrawnP2
+// Per-point cols: 12:Points 13:Apps 14:ResApps 15:ResDrawn 16:NRApps 17:NRDrawn
 function parsePointsXlsx(arrayBuffer, speciesOverride) {
   const wb = XLSX.read(arrayBuffer, { type: 'array' });
-  // Find the right sheet
   let ws = null;
   for (const name of wb.SheetNames) {
     if (/draw|point/i.test(name)) { ws = wb.Sheets[name]; break; }
@@ -1251,10 +788,9 @@ function parsePointsXlsx(arrayBuffer, speciesOverride) {
     const huntNum = r[0];
     const huntName = r[1];
     const tags = r[2];
-
     const isHeader = huntNum && typeof huntNum === 'string' && huntNum.trim() !== ''
-                     && huntName && typeof huntName === 'string' && huntName.trim() !== ''
-                     && (typeof tags === 'number');
+                  && huntName && typeof huntName === 'string' && huntName.trim() !== ''
+                  && typeof tags === 'number';
 
     if (isHeader) {
       if (cur) hunts.push(cur);
@@ -1273,7 +809,6 @@ function parsePointsXlsx(arrayBuffer, speciesOverride) {
         p2Drawn: Number(r[11]) || 0,
         pointBreakdown: []
       };
-      // Capture the point-row that's also on the header row
       if (typeof r[12] === 'number') {
         cur.pointBreakdown.push({
           points: Number(r[12]),
@@ -1297,26 +832,15 @@ function parsePointsXlsx(arrayBuffer, speciesOverride) {
   }
   if (cur) hunts.push(cur);
 
-  // Compute derived: minPointsToDraw, firstChoiceOdds
   hunts.forEach(h => {
-    // Min points needed: lowest point-tier where any tag was drawn (resident-focused;
-    // a 0-point row with 0 drawn means "none drawn" but the random draw still happens)
-    // Definition used by hunters: "highest point level where not everyone drew" + 1, OR
-    // simply "minimum points where at least 1 tag was awarded in preference phase".
-    // We use: minimum point level with resDrawn > 0, since at lower levels only the random
-    // (25%) phase remains. If no resident drew at any level (rare), fall back to 0.
-    h.pointBreakdown.sort((a, b) => b.points - a.points); // descending
+    h.pointBreakdown.sort((a, b) => b.points - a.points);
     let minPts = null;
     for (const p of h.pointBreakdown) {
       if (p.resDrawn > 0) minPts = p.points;
     }
     h.minPointsToDraw = minPts;
-    h.firstChoiceOdds = h.totalApps > 0 ? (h.totalDrawn / h.totalApps) * 100 : null;
-    // 2nd-choice availability: how many tags were left over for 2nd-choice draw
-    // p2Drawn = tags awarded in the 2nd preference phase (after all 1st-choice apps processed)
-    h.tagsLeftFor2nd = Math.max(0, (h.tags || 0) - (h.totalDrawn - (h.p2Drawn || 0)));
-    h.has2ndChance = (h.p2Drawn || 0) > 0;
-    h.secondChoiceTags = h.p2Drawn || 0;
+    // 1st-choice odds using RESIDENT apps only
+    h.firstChoiceOdds = h.residentApps > 0 ? (h.residentDrawn / h.residentApps) * 100 : null;
     h.species = speciesOverride || classifySpecies(h.huntNum);
     h.weapon = classifyHunt(h.huntNum, h.huntName);
   });
@@ -1324,32 +848,31 @@ function parsePointsXlsx(arrayBuffer, speciesOverride) {
   return hunts;
 }
 
-// PDF PARSING — Harvest Summary
-// The harvest PDF has rows like:
-//   Unit  Name  Season/Tag/Hunt  TotalHunters  DaysHunted  Antlerless  TotalBullHarvest
-//   TotalSpike  2pt 3pt 4pt 5pt 6pt+  Success%
-// We extract by hunt number (first token on a content row that matches a hunt number pattern)
-// and pull the trailing "X%" as success rate.
+// ─── PDF PARSING — Harvest Summary ───────────────────────────────────────────
+// Harvest table columns (after hunt num + name):
+// [0]=TotalHunters [1]=DaysHunted [2]=Antlerless [3]=TotalBull [4]=HarvestTotal
+// [5]=Spike [6]=2pt [7]=3pt [8]=4pt [9]=5pt [10]=6pt+  then NN%
+//
+// KEY FIX: We collect ALL numbers from the line, then try multiple column-count
+// interpretations. Real harvest rows have exactly 11 numeric cols + a percentage.
+// If we get a different count (e.g. PDF text items merged or split), we try to
+// identify the percentage and count backward.
 async function parseHarvestPdf(arrayBuffer) {
   if (!window.pdfjsLib) throw new Error('PDF library not loaded');
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const harvest = {};
-
-  // Hunt number: 3 digits, optionally followed by 1 letter and optional 1-2 digits
-  // e.g. 210, 210A1, 254X, 200M, 247D2
-  const huntInLineRe = /\b(\d{3}[A-Z]\d{0,2}|\d{3})\b/g;
+  const huntNumRe = /\b(\d{3}[A-Z]\d{0,2}|\d{3})\b/g;
 
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const tc = await page.getTextContent();
 
-    // Group items into lines by Y position. PDF.js gives transform[5] = baseline Y.
-    // Use a tolerance-based bucket: items within ~3 units of each other are same line.
+    // Group by Y position (same baseline = same row)
     const items = tc.items
       .filter(it => it.str && it.str.trim())
-      .map(it => ({ x: it.transform[4], y: it.transform[5], str: it.str }))
+      .map(it => ({ x: it.transform[4], y: it.transform[5], str: it.str.trim() }))
       .sort((a, b) => b.y - a.y || a.x - b.x);
 
     const lines = [];
@@ -1363,63 +886,78 @@ async function parseHarvestPdf(arrayBuffer) {
     });
 
     lines.forEach(line => {
-      // Reconstruct line text with single spaces between items (PDF.js often
-      // splits adjacent text, so we just join with a space and let regex handle).
       const text = line.items.map(i => i.str).join(' ').replace(/\s+/g, ' ').trim();
 
-      // Must end with NN% or NA%
-      const pctMatch = text.match(/(\d+|NA)%\s*$/);
+      // Must end with NN% (success rate)
+      const pctMatch = text.match(/(\d+)%\s*$/);
       if (!pctMatch) return;
-      const pct = pctMatch[1] === 'NA' ? null : Number(pctMatch[1]);
-      if (pct === null) return;
+      const successPct = Number(pctMatch[1]);
 
-      // Extract hunt number(s) from the line — there may be multiple if the
-      // zone label and hunt number both look numeric. We want the FIRST one
-      // that is followed by a hunt name, then a stream of numbers.
-      const huntMatches = [...text.matchAll(huntInLineRe)];
+      // Find hunt number candidates
+      const huntMatches = [...text.matchAll(huntNumRe)];
       if (!huntMatches.length) return;
 
-      // Try each hunt-num candidate; accept the first where the rest of the
-      // line has the expected shape: name (non-numeric words) then ~10 numbers then pct
       for (const m of huntMatches) {
         const huntNum = m[1];
         const after = text.slice(m.index + huntNum.length).trim();
-        // After the hunt num: name words, then stream of numbers, then NN%
-        // Strip trailing "NN%" before counting numbers
-        const afterNoPct = after.replace(/(\d+|NA)%\s*$/, '').trim();
-        // Tokenize
+        // Strip trailing "NN%"
+        const afterNoPct = after.replace(/\d+%\s*$/, '').trim();
         const tokens = afterNoPct.split(/\s+/);
-        // Find where numbers start
+
+        // Split into name words vs numbers
         let nameEnd = 0;
         while (nameEnd < tokens.length && !/^-?\d+$/.test(tokens[nameEnd])) nameEnd++;
-        if (nameEnd === 0) continue; // hunt number with no name following — skip
-        const name = tokens.slice(0, nameEnd).join(' ').trim();
+        if (nameEnd === 0) continue;
+
+        const name = tokens.slice(0, nameEnd).join(' ');
         const nums = tokens.slice(nameEnd).filter(t => /^-?\d+$/.test(t)).map(Number);
-        // Real harvest data row has 11 numeric columns:
-        // [0]=Hunters [1]=Days [2]=Antlerless [3]=TotalBull [4]=TotalHarvest
-        // [5]=Spike [6]=2pt [7]=3pt [8]=4pt [9]=5pt [10]=6pt+
+
+        // We need at least 8 numbers (hunters + days + antlerless + bull + harvest + spike + 2pt + 3pt)
+        // Full row = 11 numbers. Some PDFs omit "TotalHarvest" col, giving 10 numbers.
         if (nums.length < 8) continue;
+        if (harvest[huntNum]) break; // already got it from an earlier page
 
-        // First match wins (Controlled section before General)
-        if (harvest[huntNum]) break;
+        let hunters, days, antlerless, totalBull, totalHarvest, spike, twoPt, threePt, fourPt, fivePt, sixPlusPt;
 
-        const totalBull = nums[3] || 0;
+        if (nums.length >= 11) {
+          // Standard 11-column layout
+          [hunters, days, antlerless, totalBull, totalHarvest, spike, twoPt, threePt, fourPt, fivePt, sixPlusPt] = nums;
+        } else if (nums.length === 10) {
+          // Missing TotalHarvest column — compute it
+          [hunters, days, antlerless, totalBull, spike, twoPt, threePt, fourPt, fivePt, sixPlusPt] = nums;
+          totalHarvest = antlerless + totalBull;
+        } else {
+          // 8 or 9 cols — best effort, antler breakdown may be partial
+          [hunters, days, antlerless, totalBull] = nums;
+          totalHarvest = antlerless + totalBull;
+          spike = nums[4] || 0;
+          twoPt = nums[5] || 0;
+          threePt = nums[6] || 0;
+          fourPt = nums[7] || 0;
+          fivePt = nums[8] || 0;
+          sixPlusPt = nums[9] || 0;
+        }
+
+        // Sanity check: antler counts should not exceed totalBull
+        // If they do, the column alignment is wrong — skip antler data rather than show bad numbers
+        const antlerSum = (spike||0) + (twoPt||0) + (threePt||0) + (fourPt||0) + (fivePt||0) + (sixPlusPt||0);
+        const antlerValid = totalBull > 0 && antlerSum > 0 && antlerSum <= totalBull * 1.05;
+
         harvest[huntNum] = {
-          huntNum,
-          name,
-          hunters: nums[0] || 0,
-          days: nums[1] || 0,
-          antlerless: nums[2] || 0,
-          totalBull: totalBull,
-          totalHarvest: nums[4] != null ? nums[4] : (nums[2] || 0) + totalBull,
-          successPct: pct,
-          // Antler breakdown (counts of bulls harvested by point class)
-          spike: nums[5] || 0,
-          twoPt: nums[6] || 0,
-          threePt: nums[7] || 0,
-          fourPt: nums[8] || 0,
-          fivePt: nums[9] || 0,
-          sixPlusPt: nums[10] || 0
+          huntNum, name,
+          hunters:       hunters || 0,
+          days:          days || 0,
+          antlerless:    antlerless || 0,
+          totalBull:     totalBull || 0,
+          totalHarvest:  totalHarvest || (antlerless + totalBull),
+          successPct,
+          spike:         antlerValid ? (spike || 0) : 0,
+          twoPt:         antlerValid ? (twoPt || 0) : 0,
+          threePt:       antlerValid ? (threePt || 0) : 0,
+          fourPt:        antlerValid ? (fourPt || 0) : 0,
+          fivePt:        antlerValid ? (fivePt || 0) : 0,
+          sixPlusPt:     antlerValid ? (sixPlusPt || 0) : 0,
+          antlerValid
         };
         break;
       }
@@ -1428,7 +966,6 @@ async function parseHarvestPdf(arrayBuffer) {
   return harvest;
 }
 
-// Excel version of harvest summary (in case ODFW posts xlsx)
 function parseHarvestXlsx(arrayBuffer) {
   const wb = XLSX.read(arrayBuffer, { type: 'array' });
   const ws = wb.Sheets[wb.SheetNames[0]];
@@ -1437,23 +974,33 @@ function parseHarvestXlsx(arrayBuffer) {
   const huntNumRe = /^\d{3}[A-Z]?\d*$/;
   rows.forEach(r => {
     if (!r) return;
-    // Find hunt number cell
     for (let i = 0; i < r.length; i++) {
       const v = r[i];
       if (typeof v === 'string' && huntNumRe.test(v.trim())) {
         const huntNum = v.trim();
-        // Look for last numeric percentage in row
+        // Collect numeric columns
+        const nums = r.slice(i + 1).filter(c => typeof c === 'number' || (typeof c === 'string' && /^\d+$/.test(c.trim()))).map(Number);
         let successPct = null;
         for (let j = r.length - 1; j > i; j--) {
           const c = r[j];
           if (typeof c === 'number' && c <= 1) { successPct = c * 100; break; }
-          if (typeof c === 'string') {
-            const m = c.match(/^(\d+(?:\.\d+)?)%?$/);
-            if (m) { successPct = Number(m[1]); break; }
-          }
+          if (typeof c === 'string') { const m = c.match(/^(\d+(?:\.\d+)?)%?$/); if (m) { successPct = Number(m[1]); break; } }
         }
         if (successPct !== null && !harvest[huntNum]) {
-          harvest[huntNum] = { huntNum, successPct };
+          const antlerValid = nums.length >= 11;
+          harvest[huntNum] = {
+            huntNum, successPct,
+            hunters:   nums[0] || 0, days: nums[1] || 0,
+            antlerless: nums[2] || 0, totalBull: nums[3] || 0,
+            totalHarvest: nums[4] || 0,
+            spike:     antlerValid ? (nums[5] || 0) : 0,
+            twoPt:     antlerValid ? (nums[6] || 0) : 0,
+            threePt:   antlerValid ? (nums[7] || 0) : 0,
+            fourPt:    antlerValid ? (nums[8] || 0) : 0,
+            fivePt:    antlerValid ? (nums[9] || 0) : 0,
+            sixPlusPt: antlerValid ? (nums[10] || 0) : 0,
+            antlerValid
+          };
         }
         break;
       }
@@ -1462,7 +1009,7 @@ function parseHarvestXlsx(arrayBuffer) {
   return harvest;
 }
 
-// FILE INTAKE
+// ─── FILE INTAKE ──────────────────────────────────────────────────────────────
 function readArrayBuffer(file) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -1474,15 +1021,9 @@ function readArrayBuffer(file) {
 
 async function handleFile(target, file) {
   if (!file) return;
-  if (!state.pendingYear) {
-    toast('Pick a year first (top of Data Manager).', true);
-    return;
-  }
+  if (!state.pendingYear) { toast('Pick a year first.', true); return; }
   const year = state.pendingYear;
-  // Ensure year bucket exists
-  if (!state.years[year]) {
-    state.years[year] = { hunts: [], files: {}, harvestData: {} };
-  }
+  if (!state.years[year]) state.years[year] = { hunts: [], files: {}, harvestData: {} };
   const yearData = state.years[year];
   const ext = file.name.split('.').pop().toLowerCase();
 
@@ -1496,27 +1037,20 @@ async function handleFile(target, file) {
       yearData.hunts.push(...hunts);
       yearData.files[target] = { name: file.name, loadedAt: Date.now(), count: hunts.length };
       applyHarvestForYear(year);
-      toast(`[${year}] Loaded ${hunts.length} ${species} hunts from ${file.name}`);
+      toast(`[${year}] Loaded ${hunts.length} ${species} hunts`);
 
-    } else if (target === 'elkRifleHarvest' || target === 'deerRifleHarvest' ||
-               target === 'elkArcheryHarvest' || target === 'deerArcheryHarvest') {
+    } else {
       let harvest;
-      if (ext === 'pdf') {
-        harvest = await parseHarvestPdf(buf);
-      } else {
-        harvest = parseHarvestXlsx(buf);
-      }
+      if (ext === 'pdf') { harvest = await parseHarvestPdf(buf); }
+      else               { harvest = parseHarvestXlsx(buf); }
       yearData.harvestData[target] = harvest;
       yearData.files[target] = { name: file.name, loadedAt: Date.now(), count: Object.keys(harvest).length, matched: 0 };
       applyHarvestForYear(year);
       const matched = yearData.files[target].matched;
-      const species = target.startsWith('elk') ? 'elk' : 'deer';
-      const isArchery = target.endsWith('ArcheryHarvest');
-      const label = isArchery ? 'archery' : 'rifle';
-      toast(`[${year}] Loaded ${species} ${label} harvest: ${Object.keys(harvest).length} hunts, ${matched} matched`);
+      const label = target.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+      toast(`[${year}] ${label}: ${Object.keys(harvest).length} hunts parsed, ${matched} matched`);
     }
 
-    // Auto-select this year if nothing's selected
     if (!state.selectedYear) state.selectedYear = year;
     saveState();
     render();
@@ -1526,20 +1060,16 @@ async function handleFile(target, file) {
   }
 }
 
-// PERSISTENCE (sessionStorage NOT supported in this env per spec, use IndexedDB or memory)
-// We use localStorage in production GitHub deployment — works fine on real browsers.
+// ─── PERSISTENCE ─────────────────────────────────────────────────────────────
 function saveState() {
   try {
-    const payload = {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
       years: state.years,
       selectedYear: state.selectedYear,
       pendingYear: state.pendingYear,
       savedAt: Date.now()
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  } catch (e) {
-    console.warn('Could not save:', e);
-  }
+    }));
+  } catch(e) { console.warn('Save failed:', e); }
 }
 
 function loadState() {
@@ -1551,10 +1081,7 @@ function loadState() {
     state.selectedYear = data.selectedYear || getYearList()[0] || null;
     state.pendingYear = data.pendingYear || state.selectedYear || null;
     return true;
-  } catch (e) {
-    console.warn('Could not load:', e);
-    return false;
-  }
+  } catch(e) { return false; }
 }
 
 function clearAll() {
@@ -1563,7 +1090,7 @@ function clearAll() {
   state.pendingYear = null;
   try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
   render();
-  toast('All data cleared');
+  toast('All local data cleared');
 }
 
 function clearYear(year) {
@@ -1572,17 +1099,87 @@ function clearYear(year) {
   if (state.pendingYear === year) state.pendingYear = state.selectedYear;
   saveState();
   render();
-  toast(`Year ${year} cleared`);
+  toast(`Year ${year} removed`);
 }
 
-// RENDER
+// ─── FIREBASE SYNC ────────────────────────────────────────────────────────────
+async function fbSaveAll() {
+  if (!window.__fbReady) { toast('Firebase not ready yet', true); return; }
+  const years = getYearList();
+  if (years.length === 0) { toast('No local data to push', true); return; }
+  const btn = $('#btnSyncToCloud');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  let ok = true;
+  for (const y of years) {
+    const yd = state.years[y];
+    const saved = await window.__fb.saveYear(y, yd.hunts, yd.harvestData);
+    if (!saved) ok = false;
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Save to Cloud'; }
+  if (ok) {
+    toast('Data saved to cloud ✓');
+    updateFbBanner('success', 'Data saved to cloud — others can now load it.');
+  } else {
+    toast('Some data failed to save — check console', true);
+    updateFbBanner('error', 'Save failed. Check console for details.');
+  }
+}
+
+async function fbLoadAll() {
+  if (!window.__fbReady) { toast('Firebase not ready yet', true); return; }
+  const btn = $('#btnLoadFromCloud') || $('#btnLoadCloud') || $('#btnFbLoad');
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+  updateFbBanner('', 'Loading data from cloud…');
+  try {
+    const data = await window.__fb.loadAllYears();
+    if (!data || Object.keys(data).length === 0) {
+      toast('No cloud data found', true);
+      updateFbBanner('error', 'No data found in cloud yet. Upload files and Save to Cloud first.');
+    } else {
+      // Merge cloud data with local — cloud wins for years it has
+      Object.entries(data).forEach(([year, yd]) => {
+        state.years[year] = { hunts: yd.hunts, files: {}, harvestData: yd.harvestData };
+        applyHarvestForYear(year);
+      });
+      if (!state.selectedYear) state.selectedYear = getYearList()[0] || null;
+      if (!state.pendingYear) state.pendingYear = state.selectedYear;
+      saveState();
+      render();
+      const count = Object.values(data).reduce((s, yd) => s + (yd.hunts?.length || 0), 0);
+      toast(`Loaded ${count} hunts from cloud ✓`);
+      updateFbBanner('success', `Loaded ${count} hunts from cloud.`);
+    }
+  } catch(e) {
+    console.error(e);
+    toast('Cloud load failed: ' + e.message, true);
+    updateFbBanner('error', 'Cloud load failed. See console.');
+  }
+  const btns = ['#btnLoadFromCloud','#btnLoadCloud','#btnFbLoad'].map(s => $(s)).filter(Boolean);
+  btns.forEach(b => { b.disabled = false; b.textContent = b.id === 'btnFbLoad' ? 'Load from Cloud' : b.textContent.includes('Load') ? 'Load from Cloud' : b.textContent; });
+}
+
+function updateFbBanner(type, msg) {
+  const sync = $('#fbSyncStatus');
+  if (sync) {
+    sync.className = 'fb-banner' + (type ? ' ' + type : '');
+    sync.textContent = msg;
+  }
+  const load = $('#fbLoadBanner');
+  if (load) {
+    load.style.display = 'flex';
+    load.className = 'fb-banner' + (type ? ' ' + type : '');
+    $('#fbLoadMsg').textContent = msg;
+  }
+}
+
+// ─── RENDER ───────────────────────────────────────────────────────────────────
 function getFilters() {
   return {
-    species: $('#fSpecies').value,
-    weapon: $('#fWeapon').value,
-    myPoints: $('#fMyPoints').value === '' ? null : Number($('#fMyPoints').value),
+    species:     $('#fSpecies').value,
+    weapon:      $('#fWeapon').value,
+    myPoints:    $('#fMyPoints').value === '' ? null : Number($('#fMyPoints').value),
     drawability: $('#fDrawability').value,
-    search: $('#fSearch').value.trim().toLowerCase()
+    search:      $('#fSearch').value.trim().toLowerCase()
   };
 }
 
@@ -1598,8 +1195,7 @@ function applyFilters(hunts) {
     if (f.myPoints !== null && f.drawability !== 'all') {
       const min = h.minPointsToDraw;
       if (min === null) {
-        // Hunt where preference phase did not produce a draw — only random phase
-        if (f.drawability === 'canDraw') return true; // anyone has a shot at random phase
+        if (f.drawability === 'canDraw') return true;
         return false;
       }
       if (f.drawability === 'canDraw' && f.myPoints < min) return false;
@@ -1613,98 +1209,95 @@ function applyFilters(hunts) {
 function sortHunts(hunts) {
   const dir = state.sortDir === 'asc' ? 1 : -1;
   const k = state.sortKey;
-  const numKey = ['tags','apps','minPts','firstChoiceOdds','secondChoice','success','hunters','harvest'].includes(k);
+  const myPts = getFilters().myPoints;
   return [...hunts].sort((a, b) => {
     let av, bv;
-    if (k === 'huntNum')      { av = a.huntNum; bv = b.huntNum; }
-    else if (k === 'huntName'){ av = a.huntName; bv = b.huntName; }
-    else if (k === 'weapon')  { av = a.weapon; bv = b.weapon; }
-    else if (k === 'tags')    { av = a.tags; bv = b.tags; }
-    else if (k === 'apps')    { av = a.totalApps; bv = b.totalApps; }
-    else if (k === 'minPts')  { av = a.minPointsToDraw; bv = b.minPointsToDraw; }
-    else if (k === 'firstChoiceOdds') { av = a.firstChoiceOdds; bv = b.firstChoiceOdds; }
-    else if (k === 'secondChoice') { av = a.secondChoiceTags; bv = b.secondChoiceTags; }
-    else if (k === 'success') { av = a.harvest?.successPct; bv = b.harvest?.successPct; }
-    else if (k === 'hunters') { av = a.harvest?.hunters; bv = b.harvest?.hunters; }
-    else if (k === 'harvest') { av = a.harvest?.totalHarvest; bv = b.harvest?.totalHarvest; }
+    if      (k === 'huntNum')        { av = a.huntNum; bv = b.huntNum; }
+    else if (k === 'huntName')       { av = a.huntName; bv = b.huntName; }
+    else if (k === 'weapon')         { av = a.weapon; bv = b.weapon; }
+    else if (k === 'tags')           { av = a.tags; bv = b.tags; }
+    else if (k === 'apps')           { av = a.residentApps; bv = b.residentApps; }
+    else if (k === 'minPts')         { av = a.minPointsToDraw; bv = b.minPointsToDraw; }
+    else if (k === 'firstChoiceOdds'){ av = a.firstChoiceOdds; bv = b.firstChoiceOdds; }
+    else if (k === 'success')        { av = a.harvest?.successPct; bv = b.harvest?.successPct; }
+    else if (k === 'myOdds')         { av = calcMyOdds(a, myPts); bv = calcMyOdds(b, myPts); }
 
-    // Nulls last regardless of dir
     const aNull = av === null || av === undefined;
     const bNull = bv === null || bv === undefined;
     if (aNull && bNull) return 0;
     if (aNull) return 1;
     if (bNull) return -1;
-
-    if (numKey) return (av - bv) * dir;
+    const isNum = ['tags','apps','minPts','firstChoiceOdds','success','myOdds'].includes(k);
+    if (isNum) return (av - bv) * dir;
     return String(av).localeCompare(String(bv), undefined, { numeric: true }) * dir;
   });
 }
 
-function renderStatus() {
-  const dot = $('#statusDot');
-  const txt = $('#statusText');
-  const det = $('#statusDetail');
-  const last = $('#lastLoaded');
+// Calculate "My Draw Odds" — personal probability based on resident data
+// We look at the point-breakdown row matching the user's points level
+// and compute resDrawn / resApps at that tier.
+// If they're above minPts they drew; if below, they're in the random pool.
+function calcMyOdds(h, myPts) {
+  if (myPts === null || myPts === undefined) return null;
+  if (!h.pointBreakdown || h.pointBreakdown.length === 0) {
+    // Fall back to overall resident odds
+    return h.residentApps > 0 ? (h.residentDrawn / h.residentApps) * 100 : null;
+  }
+  // Find the tier matching the user's exact points
+  const myRow = h.pointBreakdown.find(p => p.points === myPts);
+  if (myRow && myRow.resApps > 0) {
+    return (myRow.resDrawn / myRow.resApps) * 100;
+  }
+  // User's points didn't appear in breakdown — find the closest tier below
+  const below = h.pointBreakdown.filter(p => p.points <= myPts).sort((a, b) => b.points - a.points);
+  if (below.length > 0 && below[0].resApps > 0) {
+    return (below[0].resDrawn / below[0].resApps) * 100;
+  }
+  // User is below everyone who drew in the preference phase — they're only in random
+  // Oregon random phase = 25% of tags. Estimate: (tags * 0.25) / residualResApps
+  // We don't have residual easily, so fall back to tags / residentApps as a floor estimate
+  if (h.residentApps > 0 && h.tags > 0) {
+    return Math.min(100, (h.tags * 0.25 / h.residentApps) * 100);
+  }
+  return null;
+}
 
-  const yearsList = getYearList();
+function renderStatus() {
   const pyData = state.pendingYear ? state.years[state.pendingYear] : null;
   const f = pyData?.files || {};
-
   const parts = [];
-  if (f.elkPoints) parts.push(`Elk points: ${f.elkPoints.count}`);
-  if (f.deerPoints) parts.push(`Deer points: ${f.deerPoints.count}`);
+  if (f.elkPoints) parts.push(`Elk pts: ${f.elkPoints.count}`);
+  if (f.deerPoints) parts.push(`Deer pts: ${f.deerPoints.count}`);
   if (f.elkRifleHarvest) parts.push(`Elk rifle harvest: ${f.elkRifleHarvest.matched ?? 0} matched`);
   if (f.elkArcheryHarvest) parts.push(`Elk archery harvest: ${f.elkArcheryHarvest.matched ?? 0} matched`);
   if (f.deerRifleHarvest) parts.push(`Deer rifle harvest: ${f.deerRifleHarvest.matched ?? 0} matched`);
   if (f.deerArcheryHarvest) parts.push(`Deer archery harvest: ${f.deerArcheryHarvest.matched ?? 0} matched`);
-
+  const yearsList = getYearList();
+  const totalHunts = pyData ? pyData.hunts.length : 0;
   const hasPoints = f.elkPoints || f.deerPoints;
   const hasHarvest = f.elkRifleHarvest || f.elkArcheryHarvest || f.deerRifleHarvest || f.deerArcheryHarvest;
-  const totalHunts = pyData ? pyData.hunts.length : 0;
-
+  const dot = $('#statusDot'), txt = $('#statusText'), det = $('#statusDetail'), last = $('#lastLoaded');
+  if (!dot) return;
   if (yearsList.length === 0) {
-    dot.className = 'status-dot';
-    txt.textContent = 'No data loaded';
-    det.textContent = 'Years loaded: none';
-    last.textContent = '—';
+    dot.className = 'status-dot'; txt.textContent = 'No data loaded'; det.textContent = ''; last.textContent = '—';
   } else if (totalHunts === 0) {
-    dot.className = 'status-dot';
-    txt.textContent = `No data for ${state.pendingYear}`;
-    det.textContent = `Years loaded: ${yearsList.join(', ')}`;
+    dot.className = 'status-dot'; txt.textContent = `No data for ${state.pendingYear}`; det.textContent = `Years: ${yearsList.join(', ')}`;
   } else if (hasPoints && hasHarvest) {
-    dot.className = 'status-dot loaded';
-    txt.textContent = `[${state.pendingYear}] Data loaded`;
-    det.textContent = parts.join(' · ');
+    dot.className = 'status-dot loaded'; txt.textContent = `[${state.pendingYear}] Data loaded`; det.textContent = parts.join(' · ');
   } else {
-    dot.className = 'status-dot partial';
-    txt.textContent = `[${state.pendingYear}] Partial data`;
-    det.textContent = parts.join(' · ') + ' · upload remaining files for full results';
+    dot.className = 'status-dot partial'; txt.textContent = `[${state.pendingYear}] Partial data`; det.textContent = parts.join(' · ');
   }
-
-  // Latest load timestamp across pending year
   const allFiles = Object.values(f);
-  if (allFiles.length) {
-    const max = Math.max(...allFiles.map(x => x.loadedAt));
-    last.textContent = new Date(max).toLocaleString();
-  } else {
-    last.textContent = '—';
-  }
+  last.textContent = allFiles.length ? new Date(Math.max(...allFiles.map(x => x.loadedAt))).toLocaleString() : '—';
 
-  // Per-zone file labels (showing the pending year's files)
   ['elkPoints','deerPoints','elkRifleHarvest','elkArcheryHarvest','deerRifleHarvest','deerArcheryHarvest'].forEach(k => {
     const el = document.querySelector(`[data-file="${k}"]`);
     const zone = document.querySelector(`[data-key="${k}"]`);
     if (!el || !zone) return;
-    if (f[k]) {
-      el.textContent = '✓ ' + f[k].name;
-      zone.classList.add('has-file');
-    } else {
-      el.textContent = '';
-      zone.classList.remove('has-file');
-    }
+    if (f[k]) { el.textContent = '✓ ' + f[k].name; zone.classList.add('has-file'); }
+    else      { el.textContent = ''; zone.classList.remove('has-file'); }
   });
 
-  // Render years list panel
   renderYearsPanel();
 }
 
@@ -1713,45 +1306,30 @@ function renderYearsPanel() {
   if (!list) return;
   const years = getYearList();
   if (years.length === 0) {
-    list.innerHTML = '<div class="empty-state" style="padding:20px;">No years loaded yet. Enter a year above and upload your first report.</div>';
+    list.innerHTML = '<div class="empty-state" style="padding:20px;">No years loaded. Enter a year above and upload reports.</div>';
     return;
   }
   list.innerHTML = years.map(y => {
     const yd = state.years[y];
     const isSelected = y === state.selectedYear;
     const isPending = y === state.pendingYear;
-    const huntCount = yd.hunts.length;
-    const harvestMatched = Object.values(yd.harvestData || {})
-      .reduce((s, h) => s + Object.keys(h || {}).length, 0);
+    const harvestCount = Object.values(yd.harvestData || {}).reduce((s, h) => s + Object.keys(h || {}).length, 0);
     return `
       <div class="year-row ${isSelected ? 'selected' : ''}">
         <div class="year-row-main">
           <div class="year-label">${y}${isSelected ? ' <span class="badge-sm">Viewing</span>' : ''}${isPending && !isSelected ? ' <span class="badge-sm-alt">Editing</span>' : ''}</div>
-          <div class="year-meta">${huntCount} hunts · ${harvestMatched} harvest records</div>
+          <div class="year-meta">${yd.hunts.length} hunts · ${harvestCount} harvest records</div>
         </div>
         <div class="year-row-actions">
           ${!isSelected ? `<button class="btn-mini" data-view-year="${y}">View</button>` : ''}
-          ${!isPending ? `<button class="btn-mini" data-edit-year="${y}">Edit</button>` : ''}
+          ${!isPending  ? `<button class="btn-mini" data-edit-year="${y}">Edit</button>` : ''}
           <button class="btn-mini danger" data-del-year="${y}">Delete</button>
         </div>
-      </div>
-    `;
+      </div>`;
   }).join('');
-
-  // Wire buttons
-  list.querySelectorAll('[data-view-year]').forEach(b => {
-    b.addEventListener('click', e => { e.stopPropagation(); state.selectedYear = b.dataset.viewYear; saveState(); render(); });
-  });
-  list.querySelectorAll('[data-edit-year]').forEach(b => {
-    b.addEventListener('click', e => { e.stopPropagation(); state.pendingYear = b.dataset.editYear; saveState(); render(); });
-  });
-  list.querySelectorAll('[data-del-year]').forEach(b => {
-    b.addEventListener('click', e => {
-      e.stopPropagation();
-      const y = b.dataset.delYear;
-      showConfirm(`Delete ${y}?`, `Removes all data for ${y} from this device.`, () => clearYear(y));
-    });
-  });
+  list.querySelectorAll('[data-view-year]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); state.selectedYear = b.dataset.viewYear; saveState(); render(); }));
+  list.querySelectorAll('[data-edit-year]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); state.pendingYear = b.dataset.editYear; saveState(); render(); }));
+  list.querySelectorAll('[data-del-year]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); showConfirm(`Delete ${b.dataset.delYear}?`, `Removes all data for ${b.dataset.delYear}.`, () => clearYear(b.dataset.delYear)); }));
 }
 
 function renderTable() {
@@ -1759,21 +1337,20 @@ function renderTable() {
   const filtered = applyFilters(allHunts);
   const sorted = sortHunts(filtered);
   const tbody = $('#huntsBody');
+  const myPts = getFilters().myPoints;
 
-  $('#resultsCount').textContent = allHunts.length === 0
-    ? '—'
-    : `${sorted.length} of ${allHunts.length} hunts`;
+  $('#resultsCount').textContent = allHunts.length === 0 ? '—' : `${sorted.length} of ${allHunts.length} hunts`;
 
+  const colCount = 10;
   if (allHunts.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="11" class="empty-state">Visit the Data Manager to upload an ODFW Preference Points report.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="${colCount}" class="empty-state">Load from cloud or upload ODFW reports to begin.</td></tr>`;
     return;
   }
   if (sorted.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="11" class="empty-state">No hunts match the current filters.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="${colCount}" class="empty-state">No hunts match the current filters.</td></tr>`;
     return;
   }
 
-  // Update sort arrows
   $$('#huntsTable thead th').forEach(th => {
     th.classList.remove('sorted');
     const arrow = th.querySelector('.sort-arrow');
@@ -1784,25 +1361,20 @@ function renderTable() {
     }
   });
 
-  const myPts = $('#fMyPoints').value === '' ? null : Number($('#fMyPoints').value);
   const prevYr = state.compareYear || priorYear(state.selectedYear);
 
-  // Helper: trend HTML — green if "better" for hunter, red if "worse"
-  // Direction parameter says if HIGHER value = better (true) or LOWER = better (false)
-  function trend(curVal, prevVal, higherIsBetter, fmtFn) {
+  function trendHtml(curVal, prevVal, higherIsBetter, fmtFn) {
     if (curVal == null || prevVal == null || curVal === prevVal) return '';
     const delta = curVal - prevVal;
     const better = higherIsBetter ? delta > 0 : delta < 0;
     const cls = better ? 'trend-up' : 'trend-down';
     const sign = delta > 0 ? '+' : '';
-    const formatted = fmtFn ? fmtFn(Math.abs(delta)) : Math.abs(delta);
-    const arrow = better ? '▲' : '▼';
-    return `<span class="trend ${cls}">${arrow} ${sign}${fmtFn ? fmtFn(delta) : delta}</span>`;
+    const val = fmtFn ? fmtFn(delta) : Math.round(delta);
+    return `<span class="trend ${cls}">${better ? '▲' : '▼'} ${sign}${val}</span>`;
   }
 
-  // Helper: pick the dominant antler class from harvest
   function dominantBull(harv) {
-    if (!harv || !harv.totalBull) return null;
+    if (!harv || !harv.totalBull || !harv.antlerValid) return null;
     const classes = [
       ['Spike', harv.spike || 0],
       ['2pt', harv.twoPt || 0],
@@ -1814,7 +1386,7 @@ function renderTable() {
     const top = classes.slice().sort((a, b) => b[1] - a[1])[0];
     if (!top || !top[1]) return null;
     const pct = harv.totalBull > 0 ? Math.round((top[1] / harv.totalBull) * 100) : 0;
-    return { label: top[0], pct };
+    return { label: top[0], pct, count: top[1] };
   }
 
   const html = sorted.map(h => {
@@ -1823,25 +1395,26 @@ function renderTable() {
     const odds = h.firstChoiceOdds;
     const success = h.harvest?.successPct;
     const successWidth = success != null ? Math.min(100, success) : 0;
-    const hunters = h.harvest?.hunters;
-    const harvestTotal = h.harvest?.totalHarvest;
     const bull = dominantBull(h.harvest);
+    const myOdds = calcMyOdds(h, myPts);
 
-    // Pull prior year for trends
     let prevH = null;
     if (prevYr) prevH = findHuntInYear(prevYr, h.huntNum, h.species);
 
-    // Trend HTML for several columns. Use small triangles + numeric delta.
-    // For "Min Pts to Draw": LOWER is better (easier to draw)
-    // For "1st-Choice Odds": HIGHER is better
-    // For "Success Rate": HIGHER is better
-    const minPtsTrend = prevH ? trend(minPts, prevH.minPointsToDraw, false) : '';
-    const oddsTrend = prevH ? trend(odds, prevH.firstChoiceOdds, true, v => Math.round(v) + '%') : '';
-    const successTrend = (prevH && prevH.harvest) ? trend(success, prevH.harvest.successPct, true, v => Math.round(v) + '%') : '';
+    const minPtsTrend  = prevH ? trendHtml(minPts, prevH.minPointsToDraw, false) : '';
+    const oddsTrend    = prevH ? trendHtml(odds, prevH.firstChoiceOdds, true, v => Math.round(v) + '%') : '';
+    const successTrend = (prevH?.harvest) ? trendHtml(success, prevH.harvest.successPct, true, v => Math.round(v) + '%') : '';
 
-    const secondChoice = h.has2ndChance
-      ? `<span class="sc-yes">${h.secondChoiceTags} tag${h.secondChoiceTags===1?'':'s'}</span>`
-      : `<span class="sc-no">None</span>`;
+    // My Odds cell
+    let myOddsHtml = '—';
+    if (myPts !== null) {
+      if (myOdds !== null) {
+        const oddsClass = myOdds >= 50 ? 'easy' : myOdds >= 15 ? 'med' : 'hard';
+        myOddsHtml = `<span class="my-odds-cell ${oddsClass}">${fmtPct(myOdds)}</span>`;
+      } else {
+        myOddsHtml = `<span class="my-odds-cell none">&lt;1%</span>`;
+      }
+    }
 
     return `
       <tr data-hunt="${h.huntNum}_${h.species}">
@@ -1849,29 +1422,22 @@ function renderTable() {
         <td>${escapeHtml(h.huntName)}</td>
         <td><span class="tag ${h.weapon}">${weaponLabel(h.weapon)}</span></td>
         <td class="num">${fmt(h.tags)}</td>
-        <td class="num">${fmt(h.totalApps)}</td>
         <td class="num"><span class="draw-cell ${drawClass}">${minPts === null ? '—' : minPts}</span>${minPtsTrend}</td>
-        <td class="num">${odds === null ? '—' : fmtPct(odds)} ${oddsTrend}<span class="sub">${fmt(h.totalDrawn)} drawn</span></td>
-        <td class="num">${secondChoice}</td>
+        <td class="num">${odds === null ? '—' : fmtPct(odds)} ${oddsTrend}<span class="draw-cell sub">${fmt(h.residentDrawn)} res. drawn</span></td>
         <td class="num">
           ${success == null ? '—' :
             `<span class="success-cell">${fmtPct(success)}</span> ${successTrend}
              <div class="success-bar"><div class="success-bar-fill" style="width:${successWidth}%"></div></div>`}
         </td>
-        <td class="num">${hunters == null ? '—' : fmt(hunters)}</td>
-        <td class="num">${bull ? `${bull.label} <span class="sub">${bull.pct}% of bulls</span>` : '—'}</td>
-      </tr>
-    `;
+        <td class="num">${bull ? `${bull.label} <span class="draw-cell sub">${bull.pct}% of bulls</span>` : '—'}</td>
+        <td class="num">${myOddsHtml}</td>
+        <td class="num">${fmt(h.residentApps)}</td>
+      </tr>`;
   }).join('');
 
   tbody.innerHTML = html;
-
-  // Wire row clicks
   tbody.querySelectorAll('tr').forEach(tr => {
-    tr.addEventListener('click', () => {
-      const id = tr.dataset.hunt;
-      if (id) showDetail(id);
-    });
+    tr.addEventListener('click', () => { if (tr.dataset.hunt) showDetail(tr.dataset.hunt); });
   });
 }
 
@@ -1891,47 +1457,45 @@ function showDetail(id) {
   const minPts = h.minPointsToDraw;
   const myPtsRaw = $('#fMyPoints').value;
   const myPts = myPtsRaw === '' ? null : Number(myPtsRaw);
-
-  // Find prior year same hunt
   const prevYr = state.compareYear || priorYear(state.selectedYear);
   const prevH = prevYr ? findHuntInYear(prevYr, h.huntNum, h.species) : null;
+  const myOdds = calcMyOdds(h, myPts);
 
   function delta(cur, prev, higherIsBetter, suffix) {
     if (cur == null || prev == null || cur === prev) return '';
     const better = higherIsBetter ? cur > prev : cur < prev;
     const cls = better ? 'trend-up' : 'trend-down';
-    const arrow = better ? '▲' : '▼';
     const sign = (cur - prev) > 0 ? '+' : '';
-    return ` <span class="trend ${cls}">${arrow} ${sign}${(cur - prev).toFixed(suffix === '%' ? 0 : 1)}${suffix || ''} vs ${prevYr}</span>`;
+    return ` <span class="trend ${cls}">${better ? '▲' : '▼'} ${sign}${(cur - prev).toFixed(suffix === '%' ? 0 : 1)}${suffix || ''} vs ${prevYr}</span>`;
   }
 
   let yourTake = '';
   if (myPts !== null) {
     if (minPts === null) {
-      yourTake = `<p class="callout warn"><strong>With ${myPts} point${myPts===1?'':'s'}:</strong> No tags drew in the preference phase last year — your only chance is the 25% random draw.</p>`;
+      yourTake = `<p class="callout warn"><strong>With ${myPts} point${myPts===1?'':'s'}:</strong> No tags drew in the preference phase last year — only the 25% random draw applies.</p>`;
     } else if (myPts >= minPts) {
-      yourTake = `<p class="callout good"><strong>With ${myPts} point${myPts===1?'':'s'}:</strong> You would have drawn last year (minimum was ${minPts}).</p>`;
+      const pctStr = myOdds !== null ? ` Your personal draw odds: ~${fmtPct(myOdds)}.` : '';
+      yourTake = `<p class="callout good"><strong>With ${myPts} point${myPts===1?'':'s'}:</strong> You would have drawn last year (min was ${minPts}).${pctStr}</p>`;
     } else {
       const away = minPts - myPts;
-      yourTake = `<p class="callout warn"><strong>With ${myPts} point${myPts===1?'':'s'}:</strong> ${away} point${away===1?'':'s'} short of last year's minimum (${minPts}). You can still draw via the 25% random phase.</p>`;
+      const pctStr = myOdds !== null ? ` Your random-phase odds: ~${fmtPct(myOdds)}.` : '';
+      yourTake = `<p class="callout warn"><strong>With ${myPts} point${myPts===1?'':'s'}:</strong> ${away} point${away===1?'':'s'} short of last year's minimum (${minPts}).${pctStr}</p>`;
     }
   }
 
   let body = `
     ${yourTake}
     <div class="modal-section">
-      <h4>${state.selectedYear} Draw Results</h4>
+      <h4>${state.selectedYear} Draw Results (Resident)</h4>
       <div class="kv-grid">
         <div class="kv"><div class="k">Tags Authorized</div><div class="v">${fmt(h.tags)}</div></div>
-        <div class="kv"><div class="k">Total Applicants</div><div class="v">${fmt(h.totalApps)}${prevH ? delta(h.totalApps, prevH.totalApps, false) : ''}</div></div>
-        <div class="kv"><div class="k">Total Drawn</div><div class="v">${fmt(h.totalDrawn)}</div></div>
-        <div class="kv"><div class="k">1st-Choice Odds</div><div class="v">${h.firstChoiceOdds === null ? '—' : fmtPct(h.firstChoiceOdds)}${prevH ? delta(h.firstChoiceOdds, prevH.firstChoiceOdds, true, '%') : ''}</div></div>
+        <div class="kv"><div class="k">Resident Apps</div><div class="v">${fmt(h.residentApps)}${prevH ? delta(h.residentApps, prevH.residentApps, false) : ''}</div></div>
+        <div class="kv"><div class="k">Resident Drawn</div><div class="v">${fmt(h.residentDrawn)}</div></div>
+        <div class="kv"><div class="k">1st-Choice Odds (Res.)</div><div class="v">${h.firstChoiceOdds === null ? '—' : fmtPct(h.firstChoiceOdds)}${prevH ? delta(h.firstChoiceOdds, prevH.firstChoiceOdds, true, '%') : ''}</div></div>
         <div class="kv"><div class="k">Min. Points to Draw</div><div class="v">${minPts === null ? 'Random only' : minPts}${prevH ? delta(minPts, prevH.minPointsToDraw, false) : ''}</div></div>
-        <div class="kv"><div class="k">2nd-Choice Tags Available</div><div class="v">${h.has2ndChance ? `${h.secondChoiceTags} tag${h.secondChoiceTags===1?'':'s'}` : 'None'}</div></div>
-        <div class="kv"><div class="k">Resident / Non-Res Apps</div><div class="v">${fmt(h.residentApps)} / ${fmt(h.nonResidentApps)}</div></div>
+        <div class="kv"><div class="k">Non-Resident Apps</div><div class="v">${fmt(h.nonResidentApps)}</div></div>
       </div>
-    </div>
-  `;
+    </div>`;
 
   if (h.harvest) {
     const harv = h.harvest;
@@ -1940,18 +1504,15 @@ function showDetail(id) {
       <div class="modal-section">
         <h4>${state.selectedYear} Harvest</h4>
         <div class="kv-grid">
-          <div class="kv"><div class="k">Hunters Afield</div><div class="v">${fmt(harv.hunters)}${prevHarv ? delta(harv.hunters, prevHarv.hunters, true) : ''}</div></div>
           <div class="kv"><div class="k">Total Harvest</div><div class="v">${fmt(harv.totalHarvest)}${prevHarv ? delta(harv.totalHarvest, prevHarv.totalHarvest, true) : ''}</div></div>
           <div class="kv"><div class="k">Bulls / Bucks</div><div class="v">${fmt(harv.totalBull)}</div></div>
           <div class="kv"><div class="k">Antlerless</div><div class="v">${fmt(harv.antlerless)}</div></div>
           <div class="kv"><div class="k">Success Rate</div><div class="v">${fmtPct(harv.successPct)}${prevHarv ? delta(harv.successPct, prevHarv.successPct, true, '%') : ''}</div></div>
           <div class="kv"><div class="k">Days in Field</div><div class="v">${fmt(harv.days)}</div></div>
         </div>
-      </div>
-    `;
+      </div>`;
 
-    // Antler-class breakdown — only meaningful if there were any bulls
-    if (harv.totalBull > 0) {
+    if (harv.totalBull > 0 && harv.antlerValid) {
       const classes = [
         ['Spike', harv.spike || 0],
         ['2-point', harv.twoPt || 0],
@@ -1960,57 +1521,43 @@ function showDetail(id) {
         ['5-point', harv.fivePt || 0],
         ['6-point or better', harv.sixPlusPt || 0],
       ];
-      const totalCounted = classes.reduce((s, c) => s + c[1], 0);
-      // Probability of getting class X if you tag a bull = count_X / totalBull
-      // Probability of getting class X if you draw the tag = count_X / hunters (assumes drawn = hunted; close enough)
       const rows = classes.map(([label, count]) => {
         const pctOfBulls = harv.totalBull > 0 ? (count / harv.totalBull) * 100 : 0;
-        const pctOfHunters = harv.hunters > 0 ? (count / harv.hunters) * 100 : 0;
-        return `<tr>
-          <td>${label}</td>
-          <td>${fmt(count)}</td>
-          <td>${fmtPct(pctOfBulls)}</td>
-          <td>${fmtPct(pctOfHunters)}</td>
-        </tr>`;
+        return `<tr><td>${label}</td><td>${fmt(count)}</td><td>${fmtPct(pctOfBulls)}</td></tr>`;
       }).join('');
       body += `
         <div class="modal-section">
           <h4>Bull Size Breakdown</h4>
           <table class="points">
-            <thead><tr>
-              <th>Antler Class</th><th>Harvested</th><th>% of Bulls</th><th>Odds Per Tag</th>
-            </tr></thead>
+            <thead><tr><th>Antler Class</th><th>Harvested</th><th>% of Bulls</th></tr></thead>
             <tbody>${rows}</tbody>
           </table>
-          <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">"% of Bulls" shows what fraction of harvested bulls were this class. "Odds Per Tag" is your probability of taking this class if you draw the tag (count ÷ total hunters).</p>
-        </div>
-      `;
+        </div>`;
+    } else if (harv.totalBull > 0 && !harv.antlerValid) {
+      body += `<div class="modal-section"><p style="color:var(--text-muted);font-size:12px;">Antler breakdown could not be reliably parsed from this PDF — column alignment uncertain.</p></div>`;
     }
   }
 
   if (breakdown.length) {
-    let pointsRows = breakdown.map(p => {
-      const drewHere = (p.resDrawn + p.nrDrawn) > 0 && minPts !== null && p.points >= minPts;
-      const apps = p.resApps + p.nrApps;
-      const drawn = p.resDrawn + p.nrDrawn;
-      const pct = apps > 0 ? (drawn / apps) * 100 : 0;
+    const pointsRows = breakdown.map(p => {
+      const drewHere = (p.resDrawn) > 0 && minPts !== null && p.points >= minPts;
+      const pct = p.resApps > 0 ? (p.resDrawn / p.resApps) * 100 : 0;
       return `<tr ${drewHere ? 'class="drew"' : ''}>
         <td>${p.points}</td>
-        <td>${fmt(apps)}</td>
-        <td>${fmt(drawn)}</td>
+        <td>${fmt(p.resApps)}</td>
+        <td>${fmt(p.resDrawn)}</td>
         <td>${fmtPct(pct)}</td>
       </tr>`;
     }).join('');
     body += `
       <div class="modal-section">
-        <h4>Draw by Point Level</h4>
+        <h4>Resident Draw by Point Level</h4>
         <table class="points">
-          <thead><tr><th>Points</th><th>Applicants</th><th>Drawn</th><th>Draw %</th></tr></thead>
+          <thead><tr><th>Points</th><th>Res. Apps</th><th>Res. Drawn</th><th>Draw %</th></tr></thead>
           <tbody>${pointsRows}</tbody>
         </table>
-        <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">Highlighted rows indicate point levels where tags were awarded in the 75% preference phase.</p>
-      </div>
-    `;
+        <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">Highlighted rows: preference phase tags awarded at this point level.</p>
+      </div>`;
   }
 
   $('#mBody').innerHTML = body;
@@ -2018,196 +1565,152 @@ function showDetail(id) {
 }
 
 function switchPage(pageName) {
-  document.querySelectorAll('.page').forEach(p => {
-    p.classList.toggle('active', p.dataset.page === pageName);
-  });
-  document.querySelectorAll('.nav-link').forEach(b => {
-    b.classList.toggle('active', b.dataset.page === pageName);
-  });
-  // Scroll to top on page change for clarity
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.dataset.page === pageName));
+  document.querySelectorAll('.nav-link').forEach(b => b.classList.toggle('active', b.dataset.page === pageName));
   window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
 }
 
 function renderEmptyPrompt() {
-  const prompt = document.getElementById('emptyDataPrompt');
-  const badge = document.getElementById('navBadge');
-  if (!prompt || !badge) return;
+  const prompt = $('#emptyDataPrompt');
+  const badge  = $('#navBadge');
+  const fbBanner = $('#fbLoadBanner');
   const empty = getHunts().length === 0;
-  prompt.style.display = empty ? 'block' : 'none';
-  badge.style.display = empty ? 'inline-block' : 'none';
+  if (prompt) prompt.style.display = empty ? 'block' : 'none';
+  if (badge)  badge.style.display  = empty ? 'inline-block' : 'none';
+  if (fbBanner) fbBanner.style.display = empty ? 'flex' : 'none';
 }
 
 function render() {
-  // Update pending year display
-  const pyDisp = document.getElementById('pendingYearDisplay');
+  const pyDisp = $('#pendingYearDisplay');
   if (pyDisp) pyDisp.textContent = state.pendingYear || 'none';
 
-  // Populate Database page year selectors
-  const ySelView = document.getElementById('ySelView');
-  const ySelCompare = document.getElementById('ySelCompare');
-  const yearControls = document.getElementById('yearControls');
+  const ySelView    = $('#ySelView');
+  const ySelCompare = $('#ySelCompare');
+  const yearControls = $('#yearControls');
   const years = getYearList();
+
   if (ySelView) {
-    ySelView.innerHTML = years.map(y =>
-      `<option value="${y}" ${y === state.selectedYear ? 'selected' : ''}>${y}</option>`).join('');
+    ySelView.innerHTML = years.map(y => `<option value="${y}" ${y === state.selectedYear ? 'selected' : ''}>${y}</option>`).join('');
   }
   if (ySelCompare) {
-    const compareOptions = ['<option value="auto">Prior year (auto)</option>',
+    ySelCompare.innerHTML = ['<option value="auto">Prior year (auto)</option>',
       ...years.filter(y => y !== state.selectedYear).map(y =>
-        `<option value="${y}" ${y === state.compareYear ? 'selected' : ''}>${y}</option>`)];
-    ySelCompare.innerHTML = compareOptions.join('');
+        `<option value="${y}" ${y === state.compareYear ? 'selected' : ''}>${y}</option>`)].join('');
   }
-  if (yearControls) {
-    yearControls.style.display = years.length > 0 ? 'flex' : 'none';
-  }
+  if (yearControls) yearControls.style.display = years.length > 0 ? 'flex' : 'none';
 
   renderStatus();
   renderTable();
   renderEmptyPrompt();
 }
 
-// EVENT WIRING
+// ─── INIT ──────────────────────────────────────────────────────────────────────
 function init() {
   loadState();
-  // Default pendingYear input to current year if nothing set
-  const yearInput = document.getElementById('pendingYearInput');
+  const yearInput = $('#pendingYearInput');
   if (yearInput) {
     yearInput.value = state.pendingYear || new Date().getFullYear();
     if (!state.pendingYear) state.pendingYear = String(new Date().getFullYear());
   }
   render();
 
-  // Page navigation
-  document.querySelectorAll('.nav-link').forEach(btn => {
-    btn.addEventListener('click', () => switchPage(btn.dataset.page));
-  });
-  // Inter-page buttons
-  const goData = document.getElementById('btnGoToData');
-  if (goData) goData.addEventListener('click', () => switchPage('data'));
-  const goDb = document.getElementById('btnViewDatabase');
-  if (goDb) goDb.addEventListener('click', () => switchPage('database'));
+  // Try auto-loading from Firebase if no local data
+  const tryAutoLoad = () => {
+    if (getHunts().length === 0 && window.__fbReady) {
+      updateFbBanner('', 'No local data — loading from cloud…');
+      fbLoadAll();
+    } else if (getHunts().length === 0) {
+      updateFbBanner('', 'Connecting to cloud…');
+    } else {
+      updateFbBanner('success', 'Local data loaded. Use "Save to Cloud" to share your uploads.');
+    }
+  };
 
-  // Year input button
-  const btnSetYear = document.getElementById('btnSetYear');
+  if (window.__fbReady) {
+    tryAutoLoad();
+  } else {
+    document.addEventListener('fbReady', tryAutoLoad, { once: true });
+    setTimeout(() => {
+      if (!window.__fbReady) updateFbBanner('error', 'Could not connect to cloud. Upload files locally.');
+    }, 8000);
+  }
+
+  // Nav
+  document.querySelectorAll('.nav-link').forEach(btn => btn.addEventListener('click', () => switchPage(btn.dataset.page)));
+  const goData = $('#btnGoToData'); if (goData) goData.addEventListener('click', () => switchPage('data'));
+  const goDb   = $('#btnViewDatabase'); if (goDb) goDb.addEventListener('click', () => switchPage('database'));
+
+  // Year
+  const btnSetYear = $('#btnSetYear');
   if (btnSetYear) {
     btnSetYear.addEventListener('click', () => {
-      const v = (yearInput.value || '').trim();
-      if (!/^\d{4}$/.test(v)) {
-        toast('Enter a 4-digit year', true);
-        return;
-      }
+      const v = (yearInput?.value || '').trim();
+      if (!/^\d{4}$/.test(v)) { toast('Enter a 4-digit year', true); return; }
       state.pendingYear = v;
-      // If no year is selected for viewing, set this one
       if (!state.selectedYear) state.selectedYear = v;
-      saveState();
-      render();
+      saveState(); render();
       toast(`Now editing year ${v}`);
     });
   }
-  // Live update display as user types
-  if (yearInput) {
-    yearInput.addEventListener('input', () => {
-      const d = document.getElementById('pendingYearDisplay');
-      if (d) d.textContent = yearInput.value || 'none';
-    });
-  }
+  if (yearInput) yearInput.addEventListener('input', () => { const d = $('#pendingYearDisplay'); if (d) d.textContent = yearInput.value || 'none'; });
 
-  // Year-control selectors on Database page
-  const ySelView = document.getElementById('ySelView');
-  const ySelCompare = document.getElementById('ySelCompare');
-  if (ySelView) {
-    ySelView.addEventListener('change', () => {
-      state.selectedYear = ySelView.value;
-      saveState();
-      render();
-    });
-  }
-  if (ySelCompare) {
-    ySelCompare.addEventListener('change', () => {
-      state.compareYear = ySelCompare.value === 'auto' ? null : ySelCompare.value;
-      saveState();
-      render();
-    });
-  }
+  // Year selectors
+  const ySelView    = $('#ySelView');
+  const ySelCompare = $('#ySelCompare');
+  if (ySelView)    ySelView.addEventListener('change', () => { state.selectedYear = ySelView.value; saveState(); render(); });
+  if (ySelCompare) ySelCompare.addEventListener('change', () => { state.compareYear = ySelCompare.value === 'auto' ? null : ySelCompare.value; saveState(); render(); });
 
   // File inputs
   $$('input[type=file]').forEach(inp => {
-    inp.addEventListener('change', e => {
-      const target = e.target.dataset.target;
-      const file = e.target.files[0];
-      handleFile(target, file);
-      e.target.value = '';
-    });
+    inp.addEventListener('change', e => { handleFile(e.target.dataset.target, e.target.files[0]); e.target.value = ''; });
   });
 
-  // Drag & drop on each zone
+  // Drag and drop
   $$('.upload-zone').forEach(zone => {
     const input = zone.querySelector('input[type=file]');
-    ['dragenter','dragover'].forEach(ev => {
-      zone.addEventListener(ev, e => {
-        e.preventDefault();
-        e.stopPropagation();
-        zone.classList.add('dragover');
-      });
-    });
-    ['dragleave','drop'].forEach(ev => {
-      zone.addEventListener(ev, e => {
-        e.preventDefault();
-        e.stopPropagation();
-        zone.classList.remove('dragover');
-      });
-    });
-    zone.addEventListener('drop', e => {
-      const files = e.dataTransfer?.files;
-      if (files && files[0]) {
-        handleFile(input.dataset.target, files[0]);
-      }
-    });
+    ['dragenter','dragover'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); zone.classList.add('dragover'); }));
+    ['dragleave','drop'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); zone.classList.remove('dragover'); }));
+    zone.addEventListener('drop', e => { const f = e.dataTransfer?.files; if (f?.[0]) handleFile(input.dataset.target, f[0]); });
   });
 
-  // Filter wiring
-  ['fSpecies','fWeapon','fMyPoints','fDrawability','fSearch'].forEach(id => {
-    $('#' + id).addEventListener('input', () => render());
-  });
+  // Filters
+  ['fSpecies','fWeapon','fMyPoints','fDrawability','fSearch'].forEach(id => $('#' + id).addEventListener('input', () => render()));
 
   // Sort headers
   $$('#huntsTable thead th').forEach(th => {
     if (!th.dataset.sort) return;
     th.addEventListener('click', () => {
       const k = th.dataset.sort;
-      if (state.sortKey === k) {
-        state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
-      } else {
-        state.sortKey = k;
-        state.sortDir = ['huntNum','huntName','weapon'].includes(k) ? 'asc' : 'desc';
-      }
+      state.sortDir = state.sortKey === k ? (state.sortDir === 'asc' ? 'desc' : 'asc') : 'desc';
+      state.sortKey = k;
+      if (['huntNum','huntName','weapon'].includes(k) && state.sortDir === 'desc') state.sortDir = 'asc';
       render();
     });
   });
 
-  // Clear button
+  // Firebase buttons
+  const btnSave = $('#btnSyncToCloud'); if (btnSave) btnSave.addEventListener('click', fbSaveAll);
+  const btnLoad = $('#btnLoadFromCloud'); if (btnLoad) btnLoad.addEventListener('click', fbLoadAll);
+  const btnLoadCloud = $('#btnLoadCloud'); if (btnLoadCloud) btnLoadCloud.addEventListener('click', fbLoadAll);
+  const btnFbLoad = $('#btnFbLoad'); if (btnFbLoad) btnFbLoad.addEventListener('click', fbLoadAll);
+
+  // Clear
   $('#btnClear').addEventListener('click', () => {
-    if (Object.keys(state.years).length === 0) {
-      toast('Nothing to clear');
-      return;
-    }
-    showConfirm('Clear ALL years of data?', 'This removes every year of parsed hunt data from this device. Your XLSX/PDF files are untouched.', () => clearAll());
+    if (Object.keys(state.years).length === 0) { toast('Nothing to clear'); return; }
+    showConfirm('Clear all local data?', 'Removes locally-parsed data from this device. Cloud data is unaffected.', () => clearAll());
   });
 
-  // Detail modal close
+  // Modal
   $('#mClose').addEventListener('click', () => $('#modal').classList.remove('open'));
   $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') $('#modal').classList.remove('open'); });
 }
 
-// Custom confirm modal (no native confirm — iOS Safari blocks them)
 function showConfirm(title, message, onYes) {
   const wrapper = document.createElement('div');
   wrapper.className = 'modal-backdrop open';
   wrapper.innerHTML = `
     <div class="modal" style="max-width:440px;">
-      <div class="modal-head">
-        <div><h3>${escapeHtml(title)}</h3></div>
-      </div>
+      <div class="modal-head"><div><h3>${escapeHtml(title)}</h3></div></div>
       <div class="modal-body">
         <p style="margin-top:0;">${escapeHtml(message)}</p>
         <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;">
@@ -2217,24 +1720,13 @@ function showConfirm(title, message, onYes) {
       </div>
     </div>`;
   document.body.appendChild(wrapper);
-  wrapper.querySelector('[data-yes]').addEventListener('click', () => {
-    document.body.removeChild(wrapper);
-    onYes();
-  });
-  wrapper.querySelector('[data-no]').addEventListener('click', () => {
-    document.body.removeChild(wrapper);
-  });
-  wrapper.addEventListener('click', e => {
-    if (e.target === wrapper) document.body.removeChild(wrapper);
-  });
+  wrapper.querySelector('[data-yes]').addEventListener('click', () => { document.body.removeChild(wrapper); onYes(); });
+  wrapper.querySelector('[data-no]').addEventListener('click',  () => document.body.removeChild(wrapper));
+  wrapper.addEventListener('click', e => { if (e.target === wrapper) document.body.removeChild(wrapper); });
 }
 
-// Boot
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
-}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+else init();
 </script>
 
 </body>
