@@ -8,374 +8,156 @@
 <title>Oregon Controlled Hunt Planner</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<!-- Firebase compat (non-module, no race condition) -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script>
-  (function() {
-    try {
-      const app = firebase.initializeApp({
-        apiKey: "AIzaSyCqbU875vWyWS0dQWr0hoqVRscH2AtU_v4",
-        authDomain: "oregon-hunting.firebaseapp.com",
-        projectId: "oregon-hunting",
-        storageBucket: "oregon-hunting.firebasestorage.app",
-        messagingSenderId: "84034970737",
-        appId: "1:84034970737:web:d470b1daca7b56ce6227d0"
-      });
-      const db = firebase.firestore();
-
-```
-  window.__fb = {
-    async saveYear(year, hunts, harvestData) {
-      try {
-        const CHUNK = 200;
-        const chunks = [];
-        for (let i = 0; i < hunts.length; i += CHUNK) chunks.push(hunts.slice(i, i + CHUNK));
-
-        await db.collection('years').doc(String(year)).set({
-          year: String(year),
-          huntCount: hunts.length,
-          chunkCount: chunks.length,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        for (let ci = 0; ci < chunks.length; ci++) {
-          await db.collection('years').doc(String(year))
-            .collection('chunks').doc(String(ci))
-            .set({ hunts: JSON.stringify(chunks[ci]) });
-        }
-
-        await db.collection('years').doc(String(year))
-          .collection('harvest').doc('all')
-          .set({ data: JSON.stringify(harvestData),
-                 updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-
-        console.log('[Firebase] Saved year', year);
-        return true;
-      } catch (e) {
-        console.warn('[Firebase] Save failed:', e);
-        return false;
-      }
-    },
-
-    async loadAllYears() {
-      try {
-        const snapshot = await db.collection('years').get();
-        const result = {};
-        for (const yearDoc of snapshot.docs) {
-          const meta = yearDoc.data();
-          const year = meta.year;
-          let hunts = [];
-          for (let ci = 0; ci < (meta.chunkCount || 1); ci++) {
-            const chunkDoc = await db.collection('years').doc(year)
-              .collection('chunks').doc(String(ci)).get();
-            if (chunkDoc.exists) {
-              hunts = hunts.concat(JSON.parse(chunkDoc.data().hunts || '[]'));
-            }
-          }
-          const harvestDoc = await db.collection('years').doc(year)
-            .collection('harvest').doc('all').get();
-          const harvestData = harvestDoc.exists ? JSON.parse(harvestDoc.data().data || '{}') : {};
-          result[year] = { hunts, harvestData, files: {} };
-        }
-        return result;
-      } catch (e) {
-        console.warn('[Firebase] Load failed:', e);
-        return null;
-      }
-    }
-  };
-
-  window.__fbReady = true;
-  console.log('[Firebase] Ready');
-} catch(e) {
-  console.warn('[Firebase] Init failed:', e);
-  window.__fbReady = false;
-}
-```
-
-})();
-</script>
-
 <style>
 :root {
-  color-scheme: dark;
-  --odfw-green: #4a8f5e;
-  --odfw-green-dark: #6bb582;
-  --odfw-green-light: #4a8f5e;
-  --odfw-tan: #2a2a2a;
-  --odfw-tan-light: #1f1f1f;
-  --odfw-cream: #000000;
-  --odfw-gold: #d4a04a;
-  --text-primary: #f0f0f0;
-  --text-secondary: #c5c5c5;
-  --text-muted: #8a8a8a;
-  --border: #3a3a3a;
-  --border-light: #2a2a2a;
-  --warn: #d4a04a;
-  --warn-bg: #2a2418;
-  --good: #6bb582;
-  --good-bg: #1a2a1f;
-  --bad: #d46b6b;
-  --bad-bg: #2a1818;
-  --panel-bg: #141414;
+  color-scheme:dark;
+  --green:#4a8f5e; --gl:#6bb582; --gold:#d4a04a;
+  --tan:#2a2a2a; --tanl:#1f1f1f;
+  --text:#f0f0f0; --tsec:#c5c5c5; --tmut:#8a8a8a;
+  --bor:#3a3a3a; --borl:#2a2a2a;
+  --good:#6bb582; --goodbg:#1a2a1f;
+  --warn:#d4a04a; --warnbg:#2a2418;
+  --bad:#d46b6b;  --badbg:#2a1818;
 }
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;background:#000}
+body{margin:0;font-family:'Georgia','Cambria',serif;font-size:16px;line-height:1.5;color:#f0f0f0;background:#000;-webkit-font-smoothing:antialiased}
 
-html, body, div, section, header, footer, main, nav, article, aside,
-h1,h2,h3,h4,h5,h6,p,ul,ol,li,table,thead,tbody,tr,th,td,
-label,input,select,button,span,a,img,form,textarea { box-sizing: border-box; }
+.site-header{background:var(–green);color:#fff;border-bottom:4px solid var(–gold)}
+.site-header-inner{max-width:1300px;margin:0 auto;padding:18px 20px;display:flex;align-items:center;gap:16px}
+.crest{flex-shrink:0;width:52px;height:52px;border:2px solid var(–gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;letter-spacing:1px;color:var(–gold);background:rgba(0,0,0,.15)}
+.site-title{font-family:‘Georgia’,serif;margin:0;font-size:22px;font-weight:600;line-height:1.15}
+.ver{display:inline-block;margin-left:8px;padding:1px 7px;font-family:sans-serif;font-size:11px;font-weight:600;letter-spacing:.5px;vertical-align:middle;color:var(–gold);border:1px solid var(–gold);border-radius:2px;background:rgba(0,0,0,.3)}
+.site-subtitle{font-size:12px;font-style:italic;opacity:.85;letter-spacing:.5px;text-transform:uppercase;margin-top:2px}
 
-html { -webkit-text-size-adjust: 100%; background: #000; }
-body {
-  margin: 0;
-  font-family: 'Georgia','Cambria','Times New Roman',serif;
-  font-size: 16px;
-  line-height: 1.5;
-  color: #f0f0f0 !important;
-  background: #000 !important;
-  -webkit-font-smoothing: antialiased;
-}
+.subnav{background:var(–gl);border-top:1px solid rgba(255,255,255,.1)}
+.subnav-inner{max-width:1300px;margin:0 auto;padding:0 20px;font-family:sans-serif;display:flex}
+.nav-link{background:transparent;border:none;border-bottom:3px solid transparent;color:rgba(255,255,255,.75);font-family:inherit;font-size:13px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;padding:12px 18px;cursor:pointer;-webkit-appearance:none}
+.nav-link:hover{color:#fff}
+.nav-link.active{color:#fff;border-bottom-color:var(–gold);background:rgba(0,0,0,.2)}
+.nbadge{display:inline-block;margin-left:6px;padding:1px 6px;font-size:10px;background:var(–gold);color:var(–gl);border-radius:2px;font-weight:700}
 
-/* HEADER */
-.site-header { background: var(--odfw-green); color: #fff; border-bottom: 4px solid var(--odfw-gold); }
-.site-header-inner { max-width: 1300px; margin: 0 auto; padding: 18px 20px; display: flex; align-items: center; gap: 16px; }
-.crest {
-  flex-shrink: 0; width: 52px; height: 52px; border: 2px solid var(--odfw-gold); border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-family: 'Georgia',serif; font-weight: bold; font-size: 12px; letter-spacing: 1px;
-  color: var(--odfw-gold); background: rgba(0,0,0,.15);
-}
-.site-title { font-family: 'Georgia',serif; margin: 0; font-size: 22px; font-weight: 600; letter-spacing: .3px; line-height: 1.15; }
-.site-version {
-  display: inline-block; margin-left: 8px; padding: 1px 7px;
-  font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 11px; font-weight: 600; letter-spacing: .5px;
-  vertical-align: middle; color: #d4a04a; border: 1px solid #d4a04a; border-radius: 2px; background: rgba(0,0,0,.3);
-}
-.site-subtitle { font-size: 12px; font-style: italic; opacity: .85; letter-spacing: .5px; text-transform: uppercase; margin-top: 2px; }
+.page{display:none}.page.active{display:block}
+main{max-width:1300px;margin:0 auto;padding:24px 20px 60px}
+.page-title{font-family:‘Georgia’,serif;font-size:28px;font-weight:normal;color:var(–gl);margin:0 0 4px;border-bottom:2px solid var(–gold);padding-bottom:10px}
+.page-lede{font-style:italic;color:var(–tsec);margin:8px 0 24px;font-size:15px}
 
-.subnav { background: var(--odfw-green-dark); color: #fff; border-top: 1px solid rgba(255,255,255,.1); }
-.subnav-inner { max-width: 1300px; margin: 0 auto; padding: 0 20px; font-family: 'Helvetica Neue',Arial,sans-serif; display: flex; }
-.nav-link {
-  background: transparent; border: none; border-bottom: 3px solid transparent;
-  color: rgba(255,255,255,.75); font-family: inherit; font-size: 13px; font-weight: 600;
-  letter-spacing: .7px; text-transform: uppercase; padding: 12px 18px; cursor: pointer;
-  -webkit-appearance: none; appearance: none;
-}
-.nav-link:hover { color: #fff; }
-.nav-link.active { color: #fff; border-bottom-color: var(--odfw-gold); background: rgba(0,0,0,.2); }
-.nav-link .badge {
-  display: inline-block; margin-left: 6px; padding: 1px 6px; font-size: 10px;
-  background: var(--odfw-gold); color: var(--odfw-green-dark); border-radius: 2px; font-weight: 700; letter-spacing: 0;
-}
+.panel{background:#141414;border:1px solid var(–bor);margin-bottom:24px}
+.panel-head{background:#1f1f1f;border-bottom:1px solid var(–bor);padding:10px 16px;font-family:sans-serif;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(–gold)}
+.panel-body{padding:18px 16px}
 
-.page { display: none; }
-.page.active { display: block; }
+.data-status{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:14px;font-family:sans-serif}
+.sdot{width:10px;height:10px;border-radius:50%;background:#666;display:inline-block;margin-right:8px}
+.sdot.ok{background:var(–good)}.sdot.part{background:var(–gold)}
 
-main { max-width: 1300px; margin: 0 auto; padding: 24px 20px 60px; }
+.upload-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:14px}
+@media(max-width:900px){.upload-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.upload-grid{grid-template-columns:1fr}}
+.upload-zone{border:2px dashed var(–bor);background:var(–tanl);padding:18px 14px;text-align:center;cursor:pointer;transition:all .15s;font-family:sans-serif;display:flex;flex-direction:column}
+.upload-zone:hover,.upload-zone.dv{border-color:var(–green);background:#000}
+.upload-zone.hf{border-style:solid;border-color:var(–green);background:var(–goodbg)}
+.uzl{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(–gl);margin-bottom:4px}
+.uzh{font-size:12px;color:var(–tmut)}
+.uzf{font-size:12px;color:var(–good);margin-top:6px;font-weight:600;word-break:break-all}
+.upload-zone input[type=file]{display:none}
 
-.page-title {
-  font-family: 'Georgia',serif; font-size: 28px; font-weight: normal;
-  color: var(--odfw-green-dark); margin: 0 0 4px; border-bottom: 2px solid var(--odfw-gold); padding-bottom: 10px;
-}
-.page-lede { font-style: italic; color: var(--text-secondary); margin: 8px 0 24px; font-size: 15px; }
+.btn{font-family:sans-serif;font-size:13px;font-weight:600;letter-spacing:.4px;padding:8px 16px;border:1px solid var(–gl);background:var(–green);color:#fff;cursor:pointer;text-transform:uppercase;-webkit-appearance:none;border-radius:0}
+.btn:hover{background:var(–gl)}.btn:disabled{background:#555;border-color:#555;cursor:not-allowed}
+.btn.sec{background:#1f1f1f;color:var(–gl);border-color:var(–gl)}.btn.sec:hover{background:var(–tan)}
+.btn.dan{background:#1f1f1f;color:var(–bad);border-color:var(–bad)}.btn.dan:hover{background:var(–badbg)}
+.bmini{font-family:sans-serif;font-size:11px;font-weight:600;text-transform:uppercase;padding:5px 10px;background:#1f1f1f;color:var(–gl);border:1px solid var(–gl);cursor:pointer;border-radius:0;-webkit-appearance:none}
+.bmini:hover{background:var(–tan)}.bmini.dan{color:var(–bad);border-color:var(–bad)}.bmini.dan:hover{background:var(–badbg)}
+.src-btn{display:block;margin-top:8px;font-family:sans-serif;font-size:12px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(–gl);background:#141414;border:1px solid var(–gl);text-decoration:none;text-align:center;padding:9px 12px;transition:background .15s}
+.src-btn:hover{background:var(–green);color:#fff}.src-btn::after{content:’ \2197’;font-weight:normal}
+.arow{margin-top:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.htext{font-family:sans-serif;font-size:12px;color:var(–tmut);margin-top:12px;line-height:1.5}
 
-/* PANEL */
-.panel { background: #141414; border: 1px solid var(--border); margin-bottom: 24px; }
-.panel-head {
-  background: #1f1f1f; border-bottom: 1px solid #3a3a3a; padding: 10px 16px;
-  font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 13px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: .6px; color: #d4a04a;
-}
-.panel-body { padding: 18px 16px; }
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;font-family:sans-serif}
+.field label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(–gl);margin-bottom:4px}
+.field input,.field select{width:100%;padding:7px 9px;border:1px solid var(–bor);background:#141414;font-family:inherit;font-size:14px;color:#f0f0f0;-webkit-text-fill-color:#f0f0f0;color-scheme:dark;border-radius:0;-webkit-appearance:none;appearance:none}
+.field input:focus,.field select:focus{outline:2px solid var(–gold);outline-offset:-1px}
+.field select{background-image:url(“data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%236bb582' stroke-width='1.5' fill='none'/></svg>”);background-repeat:no-repeat;background-position:right 8px center;padding-right:28px}
 
-/* STATUS */
-.data-status {
-  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
-  font-size: 14px; font-family: 'Helvetica Neue',Arial,sans-serif;
-}
-.status-light { display: inline-flex; align-items: center; gap: 8px; }
-.status-dot { width: 10px; height: 10px; border-radius: 50%; background: #c9c2ad; }
-.status-dot.loaded { background: var(--good); }
-.status-dot.partial { background: var(--odfw-gold); }
+.rmeta{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px;margin:24px 0 8px;font-family:sans-serif}
+.rmeta h2{font-family:‘Georgia’,serif;font-size:20px;font-weight:normal;color:var(–gl);margin:0}
+.rcount{font-size:13px;color:var(–tmut)}
+.twrap{background:#141414;border:1px solid var(–bor);overflow-x:auto;-webkit-overflow-scrolling:touch}
+table.hunts{width:100%;border-collapse:collapse;font-family:sans-serif;font-size:13px}
+table.hunts thead th{background:var(–green);color:#fff;font-weight:600;text-transform:uppercase;letter-spacing:.4px;font-size:11px;padding:10px 8px;text-align:left;white-space:nowrap;border-right:1px solid var(–gl);cursor:pointer;user-select:none}
+table.hunts thead th:last-child{border-right:none}
+table.hunts thead th .sa{opacity:.5;margin-left:3px;font-size:10px}
+table.hunts thead th.sorted .sa{opacity:1}
+table.hunts tbody tr{border-bottom:1px solid var(–borl);cursor:pointer}
+table.hunts tbody tr:nth-child(even){background:var(–tanl)}
+table.hunts tbody tr:hover{background:var(–tan)}
+table.hunts tbody td{padding:9px 8px;vertical-align:top}
+table.hunts tbody td.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+table.hunts tbody td.hnum{font-family:‘Georgia’,serif;font-weight:600;font-size:14px;color:var(–gl);white-space:nowrap}
+.sub{font-weight:normal;font-size:11px;color:var(–tmut);display:block;margin-top:2px}
 
-/* UPLOAD */
-.upload-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 14px; }
-@media (max-width: 900px) { .upload-grid { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 600px) { .upload-grid { grid-template-columns: 1fr; } }
+.tag{display:inline-block;padding:1px 6px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;border:1px solid var(–bor);background:#141414}
+.tag.archery{border-color:#c4a96a;color:#c4a96a}.tag.muzz{border-color:#d48b58;color:#d48b58}
+.tag.rifle{border-color:var(–gl);color:var(–gl)}.tag.youth{border-color:#7da9d4;color:#7da9d4}
 
-.upload-zone {
-  border: 2px dashed var(--border); background: var(--odfw-tan-light); padding: 18px 14px;
-  text-align: center; cursor: pointer; transition: all .15s ease;
-  font-family: 'Helvetica Neue',Arial,sans-serif;
-}
-.upload-zone:hover, .upload-zone.dragover { border-color: var(--odfw-green); background: var(--odfw-cream); }
-.upload-zone.has-file { border-style: solid; border-color: var(--odfw-green); background: var(--good-bg); }
-.uz-label { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--odfw-green-dark); margin-bottom: 4px; }
-.uz-hint { font-size: 12px; color: var(--text-muted); }
-.uz-file { font-size: 12px; color: var(--good); margin-top: 6px; font-weight: 600; word-break: break-all; }
-.upload-zone input[type=file] { display: none; }
+.ce{color:var(–good);font-weight:600;font-variant-numeric:tabular-nums}
+.cm{color:var(–warn);font-weight:600;font-variant-numeric:tabular-nums}
+.ch{color:var(–bad);font-weight:600;font-variant-numeric:tabular-nums}
+.cn{color:var(–tmut);font-variant-numeric:tabular-nums}
+.sbar{height:4px;background:var(–borl);margin-top:3px;position:relative}
+.sbarf{position:absolute;top:0;left:0;bottom:0;background:var(–green)}
+.empty{padding:40px 20px;text-align:center;color:var(–tmut);font-family:sans-serif;font-size:14px}
 
-.src-btn {
-  display: block; margin-top: 8px; font-family: 'Helvetica Neue',Arial,sans-serif;
-  font-size: 12px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase;
-  color: var(--odfw-green-dark); background: #141414; border: 1px solid var(--odfw-green-dark);
-  text-decoration: none; text-align: center; padding: 9px 12px; transition: background .15s ease;
-}
-.src-btn:hover { background: var(--odfw-green); color: #fff; }
-.src-btn::after { content: ' \2197'; font-weight: normal; }
-.upload-cell { display: flex; flex-direction: column; }
+.trend{display:inline-block;margin-left:5px;font-size:11px;font-weight:600;font-family:sans-serif;font-variant-numeric:tabular-nums}
+.tup{color:var(–good)}.tdn{color:var(–bad)}
 
-.actions-row { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.btn {
-  font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 13px; font-weight: 600; letter-spacing: .4px;
-  padding: 8px 16px; border: 1px solid var(--odfw-green-dark); background: var(--odfw-green);
-  color: #fff; cursor: pointer; text-transform: uppercase; -webkit-appearance: none; appearance: none; border-radius: 0;
-}
-.btn:hover { background: var(--odfw-green-dark); }
-.btn:disabled { background: #555; border-color: #555; cursor: not-allowed; }
-.btn.secondary { background: #1f1f1f; color: #6bb582; border-color: #6bb582; }
-.btn.secondary:hover { background: #2a2a2a; }
-.btn.danger { background: #1f1f1f; color: #d46b6b; border-color: #d46b6b; }
-.btn.danger:hover { background: #2a1818; }
+.yctrl{display:flex;gap:14px;flex-wrap:wrap;background:#141414;border:1px solid var(–bor);padding:12px 16px;margin:0 0 20px;align-items:flex-end}
+.ycf{flex:1 1 180px;min-width:160px}
+.ycf label{display:block;font-family:sans-serif;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(–gold);margin-bottom:4px}
+.ycf select{width:100%;padding:7px 9px;border:1px solid var(–bor);background:#141414;color:#f0f0f0;-webkit-text-fill-color:#f0f0f0;color-scheme:dark;font-family:sans-serif;font-size:14px;border-radius:0;-webkit-appearance:none;appearance:none;background-image:url(“data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%236bb582' stroke-width='1.5' fill='none'/></svg>”);background-repeat:no-repeat;background-position:right 8px center;padding-right:28px}
 
-.help-text { font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 12px; color: var(--text-muted); margin-top: 12px; line-height: 1.5; }
+.ylist{border:1px solid var(–bor)}
+.yrow{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(–borl);font-family:sans-serif;background:#141414}
+.yrow:last-child{border-bottom:none}.yrow.sel{background:var(–goodbg);border-left:3px solid var(–gold)}
+.yrl{font-size:16px;font-family:‘Georgia’,serif;color:#f0f0f0;font-weight:600}
+.yrm{font-size:12px;color:var(–tmut);margin-top:2px}
+.yra{display:flex;gap:6px;flex-shrink:0}
+.bsm{display:inline-block;margin-left:6px;padding:1px 6px;font-family:sans-serif;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;background:var(–gold);color:#000;border-radius:2px;vertical-align:middle}
+.bsma{display:inline-block;margin-left:6px;padding:1px 6px;font-family:sans-serif;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;background:#1f1f1f;color:var(–gl);border:1px solid var(–gl);border-radius:2px;vertical-align:middle}
 
-/* FILTERS */
-.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; font-family: 'Helvetica Neue',Arial,sans-serif; }
-.field label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--odfw-green-dark); margin-bottom: 4px; }
-.field input, .field select {
-  width: 100%; padding: 7px 9px; border: 1px solid #3a3a3a; background: #141414;
-  font-family: inherit; font-size: 14px; color: #f0f0f0; -webkit-text-fill-color: #f0f0f0;
-  color-scheme: dark; border-radius: 0; -webkit-appearance: none; appearance: none;
-}
-.field input:focus, .field select:focus { outline: 2px solid #d4a04a; outline-offset: -1px; }
-.field select {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%236bb582' stroke-width='1.5' fill='none'/></svg>");
-  background-repeat: no-repeat; background-position: right 8px center; padding-right: 28px;
-}
-.field input::placeholder { color: #707070; }
+.modal-backdrop{position:fixed;inset:0;background:rgba(20,30,20,.6);display:none;align-items:flex-start;justify-content:center;z-index:100;padding:20px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.modal-backdrop.open{display:flex}
+.modal{background:#141414;border:1px solid var(–bor);max-width:720px;width:100%;margin:20px auto;border-top:4px solid var(–gold)}
+.mhead{display:flex;justify-content:space-between;align-items:flex-start;padding:16px 20px;background:var(–tan);border-bottom:1px solid var(–bor)}
+.mhead h3{font-family:‘Georgia’,serif;font-size:20px;font-weight:normal;color:var(–gl);margin:0}
+.mhsub{font-family:sans-serif;font-size:12px;color:var(–tsec);text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
+.mclose{background:transparent;border:1px solid var(–tsec);color:var(–tsec);width:28px;height:28px;font-size:18px;line-height:1;cursor:pointer;font-family:serif;flex-shrink:0}
+.mbody{padding:20px;font-family:sans-serif;font-size:14px}
+.msec{margin-bottom:20px}
+.msec h4{font-family:‘Georgia’,serif;font-size:15px;color:var(–gl);margin:0 0 8px;border-bottom:1px solid var(–borl);padding-bottom:4px;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.kvg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px 16px}
+.kv .k{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(–tmut)}
+.kv .v{font-size:16px;font-family:‘Georgia’,serif;color:var(–text);font-variant-numeric:tabular-nums}
+table.pts{width:100%;border-collapse:collapse;font-size:13px}
+table.pts th,table.pts td{padding:6px 8px;border-bottom:1px solid var(–borl);text-align:right;font-variant-numeric:tabular-nums}
+table.pts th{background:var(–tanl);font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(–gl)}
+table.pts th:first-child,table.pts td:first-child{text-align:left}
+table.pts tr.drew td{background:var(–goodbg);font-weight:600}
+.callout{padding:10px 14px;margin:0 0 16px;border-left:3px solid var(–gold);background:var(–warnbg);font-family:sans-serif;font-size:14px;color:#f0f0f0}
+.callout.good{background:var(–goodbg);border-left-color:var(–good)}
 
-/* RESULTS TABLE */
-.results-meta { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 10px; margin: 24px 0 8px; font-family: 'Helvetica Neue',Arial,sans-serif; }
-.results-meta h2 { font-family: 'Georgia',serif; font-size: 20px; font-weight: normal; color: var(--odfw-green-dark); margin: 0; }
-.results-count { font-size: 13px; color: var(--text-muted); }
+.banner{font-family:sans-serif;font-size:13px;padding:10px 14px;border-left:3px solid var(–gold);background:var(–warnbg);color:#f0f0f0;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.banner.ok{border-left-color:var(–good);background:var(–goodbg)}
+.banner.err{border-left-color:var(–bad);background:var(–badbg)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
 
-.table-wrap { background: #141414; border: 1px solid var(--border); overflow-x: auto; -webkit-overflow-scrolling: touch; }
-table.hunts { width: 100%; border-collapse: collapse; font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 13px; }
-table.hunts thead th {
-  background: var(--odfw-green); color: #fff; font-weight: 600; text-transform: uppercase;
-  letter-spacing: .4px; font-size: 11px; padding: 10px 8px; text-align: left; white-space: nowrap;
-  border-right: 1px solid var(--odfw-green-dark); cursor: pointer; user-select: none;
-}
-table.hunts thead th:last-child { border-right: none; }
-table.hunts thead th .sort-arrow { opacity: .5; margin-left: 3px; font-size: 10px; }
-table.hunts thead th.sorted .sort-arrow { opacity: 1; }
-table.hunts tbody tr { border-bottom: 1px solid var(--border-light); cursor: pointer; }
-table.hunts tbody tr:nth-child(even) { background: var(--odfw-tan-light); }
-table.hunts tbody tr:hover { background: var(--odfw-tan); }
-table.hunts tbody td { padding: 9px 8px; vertical-align: top; }
-table.hunts tbody td.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-table.hunts tbody td.hunt-num { font-family: 'Georgia',serif; font-weight: 600; font-size: 14px; color: var(--odfw-green-dark); white-space: nowrap; }
+footer{background:var(–gl);color:rgba(255,255,255,.8);padding:30px 20px;margin-top:40px;font-family:sans-serif;font-size:12px;line-height:1.6}
+footer .inner{max-width:1300px;margin:0 auto}
+footer a{color:#000}
+.disc{font-style:italic;font-size:11px;opacity:.7;margin-top:16px;border-top:1px solid rgba(255,255,255,.2);padding-top:12px}
 
-.tag { display: inline-block; padding: 1px 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; border: 1px solid var(--border); background: #141414; }
-.tag.archery { border-color: #c4a96a; color: #c4a96a; }
-.tag.muzz { border-color: #d48b58; color: #d48b58; }
-.tag.rifle { border-color: #6bb582; color: #6bb582; }
-.tag.youth { border-color: #7da9d4; color: #7da9d4; }
-
-.draw-cell { font-weight: 600; font-variant-numeric: tabular-nums; }
-.draw-cell.easy { color: var(--good); }
-.draw-cell.med { color: var(--warn); }
-.draw-cell.hard { color: var(--bad); }
-.draw-cell .sub { font-weight: normal; font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px; }
-
-.success-cell { font-variant-numeric: tabular-nums; }
-.success-bar { height: 4px; background: var(--border-light); margin-top: 3px; position: relative; }
-.success-bar-fill { position: absolute; top: 0; left: 0; bottom: 0; background: var(--odfw-green); }
-
-.my-odds-cell { font-weight: 600; font-variant-numeric: tabular-nums; }
-.my-odds-cell.easy { color: var(--good); }
-.my-odds-cell.med  { color: var(--warn); }
-.my-odds-cell.hard { color: var(--bad); }
-.my-odds-cell.none { color: var(--text-muted); }
-
-.empty-state { padding: 40px 20px; text-align: center; color: var(--text-muted); font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 14px; }
-
-/* MODAL */
-.modal-backdrop { position: fixed; inset: 0; background: rgba(20,30,20,.6); display: none; align-items: flex-start; justify-content: center; z-index: 100; padding: 20px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-.modal-backdrop.open { display: flex; }
-.modal { background: #141414; border: 1px solid var(--border); max-width: 720px; width: 100%; margin: 20px auto; border-top: 4px solid var(--odfw-gold); }
-.modal-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 20px; background: var(--odfw-tan); border-bottom: 1px solid var(--border); }
-.modal-head h3 { font-family: 'Georgia',serif; font-size: 20px; font-weight: normal; color: var(--odfw-green-dark); margin: 0; }
-.modal-head .sub { font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .5px; margin-top: 3px; }
-.modal-close { background: transparent; border: 1px solid var(--text-secondary); color: var(--text-secondary); width: 28px; height: 28px; font-size: 18px; line-height: 1; cursor: pointer; font-family: serif; flex-shrink: 0; }
-.modal-body { padding: 20px; font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 14px; }
-.modal-section { margin-bottom: 20px; }
-.modal-section h4 { font-family: 'Georgia',serif; font-size: 15px; color: var(--odfw-green-dark); margin: 0 0 8px; border-bottom: 1px solid var(--border-light); padding-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
-.kv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 16px; }
-.kv .k { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
-.kv .v { font-size: 16px; font-family: 'Georgia',serif; color: var(--text-primary); font-variant-numeric: tabular-nums; }
-
-table.points { width: 100%; border-collapse: collapse; font-size: 13px; }
-table.points th, table.points td { padding: 6px 8px; border-bottom: 1px solid var(--border-light); text-align: right; font-variant-numeric: tabular-nums; }
-table.points th { background: var(--odfw-tan-light); text-align: right; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--odfw-green-dark); }
-table.points th:first-child, table.points td:first-child { text-align: left; }
-table.points tr.drew td { background: var(--good-bg); font-weight: 600; }
-
-/* FIREBASE STATUS BANNER */
-.fb-banner {
-  font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 13px; padding: 8px 14px;
-  border-left: 3px solid var(--odfw-gold); background: #1a1810; color: #f0f0f0;
-  margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
-}
-.fb-banner.success { border-left-color: var(--good); background: #101a12; }
-.fb-banner.error { border-left-color: var(--bad); background: #1a1010; }
-
-/* YEAR CONTROLS */
-.year-controls { display: flex; gap: 14px; flex-wrap: wrap; background: #141414; border: 1px solid #3a3a3a; padding: 12px 16px; margin: 0 0 20px; align-items: flex-end; }
-.year-control-field { flex: 1 1 180px; min-width: 160px; }
-.year-control-field label { display: block; font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: #d4a04a; margin-bottom: 4px; }
-.year-control-field select {
-  width: 100%; padding: 7px 9px; border: 1px solid #3a3a3a; background: #141414; color: #f0f0f0;
-  -webkit-text-fill-color: #f0f0f0; color-scheme: dark; font-family: 'Helvetica Neue',Arial,sans-serif;
-  font-size: 14px; border-radius: 0; -webkit-appearance: none; appearance: none;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%236bb582' stroke-width='1.5' fill='none'/></svg>");
-  background-repeat: no-repeat; background-position: right 8px center; padding-right: 28px;
-}
-
-/* YEARS LIST */
-.years-list { border: 1px solid #3a3a3a; }
-.year-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid #2a2a2a; font-family: 'Helvetica Neue',Arial,sans-serif; background: #141414; }
-.year-row:last-child { border-bottom: none; }
-.year-row.selected { background: #1a2418; border-left: 3px solid #d4a04a; }
-.year-row-main { flex: 1; min-width: 0; }
-.year-label { font-size: 16px; font-family: 'Georgia',serif; color: #f0f0f0; font-weight: 600; }
-.year-meta { font-size: 12px; color: #8a8a8a; margin-top: 2px; }
-.year-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
-.btn-mini { font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 11px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; padding: 5px 10px; background: #1f1f1f; color: #6bb582; border: 1px solid #6bb582; cursor: pointer; border-radius: 0; -webkit-appearance: none; appearance: none; }
-.btn-mini:hover { background: #2a2a2a; }
-.btn-mini.danger { color: #d46b6b; border-color: #d46b6b; }
-.btn-mini.danger:hover { background: #2a1818; }
-
-.badge-sm { display: inline-block; margin-left: 6px; padding: 1px 6px; font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; background: #d4a04a; color: #000; border-radius: 2px; vertical-align: middle; }
-.badge-sm-alt { display: inline-block; margin-left: 6px; padding: 1px 6px; font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; background: #1f1f1f; color: #6bb582; border: 1px solid #6bb582; border-radius: 2px; vertical-align: middle; }
-
-.callout { padding: 10px 14px; margin: 0 0 16px; border-left: 3px solid #d4a04a; background: #2a2418; font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 14px; color: #f0f0f0; }
-.callout.good { background: #1a2a1f; border-left-color: #6bb582; }
-.callout.warn { background: #2a2418; border-left-color: #d4a04a; }
-
-footer { background: var(--odfw-green-dark); color: rgba(255,255,255,.8); padding: 30px 20px; margin-top: 40px; font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 12px; line-height: 1.6; }
-footer .inner { max-width: 1300px; margin: 0 auto; }
-footer a { color: var(--odfw-tan); }
-.disclaimer { font-style: italic; font-size: 11px; opacity: .7; margin-top: 16px; border-top: 1px solid rgba(255,255,255,.2); padding-top: 12px; }
-
-.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--odfw-green-dark); color: #fff; padding: 10px 18px; font-family: 'Helvetica Neue',Arial,sans-serif; font-size: 13px; border-left: 3px solid var(--odfw-gold); z-index: 200; max-width: 90%; display: none; }
-.toast.error { background: var(--bad); border-left-color: #fff; }
-.toast.show { display: block; }
-
-.trend { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 600; font-family: 'Helvetica Neue',Arial,sans-serif; letter-spacing: .3px; font-variant-numeric: tabular-nums; }
-.trend-up { color: #6bb582; }
-.trend-down { color: #d46b6b; }
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(–gl);color:#fff;padding:10px 18px;font-family:sans-serif;font-size:13px;border-left:3px solid var(–gold);z-index:200;max-width:90%;display:none}
+.toast.err{background:var(–bad);border-left-color:#fff}.toast.show{display:block}
 </style>
 
 </head>
@@ -385,7 +167,7 @@ footer a { color: var(--odfw-tan); }
   <div class="site-header-inner">
     <div class="crest">ODFW</div>
     <div>
-      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="site-version">v1.3</span></h1>
+      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v1.4</span></h1>
       <div class="site-subtitle">Buck Deer &amp; Elk &mdash; Draw Odds &amp; Harvest Statistics</div>
     </div>
   </div>
@@ -394,1321 +176,812 @@ footer a { color: var(--odfw-tan); }
 <div class="subnav">
   <div class="subnav-inner">
     <button class="nav-link active" data-page="database">Hunt Database</button>
-    <button class="nav-link" data-page="data">Data Manager <span class="badge" id="navBadge" style="display:none;">!</span></button>
+    <button class="nav-link" data-page="data">Data Manager <span class="nbadge" id="navBadge" style="display:none">!</span></button>
   </div>
 </div>
 
 <main>
-  <!-- ===================== DATABASE PAGE ===================== -->
+
+  <!-- DATABASE PAGE -->
+
   <div class="page active" data-page="database">
     <h2 class="page-title">Hunt Database</h2>
-    <p class="page-lede">Browse Oregon controlled hunts. Draw odds and success rates use resident application data. Enter your points to see personalized draw odds.</p>
+    <p class="page-lede">Data loads automatically from the cloud. Enter your preference points to see personal draw odds.</p>
 
 ```
-<div id="fbLoadBanner" class="fb-banner" style="display:none;">
-  <span id="fbLoadMsg">Loading shared data from cloud…</span>
-  <button class="btn secondary" id="btnFbLoad" style="white-space:nowrap;">Load from Cloud</button>
+<div id="dbBanner" class="banner"><span class="spin"></span><span id="dbMsg">Loading data from cloud…</span></div>
+
+<div id="yctrl" class="yctrl" style="display:none">
+  <div class="ycf"><label>Viewing</label><select id="ySelView"></select></div>
+  <div class="ycf"><label>Compare To</label><select id="ySelCompare"></select></div>
 </div>
 
-<div id="yearControls" class="year-controls" style="display:none;">
-  <div class="year-control-field">
-    <label>Viewing</label>
-    <select id="ySelView"></select>
-  </div>
-  <div class="year-control-field">
-    <label>Compare To</label>
-    <select id="ySelCompare"></select>
-  </div>
-</div>
-
-<div id="emptyDataPrompt" style="display:none;">
-  <section class="panel" style="border-left:4px solid var(--odfw-gold);">
-    <div class="panel-body" style="text-align:center;">
-      <p style="margin:0 0 14px;font-family:'Helvetica Neue',Arial,sans-serif;color:var(--text-secondary);">
-        No data loaded. Load from cloud or visit the Data Manager to upload ODFW reports.
-      </p>
-      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-        <button class="btn" id="btnLoadCloud">Load from Cloud</button>
-        <button class="btn secondary" id="btnGoToData">Upload Files</button>
-      </div>
+<div id="emptyPrompt" style="display:none">
+  <section class="panel" style="border-left:4px solid var(--gold)">
+    <div class="panel-body" style="text-align:center">
+      <p style="margin:0 0 14px;font-family:sans-serif;color:var(--tsec)">No data available yet. Go to Data Manager to upload ODFW reports.</p>
+      <button class="btn" id="btnGoData">Go to Data Manager</button>
     </div>
   </section>
 </div>
 
-<!-- FILTERS -->
 <section class="panel">
   <div class="panel-head">Filter</div>
   <div class="panel-body">
     <div class="filters">
-      <div class="field">
-        <label for="fSpecies">Species</label>
-        <select id="fSpecies">
-          <option value="all">All</option>
-          <option value="elk">Elk</option>
-          <option value="deer">Buck Deer</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="fWeapon">Weapon / Type</label>
-        <select id="fWeapon">
-          <option value="all">All</option>
-          <option value="rifle">Rifle (Any Legal)</option>
-          <option value="archery">Archery</option>
-          <option value="muzz">Muzzleloader</option>
-          <option value="youth">Youth</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="fMyPoints">My Points</label>
-        <input type="number" id="fMyPoints" min="0" max="30" placeholder="e.g. 5" inputmode="numeric">
-      </div>
-      <div class="field">
-        <label for="fDrawability">Show Hunts</label>
-        <select id="fDrawability">
-          <option value="all">All</option>
-          <option value="canDraw">I have enough points</option>
-          <option value="oneAway">One point away</option>
-          <option value="reachable">Within 3 points</option>
-        </select>
-      </div>
-      <div class="field" style="grid-column:span 2;">
-        <label for="fSearch">Search Unit / Hunt Name</label>
-        <input type="text" id="fSearch" placeholder="e.g. Murderers Cr, Wenaha, 230X">
-      </div>
+      <div class="field"><label>Species</label>
+        <select id="fSpecies"><option value="all">All</option><option value="elk">Elk</option><option value="deer">Buck Deer</option></select></div>
+      <div class="field"><label>Weapon / Type</label>
+        <select id="fWeapon"><option value="all">All</option><option value="rifle">Rifle (Any Legal)</option><option value="archery">Archery</option><option value="muzz">Muzzleloader</option><option value="youth">Youth</option></select></div>
+      <div class="field"><label>My Points</label>
+        <input type="number" id="fMyPoints" min="0" max="30" inputmode="numeric"></div>
+      <div class="field"><label>Show Hunts</label>
+        <select id="fDrawability"><option value="all">All</option><option value="canDraw">I can draw (100% tier)</option><option value="oneAway">One point away from 100%</option><option value="reachable">Within 3 points of 100%</option></select></div>
+      <div class="field" style="grid-column:span 2"><label>Search Unit / Hunt Name</label>
+        <input type="text" id="fSearch" placeholder="e.g. Murderers Cr, Wenaha, 230X"></div>
     </div>
   </div>
 </section>
 
-<!-- RESULTS -->
-<div class="results-meta">
-  <h2>Results</h2>
-  <div class="results-count" id="resultsCount">—</div>
-</div>
-
-<div class="table-wrap">
+<div class="rmeta"><h2>Results</h2><div class="rcount" id="rcount">—</div></div>
+<div class="twrap">
   <table class="hunts" id="huntsTable">
-    <thead>
-      <tr>
-        <th data-sort="huntNum">Hunt No. <span class="sort-arrow">▾</span></th>
-        <th data-sort="huntName">Hunt Name <span class="sort-arrow">▾</span></th>
-        <th data-sort="weapon">Type <span class="sort-arrow">▾</span></th>
-        <th data-sort="tags" class="num-th">Tags <span class="sort-arrow">▾</span></th>
-        <th data-sort="minPts" class="num-th">Min. Pts to Draw <span class="sort-arrow">▾</span></th>
-        <th data-sort="firstChoiceOdds" class="num-th">1st-Choice Odds <span class="sort-arrow">▾</span></th>
-        <th data-sort="success" class="num-th">Success Rate <span class="sort-arrow">▾</span></th>
-        <th class="num-th">Most Common Bull</th>
-        <th data-sort="myOdds" class="num-th">My Draw Odds <span class="sort-arrow">▾</span></th>
-        <th data-sort="apps" class="num-th">Applicants <span class="sort-arrow">▾</span></th>
-      </tr>
-    </thead>
-    <tbody id="huntsBody">
-      <tr><td colspan="10" class="empty-state">Upload an ODFW Preference Points report or load from cloud to begin.</td></tr>
-    </tbody>
+    <thead><tr>
+      <th data-sort="huntNum">Hunt No. <span class="sa">▾</span></th>
+      <th data-sort="huntName">Hunt Name <span class="sa">▾</span></th>
+      <th data-sort="weapon">Type <span class="sa">▾</span></th>
+      <th data-sort="tags" class="num-th">Tags <span class="sa">▾</span></th>
+      <th data-sort="pts100" class="num-th">Pts for 100% Draw <span class="sa">▾</span></th>
+      <th data-sort="success" class="num-th">Success Rate <span class="sa">▾</span></th>
+      <th class="num-th">Most Common Bull</th>
+      <th data-sort="myOdds" class="num-th">My Draw Odds <span class="sa">▾</span></th>
+      <th data-sort="apps" class="num-th">Applicants <span class="sa">▾</span></th>
+    </tr></thead>
+    <tbody id="huntsBody"><tr><td colspan="9" class="empty"><span class="spin"></span> Loading…</td></tr></tbody>
   </table>
 </div>
 ```
 
   </div>
 
-  <!-- ===================== DATA MANAGER PAGE ===================== -->
+  <!-- DATA MANAGER -->
 
   <div class="page" data-page="data">
     <h2 class="page-title">Data Manager</h2>
-    <p class="page-lede">Upload ODFW reports to parse and share data. Once uploaded, data is saved to the cloud so everyone can use it without re-uploading.</p>
+    <p class="page-lede">Upload ODFW reports. Files are parsed in your browser and automatically saved to the cloud — everyone sees the data instantly.</p>
 
 ```
-<section class="panel">
-  <div class="panel-head">Cloud Sync (Firebase)</div>
-  <div class="panel-body">
-    <div id="fbSyncStatus" class="fb-banner" style="margin-bottom:0;">Connecting to cloud…</div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
-      <button class="btn" id="btnSyncToCloud">Save to Cloud</button>
-      <button class="btn secondary" id="btnLoadFromCloud">Load from Cloud</button>
-    </div>
-    <p class="help-text" style="margin-top:10px;">
-      "Save to Cloud" pushes your locally-uploaded data so others can see it. "Load from Cloud" pulls the latest shared data onto this device.
-    </p>
-  </div>
-</section>
+<div id="dmBanner" class="banner"><span class="spin"></span><span id="dmMsg">Connecting to cloud…</span></div>
 
 <section class="panel">
   <div class="panel-head">Status</div>
   <div class="panel-body">
     <div class="data-status">
       <div>
-        <div class="status-light"><span id="statusDot" class="status-dot"></span> <strong id="statusText">No data loaded</strong></div>
-        <div id="statusDetail" style="font-size:12px;color:var(--text-muted);margin-top:4px;font-family:'Helvetica Neue',Arial,sans-serif;"></div>
+        <span id="sdot" class="sdot"></span><strong id="stxt">No data</strong>
+        <div id="sdet" style="font-size:12px;color:var(--tmut);margin-top:4px;font-family:sans-serif"></div>
       </div>
-      <div style="font-size:12px;color:var(--text-muted);font-family:'Helvetica Neue',Arial,sans-serif;">
-        Last loaded: <span id="lastLoaded">—</span>
-      </div>
+      <div style="font-size:12px;color:var(--tmut);font-family:sans-serif">Last loaded: <span id="slast">—</span></div>
     </div>
   </div>
 </section>
 
 <section class="panel">
-  <div class="panel-head">Step 1 &mdash; Choose Year</div>
+  <div class="panel-head">Step 1 — Choose Year</div>
   <div class="panel-body">
-    <p style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;margin:0 0 12px;color:var(--text-secondary);">
-      Enter the year of the reports you're about to upload.
-    </p>
-    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
-      <div class="field" style="flex:0 0 140px;">
-        <label for="pendingYearInput">Year</label>
-        <input type="number" id="pendingYearInput" min="2000" max="2100" placeholder="e.g. 2025" inputmode="numeric">
-      </div>
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <div class="field" style="flex:0 0 140px"><label>Year</label>
+        <input type="number" id="pyInput" min="2000" max="2100" placeholder="2025" inputmode="numeric"></div>
       <button class="btn" id="btnSetYear">Use This Year</button>
-      <span style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;color:var(--text-secondary);">
-        Currently editing: <strong id="pendingYearDisplay" style="color:#d4a04a;">none</strong>
-      </span>
+      <span style="font-family:sans-serif;font-size:13px;color:var(--tsec)">Editing: <strong id="pyDisp" style="color:var(--gold)">none</strong></span>
     </div>
-    <div id="yearsList" class="years-list" style="margin-top:18px;"></div>
+    <div id="ylist" class="ylist" style="margin-top:18px"></div>
   </div>
 </section>
 
 <section class="panel">
-  <div class="panel-head">Step 2 &mdash; Download from ODFW</div>
+  <div class="panel-head">Step 2 — Download from ODFW</div>
   <div class="panel-body">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-      <a class="src-btn" href="https://odfw.huntfishoregon.com/reportdownloads" target="_blank" rel="noopener">Point Summary Link</a>
-      <a class="src-btn" href="https://myodfw.com/articles/big-game-hunting-harvest-statistics" target="_blank" rel="noopener">Harvest Summary Link</a>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <a class="src-btn" href="https://odfw.huntfishoregon.com/reportdownloads" target="_blank" rel="noopener">Point Summary</a>
+      <a class="src-btn" href="https://myodfw.com/articles/big-game-hunting-harvest-statistics" target="_blank" rel="noopener">Harvest Summary</a>
     </div>
   </div>
 </section>
 
 <section class="panel">
-  <div class="panel-head">Step 3 &mdash; Upload Files</div>
+  <div class="panel-head">Step 3 — Upload Files</div>
   <div class="panel-body">
     <div class="upload-grid">
-      <div class="upload-cell">
-        <label class="upload-zone" id="uzElkPoints" data-key="elkPoints">
-          <input type="file" accept=".xlsx,.xls" data-target="elkPoints">
-          <div class="uz-label">Elk &mdash; Preference Points</div>
-          <div class="uz-hint">Draw report XLSX</div>
-          <div class="uz-file" data-file="elkPoints"></div>
-        </label>
-      </div>
-      <div class="upload-cell">
-        <label class="upload-zone" id="uzDeerPoints" data-key="deerPoints">
-          <input type="file" accept=".xlsx,.xls" data-target="deerPoints">
-          <div class="uz-label">Buck Deer &mdash; Preference Points</div>
-          <div class="uz-hint">Draw report XLSX</div>
-          <div class="uz-file" data-file="deerPoints"></div>
-        </label>
-      </div>
-      <div class="upload-cell">
-        <label class="upload-zone" id="uzElkRifleHarvest" data-key="elkRifleHarvest">
-          <input type="file" accept=".pdf,.xlsx,.xls" data-target="elkRifleHarvest">
-          <div class="uz-label">Elk &mdash; Rifle Harvest</div>
-          <div class="uz-hint">"Any Legal Weapon" PDF / XLSX</div>
-          <div class="uz-file" data-file="elkRifleHarvest"></div>
-        </label>
-      </div>
-      <div class="upload-cell">
-        <label class="upload-zone" id="uzElkArcheryHarvest" data-key="elkArcheryHarvest">
-          <input type="file" accept=".pdf,.xlsx,.xls" data-target="elkArcheryHarvest">
-          <div class="uz-label">Elk &mdash; Archery Harvest</div>
-          <div class="uz-hint">Archery PDF / XLSX</div>
-          <div class="uz-file" data-file="elkArcheryHarvest"></div>
-        </label>
-      </div>
-      <div class="upload-cell">
-        <label class="upload-zone" id="uzDeerRifleHarvest" data-key="deerRifleHarvest">
-          <input type="file" accept=".pdf,.xlsx,.xls" data-target="deerRifleHarvest">
-          <div class="uz-label">Buck Deer &mdash; Rifle Harvest</div>
-          <div class="uz-hint">"Any Legal Weapon" PDF / XLSX</div>
-          <div class="uz-file" data-file="deerRifleHarvest"></div>
-        </label>
-      </div>
-      <div class="upload-cell">
-        <label class="upload-zone" id="uzDeerArcheryHarvest" data-key="deerArcheryHarvest">
-          <input type="file" accept=".pdf,.xlsx,.xls" data-target="deerArcheryHarvest">
-          <div class="uz-label">Buck Deer &mdash; Archery Harvest</div>
-          <div class="uz-hint">Archery PDF / XLSX</div>
-          <div class="uz-file" data-file="deerArcheryHarvest"></div>
-        </label>
-      </div>
+      <label class="upload-zone" data-key="elkPoints"><input type="file" accept=".xlsx,.xls" data-target="elkPoints"><div class="uzl">Elk — Preference Points</div><div class="uzh">Draw report XLSX</div><div class="uzf" data-file="elkPoints"></div></label>
+      <label class="upload-zone" data-key="deerPoints"><input type="file" accept=".xlsx,.xls" data-target="deerPoints"><div class="uzl">Deer — Preference Points</div><div class="uzh">Draw report XLSX</div><div class="uzf" data-file="deerPoints"></div></label>
+      <label class="upload-zone" data-key="elkRifleHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="elkRifleHarvest"><div class="uzl">Elk — Rifle Harvest</div><div class="uzh">PDF or XLSX</div><div class="uzf" data-file="elkRifleHarvest"></div></label>
+      <label class="upload-zone" data-key="elkArcheryHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="elkArcheryHarvest"><div class="uzl">Elk — Archery Harvest</div><div class="uzh">PDF or XLSX</div><div class="uzf" data-file="elkArcheryHarvest"></div></label>
+      <label class="upload-zone" data-key="deerRifleHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="deerRifleHarvest"><div class="uzl">Deer — Rifle Harvest</div><div class="uzh">PDF or XLSX</div><div class="uzf" data-file="deerRifleHarvest"></div></label>
+      <label class="upload-zone" data-key="deerArcheryHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="deerArcheryHarvest"><div class="uzl">Deer — Archery Harvest</div><div class="uzh">PDF or XLSX</div><div class="uzf" data-file="deerArcheryHarvest"></div></label>
     </div>
-    <div class="actions-row">
-      <button class="btn" id="btnViewDatabase">View Hunt Database</button>
-      <button class="btn danger" id="btnClear">Clear All Local Data</button>
+    <div class="arow">
+      <button class="btn" id="btnViewDb">View Hunt Database</button>
+      <button class="btn dan" id="btnClear">Clear Local Data</button>
     </div>
-    <p class="help-text">
-      Preference Points reports power draw-odds columns. Harvest PDFs power success rate and antler-size columns. Upload only some files is fine — missing columns show "—". After uploading, hit <strong>Save to Cloud</strong> above so others see the data.
-    </p>
+    <p class="htext">Files parse in your browser, then auto-save to cloud. Everyone sees the data on their next page load — no manual sync needed.</p>
   </div>
 </section>
 ```
 
   </div>
 
-  <!-- DETAIL MODAL -->
+  <!-- MODAL -->
 
   <div class="modal-backdrop" id="modal">
     <div class="modal">
-      <div class="modal-head">
-        <div>
-          <h3 id="mTitle">—</h3>
-          <div class="sub" id="mSub">—</div>
-        </div>
-        <button class="modal-close" id="mClose" aria-label="Close">×</button>
+      <div class="mhead">
+        <div><h3 id="mTitle">—</h3><div class="mhsub" id="mSub">—</div></div>
+        <button class="mclose" id="mClose">×</button>
       </div>
-      <div class="modal-body" id="mBody"></div>
+      <div class="mbody" id="mBody"></div>
     </div>
   </div>
+
 </main>
 
 <footer>
   <div class="inner">
-    <div><strong>Oregon Controlled Hunt Planner</strong> &mdash; A personal reference tool.</div>
-    <div style="margin-top:6px;">Data sourced from public ODFW reports. Not affiliated with or endorsed by ODFW. <a href="https://myodfw.com" target="_blank" rel="noopener">myodfw.com</a></div>
-    <div class="disclaimer">Always verify hunt numbers, season dates, and regulations against the current Oregon Big Game Regulations booklet before applying.</div>
+    <strong>Oregon Controlled Hunt Planner</strong> — Personal reference tool. Data from public ODFW reports. Not affiliated with ODFW.
+    <a href="https://myodfw.com" target="_blank" rel="noopener">myodfw.com</a>
+    <div class="disc">Always verify hunt numbers, dates, and regulations against the current Oregon Big Game Regulations before applying.</div>
   </div>
 </footer>
 
 <div class="toast" id="toast"></div>
 
+<!-- Firebase compat SDK — loaded synchronously before the main script -->
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
 <script>
 'use strict';
 
-// ─── STATE ───────────────────────────────────────────────────────────────────
-const STORAGE_KEY = 'odfw_planner_v3';
-const state = {
-  years: {},          // { "2025": { hunts, files, harvestData } }
-  selectedYear: null,
-  compareYear: null,
-  pendingYear: null,
-  sortKey: 'huntNum',
-  sortDir: 'asc'
-};
+// ─── FIREBASE (synchronous compat SDK) ───────────────────────────────────────
+let db = null;
+try {
+  firebase.initializeApp({
+    apiKey:            'AIzaSyCqbU875vWyWS0dQWr0hoqVRscH2AtU_v4',
+    authDomain:        'oregon-hunting.firebaseapp.com',
+    projectId:         'oregon-hunting',
+    storageBucket:     'oregon-hunting.firebasestorage.app',
+    messagingSenderId: '84034970737',
+    appId:             '1:84034970737:web:d470b1daca7b56ce6227d0'
+  });
+  db = firebase.firestore();
+  console.log('[FB] Ready');
+} catch(e) { console.warn('[FB] Init failed:', e); }
 
-function curYear()  { return state.selectedYear ? state.years[state.selectedYear] : null; }
-function getHunts() { const y = curYear(); return y ? y.hunts : []; }
-function getYearList() { return Object.keys(state.years).sort().reverse(); }
-function priorYear(year) {
-  const all = getYearList();
-  const idx = all.indexOf(year);
-  return idx >= 0 && idx < all.length - 1 ? all[idx + 1] : null;
-}
-function findHuntInYear(year, huntNum, species) {
-  const y = state.years[year];
-  if (!y) return null;
-  return y.hunts.find(h => h.huntNum === huntNum && h.species === species);
+const CHUNK = 150;
+
+async function fbSave(year, hunts, harvestData) {
+  if (!db) return false;
+  try {
+    const chunks = [];
+    for (let i = 0; i < hunts.length; i += CHUNK) chunks.push(hunts.slice(i, i + CHUNK));
+    await db.collection('years').doc(String(year)).set({
+      year: String(year), huntCount: hunts.length, chunkCount: chunks.length,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    for (let ci = 0; ci < chunks.length; ci++) {
+      await db.collection('years').doc(String(year)).collection('chunks').doc(String(ci))
+        .set({ hunts: JSON.stringify(chunks[ci]) });
+    }
+    await db.collection('years').doc(String(year)).collection('harvest').doc('all')
+      .set({ data: JSON.stringify(harvestData), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    console.log('[FB] Saved', year, hunts.length, 'hunts');
+    return true;
+  } catch(e) { console.warn('[FB] Save error:', e); return false; }
 }
 
-function applyHarvestForYear(year) {
-  const y = state.years[year];
-  if (!y) return;
+async function fbLoad() {
+  if (!db) return null;
+  try {
+    const snap = await db.collection('years').get();
+    const out = {};
+    for (const yd of snap.docs) {
+      const meta = yd.data(), year = meta.year;
+      let hunts = [];
+      for (let ci = 0; ci < (meta.chunkCount || 1); ci++) {
+        const cd = await db.collection('years').doc(year).collection('chunks').doc(String(ci)).get();
+        if (cd.exists) hunts = hunts.concat(JSON.parse(cd.data().hunts || '[]'));
+      }
+      const hd = await db.collection('years').doc(year).collection('harvest').doc('all').get();
+      out[year] = { hunts, harvestData: hd.exists ? JSON.parse(hd.data().data || '{}') : {}, files: {} };
+    }
+    return out;
+  } catch(e) { console.warn('[FB] Load error:', e); return null; }
+}
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+const SK = 'odfw_v4';
+const S = { years:{}, selectedYear:null, compareYear:null, pendingYear:null, sortKey:'huntNum', sortDir:'asc' };
+
+const curYD  = () => S.selectedYear ? S.years[S.selectedYear] : null;
+const getH   = () => { const y = curYD(); return y ? y.hunts : []; };
+const yList  = () => Object.keys(S.years).sort().reverse();
+const prevYr = yr  => { const a=yList(), i=a.indexOf(yr); return i>=0&&i<a.length-1?a[i+1]:null; };
+const findH  = (yr,num,sp) => { const y=S.years[yr]; return y?y.hunts.find(h=>h.huntNum===num&&h.species===sp):null; };
+
+function applyHarvest(year) {
+  const y = S.years[year]; if (!y) return;
   y.hunts.forEach(h => { h.harvest = null; });
   Object.entries(y.harvestData || {}).forEach(([key, data]) => {
     if (!data) return;
-    const species = key.startsWith('elk') ? 'elk' : 'deer';
-    const isArchery = key.endsWith('ArcheryHarvest');
-    const matchWeapons = isArchery ? ['archery'] : ['rifle', 'youth', 'muzz'];
+    const sp = key.startsWith('elk') ? 'elk' : 'deer';
+    const arch = key.endsWith('ArcheryHarvest');
+    const weps = arch ? ['archery'] : ['rifle','youth','muzz'];
     let matched = 0;
     y.hunts.forEach(h => {
-      if (h.species !== species) return;
-      if (!matchWeapons.includes(h.weapon)) return;
+      if (h.species !== sp || !weps.includes(h.weapon)) return;
       if (data[h.huntNum]) { h.harvest = data[h.huntNum]; matched++; }
     });
     if (y.files[key]) y.files[key].matched = matched;
   });
 }
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
-function $(sel) { return document.querySelector(sel); }
-function $$(sel) { return [...document.querySelectorAll(sel)]; }
+// ─── UTILS ───────────────────────────────────────────────────────────────────
+const $  = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const fmt  = n => (n==null||isNaN(n)) ? '—' : Number(n).toLocaleString();
+const fmtP = n => (n==null||isNaN(n)) ? '—' : Math.round(n)+'%';
+const esc  = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-function toast(msg, isError) {
-  const t = $('#toast');
-  t.textContent = msg;
-  t.className = 'toast show' + (isError ? ' error' : '');
+function toast(msg, isErr) {
+  const t = $('#toast'); t.textContent = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
   setTimeout(() => { t.className = 'toast'; }, 3500);
 }
 
-function fmt(n) {
-  if (n === null || n === undefined || isNaN(n)) return '—';
-  return Number(n).toLocaleString();
-}
-function fmtPct(n) {
-  if (n === null || n === undefined || isNaN(n)) return '—';
-  return Math.round(n) + '%';
+function banner(id, type, msg, spin) {
+  const el = $(id); if (!el) return;
+  el.className = 'banner' + (type ? ' '+type : '');
+  el.innerHTML = (spin ? '<span class="spin"></span>' : '') + '<span>' + esc(msg) + '</span>';
 }
 
 // ─── CLASSIFICATION ───────────────────────────────────────────────────────────
-function classifyHunt(huntNum, huntName) {
-  const num = String(huntNum || '').toUpperCase();
-  const name = String(huntName || '').toLowerCase();
-  if (name.includes('youth')) return 'youth';
-  if (name.includes('muzzleload')) return 'muzz';
-  if (name.includes('archery') || name.includes('bow') || name.includes('trad')) return 'archery';
-  if (/T\d*$/.test(num)) return 'youth';
-  if (/M$/.test(num)) return 'muzz';
-  if (/R\d*$/.test(num)) return 'archery';
+function weapon(num, name) {
+  const n=String(num||'').toUpperCase(), na=String(name||'').toLowerCase();
+  if (na.includes('youth')) return 'youth';
+  if (na.includes('muzzleload')) return 'muzz';
+  if (na.includes('archery')||na.includes('bow')||na.includes('trad')) return 'archery';
+  if (/T\d*$/.test(n)) return 'youth';
+  if (/M$/.test(n)) return 'muzz';
+  if (/R\d*$/.test(n)) return 'archery';
   return 'rifle';
 }
-function classifySpecies(huntNum) {
-  const n = parseInt(String(huntNum).match(/^\d+/)?.[0] || '0', 10);
-  if (n >= 100 && n < 200) return 'deer';
-  if (n >= 200 && n < 300) return 'elk';
-  return 'other';
+function species(num) {
+  const n=parseInt(String(num).match(/^\d+/)?.[0]||'0',10);
+  return n>=100&&n<200?'deer':n>=200&&n<300?'elk':'other';
 }
-function weaponLabel(w) {
-  return { rifle: 'Rifle', archery: 'Archery', muzz: 'Muzz.', youth: 'Youth' }[w] || w;
-}
+const wLabel = w => ({rifle:'Rifle',archery:'Archery',muzz:'Muzz.',youth:'Youth'}[w]||w);
 
-// ─── XLSX PARSING — Preference Points ────────────────────────────────────────
-// Column layout (0-indexed):
-// 0:HuntNum  1:HuntName  2:Tags
-// 3:ResApps  4:ResDrawn  5:NRApps  6:NRDrawn
-// 7:TotalApps  8:TotalDrawn  9:TotalPtApps
-// 10:TotalPtDrawnP1  11:TotalPtDrawnP2
-// Per-point cols: 12:Points 13:Apps 14:ResApps 15:ResDrawn 16:NRApps 17:NRDrawn
-function parsePointsXlsx(arrayBuffer, speciesOverride) {
-  const wb = XLSX.read(arrayBuffer, { type: 'array' });
-  let ws = null;
-  for (const name of wb.SheetNames) {
-    if (/draw|point/i.test(name)) { ws = wb.Sheets[name]; break; }
+// ─── DERIVE pts100 ────────────────────────────────────────────────────────────
+// pts100 = MINIMUM point tier where resDrawn >= resApps (every resident drew).
+// We iterate all tiers; if multiple qualify we want the lowest (easiest to reach).
+function derive(h) {
+  h.pointBreakdown.sort((a,b) => b.points - a.points);
+  let pts100 = null, minPts = null;
+  for (const p of h.pointBreakdown) {
+    if (p.resDrawn > 0) minPts = p.points;
+    if (p.resApps > 0 && p.resDrawn >= p.resApps) pts100 = p.points; // keep updating → ends at minimum
   }
-  if (!ws) ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
-
-  const hunts = [];
-  let cur = null;
-
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    if (!r) continue;
-    const huntNum = r[0];
-    const huntName = r[1];
-    const tags = r[2];
-    const isHeader = huntNum && typeof huntNum === 'string' && huntNum.trim() !== ''
-                  && huntName && typeof huntName === 'string' && huntName.trim() !== ''
-                  && typeof tags === 'number';
-
-    if (isHeader) {
-      if (cur) hunts.push(cur);
-      cur = {
-        huntNum: String(huntNum).trim(),
-        huntName: String(huntName).trim(),
-        tags: Number(tags) || 0,
-        residentApps: Number(r[3]) || 0,
-        residentDrawn: Number(r[4]) || 0,
-        nonResidentApps: Number(r[5]) || 0,
-        nonResidentDrawn: Number(r[6]) || 0,
-        totalApps: Number(r[7]) || 0,
-        totalDrawn: Number(r[8]) || 0,
-        totalPointApps: Number(r[9]) || 0,
-        p1Drawn: Number(r[10]) || 0,
-        p2Drawn: Number(r[11]) || 0,
-        pointBreakdown: []
-      };
-      if (typeof r[12] === 'number') {
-        cur.pointBreakdown.push({
-          points: Number(r[12]),
-          apps: Number(r[13]) || 0,
-          resApps: Number(r[14]) || 0,
-          resDrawn: Number(r[15]) || 0,
-          nrApps: Number(r[16]) || 0,
-          nrDrawn: Number(r[17]) || 0
-        });
-      }
-    } else if (cur && typeof r[12] === 'number') {
-      cur.pointBreakdown.push({
-        points: Number(r[12]),
-        apps: Number(r[13]) || 0,
-        resApps: Number(r[14]) || 0,
-        resDrawn: Number(r[15]) || 0,
-        nrApps: Number(r[16]) || 0,
-        nrDrawn: Number(r[17]) || 0
-      });
-    }
-  }
-  if (cur) hunts.push(cur);
-
-  hunts.forEach(h => {
-    h.pointBreakdown.sort((a, b) => b.points - a.points);
-    let minPts = null;
-    for (const p of h.pointBreakdown) {
-      if (p.resDrawn > 0) minPts = p.points;
-    }
-    h.minPointsToDraw = minPts;
-    // 1st-choice odds using RESIDENT apps only
-    h.firstChoiceOdds = h.residentApps > 0 ? (h.residentDrawn / h.residentApps) * 100 : null;
-    h.species = speciesOverride || classifySpecies(h.huntNum);
-    h.weapon = classifyHunt(h.huntNum, h.huntName);
-  });
-
-  return hunts;
+  h.pts100 = pts100;
+  h.minPointsToDraw = minPts;
+  h.resOdds = h.residentApps > 0 ? (h.residentDrawn / h.residentApps) * 100 : null;
 }
 
-// ─── PDF PARSING — Harvest Summary ───────────────────────────────────────────
-// Harvest table columns (after hunt num + name):
-// [0]=TotalHunters [1]=DaysHunted [2]=Antlerless [3]=TotalBull [4]=HarvestTotal
-// [5]=Spike [6]=2pt [7]=3pt [8]=4pt [9]=5pt [10]=6pt+  then NN%
-//
-// KEY FIX: We collect ALL numbers from the line, then try multiple column-count
-// interpretations. Real harvest rows have exactly 11 numeric cols + a percentage.
-// If we get a different count (e.g. PDF text items merged or split), we try to
-// identify the percentage and count backward.
-async function parseHarvestPdf(arrayBuffer) {
-  if (!window.pdfjsLib) throw new Error('PDF library not loaded');
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const harvest = {};
-  const huntNumRe = /\b(\d{3}[A-Z]\d{0,2}|\d{3})\b/g;
-
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
-    const tc = await page.getTextContent();
-
-    // Group by Y position (same baseline = same row)
-    const items = tc.items
-      .filter(it => it.str && it.str.trim())
-      .map(it => ({ x: it.transform[4], y: it.transform[5], str: it.str.trim() }))
-      .sort((a, b) => b.y - a.y || a.x - b.x);
-
-    const lines = [];
-    let curLine = null;
-    items.forEach(it => {
-      if (!curLine || Math.abs(curLine.y - it.y) > 3) {
-        curLine = { y: it.y, items: [] };
-        lines.push(curLine);
-      }
-      curLine.items.push(it);
-    });
-
-    lines.forEach(line => {
-      const text = line.items.map(i => i.str).join(' ').replace(/\s+/g, ' ').trim();
-
-      // Must end with NN% (success rate)
-      const pctMatch = text.match(/(\d+)%\s*$/);
-      if (!pctMatch) return;
-      const successPct = Number(pctMatch[1]);
-
-      // Find hunt number candidates
-      const huntMatches = [...text.matchAll(huntNumRe)];
-      if (!huntMatches.length) return;
-
-      for (const m of huntMatches) {
-        const huntNum = m[1];
-        const after = text.slice(m.index + huntNum.length).trim();
-        // Strip trailing "NN%"
-        const afterNoPct = after.replace(/\d+%\s*$/, '').trim();
-        const tokens = afterNoPct.split(/\s+/);
-
-        // Split into name words vs numbers
-        let nameEnd = 0;
-        while (nameEnd < tokens.length && !/^-?\d+$/.test(tokens[nameEnd])) nameEnd++;
-        if (nameEnd === 0) continue;
-
-        const name = tokens.slice(0, nameEnd).join(' ');
-        const nums = tokens.slice(nameEnd).filter(t => /^-?\d+$/.test(t)).map(Number);
-
-        // We need at least 8 numbers (hunters + days + antlerless + bull + harvest + spike + 2pt + 3pt)
-        // Full row = 11 numbers. Some PDFs omit "TotalHarvest" col, giving 10 numbers.
-        if (nums.length < 8) continue;
-        if (harvest[huntNum]) break; // already got it from an earlier page
-
-        let hunters, days, antlerless, totalBull, totalHarvest, spike, twoPt, threePt, fourPt, fivePt, sixPlusPt;
-
-        if (nums.length >= 11) {
-          // Standard 11-column layout
-          [hunters, days, antlerless, totalBull, totalHarvest, spike, twoPt, threePt, fourPt, fivePt, sixPlusPt] = nums;
-        } else if (nums.length === 10) {
-          // Missing TotalHarvest column — compute it
-          [hunters, days, antlerless, totalBull, spike, twoPt, threePt, fourPt, fivePt, sixPlusPt] = nums;
-          totalHarvest = antlerless + totalBull;
-        } else {
-          // 8 or 9 cols — best effort, antler breakdown may be partial
-          [hunters, days, antlerless, totalBull] = nums;
-          totalHarvest = antlerless + totalBull;
-          spike = nums[4] || 0;
-          twoPt = nums[5] || 0;
-          threePt = nums[6] || 0;
-          fourPt = nums[7] || 0;
-          fivePt = nums[8] || 0;
-          sixPlusPt = nums[9] || 0;
-        }
-
-        // Sanity check: antler counts should not exceed totalBull
-        // If they do, the column alignment is wrong — skip antler data rather than show bad numbers
-        const antlerSum = (spike||0) + (twoPt||0) + (threePt||0) + (fourPt||0) + (fivePt||0) + (sixPlusPt||0);
-        const antlerValid = totalBull > 0 && antlerSum > 0 && antlerSum <= totalBull * 1.05;
-
-        harvest[huntNum] = {
-          huntNum, name,
-          hunters:       hunters || 0,
-          days:          days || 0,
-          antlerless:    antlerless || 0,
-          totalBull:     totalBull || 0,
-          totalHarvest:  totalHarvest || (antlerless + totalBull),
-          successPct,
-          spike:         antlerValid ? (spike || 0) : 0,
-          twoPt:         antlerValid ? (twoPt || 0) : 0,
-          threePt:       antlerValid ? (threePt || 0) : 0,
-          fourPt:        antlerValid ? (fourPt || 0) : 0,
-          fivePt:        antlerValid ? (fivePt || 0) : 0,
-          sixPlusPt:     antlerValid ? (sixPlusPt || 0) : 0,
-          antlerValid
-        };
-        break;
-      }
-    });
-  }
-  return harvest;
-}
-
-function parseHarvestXlsx(arrayBuffer) {
-  const wb = XLSX.read(arrayBuffer, { type: 'array' });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
-  const harvest = {};
-  const huntNumRe = /^\d{3}[A-Z]?\d*$/;
-  rows.forEach(r => {
-    if (!r) return;
-    for (let i = 0; i < r.length; i++) {
-      const v = r[i];
-      if (typeof v === 'string' && huntNumRe.test(v.trim())) {
-        const huntNum = v.trim();
-        // Collect numeric columns
-        const nums = r.slice(i + 1).filter(c => typeof c === 'number' || (typeof c === 'string' && /^\d+$/.test(c.trim()))).map(Number);
-        let successPct = null;
-        for (let j = r.length - 1; j > i; j--) {
-          const c = r[j];
-          if (typeof c === 'number' && c <= 1) { successPct = c * 100; break; }
-          if (typeof c === 'string') { const m = c.match(/^(\d+(?:\.\d+)?)%?$/); if (m) { successPct = Number(m[1]); break; } }
-        }
-        if (successPct !== null && !harvest[huntNum]) {
-          const antlerValid = nums.length >= 11;
-          harvest[huntNum] = {
-            huntNum, successPct,
-            hunters:   nums[0] || 0, days: nums[1] || 0,
-            antlerless: nums[2] || 0, totalBull: nums[3] || 0,
-            totalHarvest: nums[4] || 0,
-            spike:     antlerValid ? (nums[5] || 0) : 0,
-            twoPt:     antlerValid ? (nums[6] || 0) : 0,
-            threePt:   antlerValid ? (nums[7] || 0) : 0,
-            fourPt:    antlerValid ? (nums[8] || 0) : 0,
-            fivePt:    antlerValid ? (nums[9] || 0) : 0,
-            sixPlusPt: antlerValid ? (nums[10] || 0) : 0,
-            antlerValid
-          };
-        }
-        break;
-      }
-    }
-  });
-  return harvest;
-}
-
-// ─── FILE INTAKE ──────────────────────────────────────────────────────────────
-function readArrayBuffer(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
-    r.readAsArrayBuffer(file);
-  });
-}
-
-async function handleFile(target, file) {
-  if (!file) return;
-  if (!state.pendingYear) { toast('Pick a year first.', true); return; }
-  const year = state.pendingYear;
-  if (!state.years[year]) state.years[year] = { hunts: [], files: {}, harvestData: {} };
-  const yearData = state.years[year];
-  const ext = file.name.split('.').pop().toLowerCase();
-
-  try {
-    const buf = await readArrayBuffer(file);
-
-    if (target === 'elkPoints' || target === 'deerPoints') {
-      const species = target === 'elkPoints' ? 'elk' : 'deer';
-      const hunts = parsePointsXlsx(buf, species);
-      yearData.hunts = yearData.hunts.filter(h => h.species !== species);
-      yearData.hunts.push(...hunts);
-      yearData.files[target] = { name: file.name, loadedAt: Date.now(), count: hunts.length };
-      applyHarvestForYear(year);
-      toast(`[${year}] Loaded ${hunts.length} ${species} hunts`);
-
-    } else {
-      let harvest;
-      if (ext === 'pdf') { harvest = await parseHarvestPdf(buf); }
-      else               { harvest = parseHarvestXlsx(buf); }
-      yearData.harvestData[target] = harvest;
-      yearData.files[target] = { name: file.name, loadedAt: Date.now(), count: Object.keys(harvest).length, matched: 0 };
-      applyHarvestForYear(year);
-      const matched = yearData.files[target].matched;
-      const label = target.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
-      toast(`[${year}] ${label}: ${Object.keys(harvest).length} hunts parsed, ${matched} matched`);
-    }
-
-    if (!state.selectedYear) state.selectedYear = year;
-    saveState();
-    render();
-  } catch (e) {
-    console.error(e);
-    toast('Could not read ' + file.name + ': ' + e.message, true);
-  }
-}
-
-// ─── PERSISTENCE ─────────────────────────────────────────────────────────────
-function saveState() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      years: state.years,
-      selectedYear: state.selectedYear,
-      pendingYear: state.pendingYear,
-      savedAt: Date.now()
-    }));
-  } catch(e) { console.warn('Save failed:', e); }
-}
-
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return false;
-    const data = JSON.parse(raw);
-    state.years = data.years || {};
-    state.selectedYear = data.selectedYear || getYearList()[0] || null;
-    state.pendingYear = data.pendingYear || state.selectedYear || null;
-    return true;
-  } catch(e) { return false; }
-}
-
-function clearAll() {
-  state.years = {};
-  state.selectedYear = null;
-  state.pendingYear = null;
-  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
-  render();
-  toast('All local data cleared');
-}
-
-function clearYear(year) {
-  delete state.years[year];
-  if (state.selectedYear === year) state.selectedYear = getYearList()[0] || null;
-  if (state.pendingYear === year) state.pendingYear = state.selectedYear;
-  saveState();
-  render();
-  toast(`Year ${year} removed`);
-}
-
-// ─── FIREBASE SYNC ────────────────────────────────────────────────────────────
-async function fbSaveAll() {
-  if (!window.__fbReady) { toast('Firebase not ready yet', true); return; }
-  const years = getYearList();
-  if (years.length === 0) { toast('No local data to push', true); return; }
-  const btn = $('#btnSyncToCloud');
-  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-  let ok = true;
-  for (const y of years) {
-    const yd = state.years[y];
-    const saved = await window.__fb.saveYear(y, yd.hunts, yd.harvestData);
-    if (!saved) ok = false;
-  }
-  if (btn) { btn.disabled = false; btn.textContent = 'Save to Cloud'; }
-  if (ok) {
-    toast('Data saved to cloud ✓');
-    updateFbBanner('success', 'Data saved to cloud — others can now load it.');
-  } else {
-    toast('Some data failed to save — check console', true);
-    updateFbBanner('error', 'Save failed. Check console for details.');
-  }
-}
-
-async function fbLoadAll() {
-  if (!window.__fbReady) { toast('Firebase not ready yet', true); return; }
-  const btn = $('#btnLoadFromCloud') || $('#btnLoadCloud') || $('#btnFbLoad');
-  if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
-  updateFbBanner('', 'Loading data from cloud…');
-  try {
-    const data = await window.__fb.loadAllYears();
-    if (!data || Object.keys(data).length === 0) {
-      toast('No cloud data found', true);
-      updateFbBanner('error', 'No data found in cloud yet. Upload files and Save to Cloud first.');
-    } else {
-      // Merge cloud data with local — cloud wins for years it has
-      Object.entries(data).forEach(([year, yd]) => {
-        state.years[year] = { hunts: yd.hunts, files: {}, harvestData: yd.harvestData };
-        applyHarvestForYear(year);
-      });
-      if (!state.selectedYear) state.selectedYear = getYearList()[0] || null;
-      if (!state.pendingYear) state.pendingYear = state.selectedYear;
-      saveState();
-      render();
-      const count = Object.values(data).reduce((s, yd) => s + (yd.hunts?.length || 0), 0);
-      toast(`Loaded ${count} hunts from cloud ✓`);
-      updateFbBanner('success', `Loaded ${count} hunts from cloud.`);
-    }
-  } catch(e) {
-    console.error(e);
-    toast('Cloud load failed: ' + e.message, true);
-    updateFbBanner('error', 'Cloud load failed. See console.');
-  }
-  const btns = ['#btnLoadFromCloud','#btnLoadCloud','#btnFbLoad'].map(s => $(s)).filter(Boolean);
-  btns.forEach(b => { b.disabled = false; b.textContent = b.id === 'btnFbLoad' ? 'Load from Cloud' : b.textContent.includes('Load') ? 'Load from Cloud' : b.textContent; });
-}
-
-function updateFbBanner(type, msg) {
-  const sync = $('#fbSyncStatus');
-  if (sync) {
-    sync.className = 'fb-banner' + (type ? ' ' + type : '');
-    sync.textContent = msg;
-  }
-  const load = $('#fbLoadBanner');
-  if (load) {
-    load.style.display = 'flex';
-    load.className = 'fb-banner' + (type ? ' ' + type : '');
-    $('#fbLoadMsg').textContent = msg;
-  }
-}
-
-// ─── RENDER ───────────────────────────────────────────────────────────────────
-function getFilters() {
-  return {
-    species:     $('#fSpecies').value,
-    weapon:      $('#fWeapon').value,
-    myPoints:    $('#fMyPoints').value === '' ? null : Number($('#fMyPoints').value),
-    drawability: $('#fDrawability').value,
-    search:      $('#fSearch').value.trim().toLowerCase()
-  };
-}
-
-function applyFilters(hunts) {
-  const f = getFilters();
-  return hunts.filter(h => {
-    if (f.species !== 'all' && h.species !== f.species) return false;
-    if (f.weapon !== 'all' && h.weapon !== f.weapon) return false;
-    if (f.search) {
-      const hay = (h.huntNum + ' ' + h.huntName).toLowerCase();
-      if (!hay.includes(f.search)) return false;
-    }
-    if (f.myPoints !== null && f.drawability !== 'all') {
-      const min = h.minPointsToDraw;
-      if (min === null) {
-        if (f.drawability === 'canDraw') return true;
-        return false;
-      }
-      if (f.drawability === 'canDraw' && f.myPoints < min) return false;
-      if (f.drawability === 'oneAway' && f.myPoints !== min - 1) return false;
-      if (f.drawability === 'reachable' && (f.myPoints < min - 3 || f.myPoints > min + 5)) return false;
-    }
-    return true;
-  });
-}
-
-function sortHunts(hunts) {
-  const dir = state.sortDir === 'asc' ? 1 : -1;
-  const k = state.sortKey;
-  const myPts = getFilters().myPoints;
-  return [...hunts].sort((a, b) => {
-    let av, bv;
-    if      (k === 'huntNum')        { av = a.huntNum; bv = b.huntNum; }
-    else if (k === 'huntName')       { av = a.huntName; bv = b.huntName; }
-    else if (k === 'weapon')         { av = a.weapon; bv = b.weapon; }
-    else if (k === 'tags')           { av = a.tags; bv = b.tags; }
-    else if (k === 'apps')           { av = a.residentApps; bv = b.residentApps; }
-    else if (k === 'minPts')         { av = a.minPointsToDraw; bv = b.minPointsToDraw; }
-    else if (k === 'firstChoiceOdds'){ av = a.firstChoiceOdds; bv = b.firstChoiceOdds; }
-    else if (k === 'success')        { av = a.harvest?.successPct; bv = b.harvest?.successPct; }
-    else if (k === 'myOdds')         { av = calcMyOdds(a, myPts); bv = calcMyOdds(b, myPts); }
-
-    const aNull = av === null || av === undefined;
-    const bNull = bv === null || bv === undefined;
-    if (aNull && bNull) return 0;
-    if (aNull) return 1;
-    if (bNull) return -1;
-    const isNum = ['tags','apps','minPts','firstChoiceOdds','success','myOdds'].includes(k);
-    if (isNum) return (av - bv) * dir;
-    return String(av).localeCompare(String(bv), undefined, { numeric: true }) * dir;
-  });
-}
-
-// Calculate "My Draw Odds" — personal probability based on resident data
-// We look at the point-breakdown row matching the user's points level
-// and compute resDrawn / resApps at that tier.
-// If they're above minPts they drew; if below, they're in the random pool.
-function calcMyOdds(h, myPts) {
+function myOdds(h, myPts) {
   if (myPts === null || myPts === undefined) return null;
-  if (!h.pointBreakdown || h.pointBreakdown.length === 0) {
-    // Fall back to overall resident odds
-    return h.residentApps > 0 ? (h.residentDrawn / h.residentApps) * 100 : null;
-  }
-  // Find the tier matching the user's exact points
-  const myRow = h.pointBreakdown.find(p => p.points === myPts);
-  if (myRow && myRow.resApps > 0) {
-    return (myRow.resDrawn / myRow.resApps) * 100;
-  }
-  // User's points didn't appear in breakdown — find the closest tier below
-  const below = h.pointBreakdown.filter(p => p.points <= myPts).sort((a, b) => b.points - a.points);
-  if (below.length > 0 && below[0].resApps > 0) {
-    return (below[0].resDrawn / below[0].resApps) * 100;
-  }
-  // User is below everyone who drew in the preference phase — they're only in random
-  // Oregon random phase = 25% of tags. Estimate: (tags * 0.25) / residualResApps
-  // We don't have residual easily, so fall back to tags / residentApps as a floor estimate
-  if (h.residentApps > 0 && h.tags > 0) {
-    return Math.min(100, (h.tags * 0.25 / h.residentApps) * 100);
-  }
+  if (!h.pointBreakdown?.length) return h.resOdds;
+  const exact = h.pointBreakdown.find(p => p.points === myPts);
+  if (exact && exact.resApps > 0) return (exact.resDrawn / exact.resApps) * 100;
+  const below = h.pointBreakdown.filter(p => p.points <= myPts).sort((a,b) => b.points - a.points);
+  if (below.length && below[0].resApps > 0) return (below[0].resDrawn / below[0].resApps) * 100;
+  if (h.residentApps > 0 && h.tags > 0) return Math.min(100, (h.tags * 0.25 / h.residentApps) * 100);
   return null;
 }
 
-function renderStatus() {
-  const pyData = state.pendingYear ? state.years[state.pendingYear] : null;
-  const f = pyData?.files || {};
-  const parts = [];
-  if (f.elkPoints) parts.push(`Elk pts: ${f.elkPoints.count}`);
-  if (f.deerPoints) parts.push(`Deer pts: ${f.deerPoints.count}`);
-  if (f.elkRifleHarvest) parts.push(`Elk rifle harvest: ${f.elkRifleHarvest.matched ?? 0} matched`);
-  if (f.elkArcheryHarvest) parts.push(`Elk archery harvest: ${f.elkArcheryHarvest.matched ?? 0} matched`);
-  if (f.deerRifleHarvest) parts.push(`Deer rifle harvest: ${f.deerRifleHarvest.matched ?? 0} matched`);
-  if (f.deerArcheryHarvest) parts.push(`Deer archery harvest: ${f.deerArcheryHarvest.matched ?? 0} matched`);
-  const yearsList = getYearList();
-  const totalHunts = pyData ? pyData.hunts.length : 0;
-  const hasPoints = f.elkPoints || f.deerPoints;
-  const hasHarvest = f.elkRifleHarvest || f.elkArcheryHarvest || f.deerRifleHarvest || f.deerArcheryHarvest;
-  const dot = $('#statusDot'), txt = $('#statusText'), det = $('#statusDetail'), last = $('#lastLoaded');
-  if (!dot) return;
-  if (yearsList.length === 0) {
-    dot.className = 'status-dot'; txt.textContent = 'No data loaded'; det.textContent = ''; last.textContent = '—';
-  } else if (totalHunts === 0) {
-    dot.className = 'status-dot'; txt.textContent = `No data for ${state.pendingYear}`; det.textContent = `Years: ${yearsList.join(', ')}`;
-  } else if (hasPoints && hasHarvest) {
-    dot.className = 'status-dot loaded'; txt.textContent = `[${state.pendingYear}] Data loaded`; det.textContent = parts.join(' · ');
-  } else {
-    dot.className = 'status-dot partial'; txt.textContent = `[${state.pendingYear}] Partial data`; det.textContent = parts.join(' · ');
+// ─── XLSX ────────────────────────────────────────────────────────────────────
+function parseXlsx(buf, sp) {
+  const wb = XLSX.read(buf, {type:'array'});
+  let ws = null;
+  for (const n of wb.SheetNames) { if (/draw|point/i.test(n)){ws=wb.Sheets[n];break;} }
+  if (!ws) ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1,raw:true,defval:null});
+  const hunts = []; let cur = null;
+  for (const r of rows) {
+    if (!r) continue;
+    const isH = r[0]&&typeof r[0]==='string'&&r[0].trim()&&r[1]&&typeof r[1]==='string'&&r[1].trim()&&typeof r[2]==='number';
+    if (isH) {
+      if (cur) { derive(cur); hunts.push(cur); }
+      cur = {
+        huntNum:String(r[0]).trim(), huntName:String(r[1]).trim(), tags:Number(r[2])||0,
+        residentApps:Number(r[3])||0, residentDrawn:Number(r[4])||0,
+        nonResidentApps:Number(r[5])||0, nonResidentDrawn:Number(r[6])||0,
+        totalApps:Number(r[7])||0, totalDrawn:Number(r[8])||0,
+        species:sp, weapon:weapon(r[0],r[1]), pointBreakdown:[], harvest:null
+      };
+      if (typeof r[12]==='number') cur.pointBreakdown.push({points:Number(r[12]),apps:Number(r[13])||0,resApps:Number(r[14])||0,resDrawn:Number(r[15])||0,nrApps:Number(r[16])||0,nrDrawn:Number(r[17])||0});
+    } else if (cur && typeof r[12]==='number') {
+      cur.pointBreakdown.push({points:Number(r[12]),apps:Number(r[13])||0,resApps:Number(r[14])||0,resDrawn:Number(r[15])||0,nrApps:Number(r[16])||0,nrDrawn:Number(r[17])||0});
+    }
   }
-  const allFiles = Object.values(f);
-  last.textContent = allFiles.length ? new Date(Math.max(...allFiles.map(x => x.loadedAt))).toLocaleString() : '—';
-
-  ['elkPoints','deerPoints','elkRifleHarvest','elkArcheryHarvest','deerRifleHarvest','deerArcheryHarvest'].forEach(k => {
-    const el = document.querySelector(`[data-file="${k}"]`);
-    const zone = document.querySelector(`[data-key="${k}"]`);
-    if (!el || !zone) return;
-    if (f[k]) { el.textContent = '✓ ' + f[k].name; zone.classList.add('has-file'); }
-    else      { el.textContent = ''; zone.classList.remove('has-file'); }
-  });
-
-  renderYearsPanel();
+  if (cur) { derive(cur); hunts.push(cur); }
+  return hunts;
 }
 
-function renderYearsPanel() {
-  const list = document.getElementById('yearsList');
-  if (!list) return;
-  const years = getYearList();
-  if (years.length === 0) {
-    list.innerHTML = '<div class="empty-state" style="padding:20px;">No years loaded. Enter a year above and upload reports.</div>';
-    return;
+// ─── PDF HARVEST ──────────────────────────────────────────────────────────────
+async function parsePdf(buf) {
+  if (!window.pdfjsLib) throw new Error('PDF.js not loaded');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+  const out = {}, re = /\b(\d{3}[A-Z]\d{0,2}|\d{3})\b/g;
+  for (let p=1; p<=pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const tc   = await page.getTextContent();
+    const items = tc.items.filter(it=>it.str?.trim())
+      .map(it=>({x:it.transform[4],y:it.transform[5],str:it.str.trim()}))
+      .sort((a,b)=>b.y-a.y||a.x-b.x);
+    const lines=[]; let cl=null;
+    items.forEach(it=>{if(!cl||Math.abs(cl.y-it.y)>3){cl={y:it.y,items:[]};lines.push(cl);}cl.items.push(it);});
+    lines.forEach(line=>{
+      const text=line.items.map(i=>i.str).join(' ').replace(/\s+/g,' ').trim();
+      const pm=text.match(/(\d+)%\s*$/); if(!pm) return;
+      const pct=Number(pm[1]);
+      const hms=[...text.matchAll(re)]; if(!hms.length) return;
+      for (const m of hms) {
+        const num=m[1]; if(out[num]) break;
+        const after=text.slice(m.index+num.length).trim().replace(/\d+%\s*$/,'').trim();
+        const tokens=after.split(/\s+/);
+        let ne=0; while(ne<tokens.length&&!/^-?\d+$/.test(tokens[ne])) ne++;
+        if(!ne) continue;
+        const name=tokens.slice(0,ne).join(' ');
+        const nums=tokens.slice(ne).filter(t=>/^-?\d+$/.test(t)).map(Number);
+        if(nums.length<8) continue;
+        let hu,da,al,tb,th,sp,t2,t3,t4,t5,t6;
+        if(nums.length>=11)      [hu,da,al,tb,th,sp,t2,t3,t4,t5,t6]=nums;
+        else if(nums.length===10){[hu,da,al,tb,sp,t2,t3,t4,t5,t6]=nums;th=(al||0)+(tb||0);}
+        else                     {[hu,da,al,tb]=nums;th=(al||0)+(tb||0);[sp,t2,t3,t4,t5,t6]=[nums[4]||0,nums[5]||0,nums[6]||0,nums[7]||0,nums[8]||0,nums[9]||0];}
+        const as=(sp||0)+(t2||0)+(t3||0)+(t4||0)+(t5||0)+(t6||0);
+        const av=tb>0&&as>0&&as<=tb*1.05;
+        out[num]={huntNum:num,name,hunters:hu||0,days:da||0,antlerless:al||0,totalBull:tb||0,
+          totalHarvest:th||(al+tb),successPct:pct,
+          spike:av?sp:0,twoPt:av?t2:0,threePt:av?t3:0,fourPt:av?t4:0,fivePt:av?t5:0,sixPlusPt:av?t6:0,antlerValid:av};
+        break;
+      }
+    });
   }
-  list.innerHTML = years.map(y => {
-    const yd = state.years[y];
-    const isSelected = y === state.selectedYear;
-    const isPending = y === state.pendingYear;
-    const harvestCount = Object.values(yd.harvestData || {}).reduce((s, h) => s + Object.keys(h || {}).length, 0);
-    return `
-      <div class="year-row ${isSelected ? 'selected' : ''}">
-        <div class="year-row-main">
-          <div class="year-label">${y}${isSelected ? ' <span class="badge-sm">Viewing</span>' : ''}${isPending && !isSelected ? ' <span class="badge-sm-alt">Editing</span>' : ''}</div>
-          <div class="year-meta">${yd.hunts.length} hunts · ${harvestCount} harvest records</div>
-        </div>
-        <div class="year-row-actions">
-          ${!isSelected ? `<button class="btn-mini" data-view-year="${y}">View</button>` : ''}
-          ${!isPending  ? `<button class="btn-mini" data-edit-year="${y}">Edit</button>` : ''}
-          <button class="btn-mini danger" data-del-year="${y}">Delete</button>
-        </div>
-      </div>`;
-  }).join('');
-  list.querySelectorAll('[data-view-year]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); state.selectedYear = b.dataset.viewYear; saveState(); render(); }));
-  list.querySelectorAll('[data-edit-year]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); state.pendingYear = b.dataset.editYear; saveState(); render(); }));
-  list.querySelectorAll('[data-del-year]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); showConfirm(`Delete ${b.dataset.delYear}?`, `Removes all data for ${b.dataset.delYear}.`, () => clearYear(b.dataset.delYear)); }));
+  return out;
+}
+
+function parseHarvestXlsx(buf) {
+  const wb=XLSX.read(buf,{type:'array'}), ws=wb.Sheets[wb.SheetNames[0]];
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null}), out={}, re=/^\d{3}[A-Z]?\d*$/;
+  rows.forEach(r=>{
+    if(!r) return;
+    for(let i=0;i<r.length;i++){
+      const v=r[i];
+      if(typeof v==='string'&&re.test(v.trim())){
+        const num=v.trim(); let pct=null;
+        for(let j=r.length-1;j>i;j--){const c=r[j];if(typeof c==='number'&&c<=1){pct=c*100;break}if(typeof c==='string'){const m=c.match(/^(\d+(?:\.\d+)?)%?$/);if(m){pct=Number(m[1]);break}}}
+        const ns=r.slice(i+1).filter(c=>typeof c==='number'||(typeof c==='string'&&/^\d+$/.test(c.trim()))).map(Number);
+        const av=ns.length>=11;
+        if(pct!==null&&!out[num]) out[num]={huntNum:num,successPct:pct,hunters:ns[0]||0,days:ns[1]||0,antlerless:ns[2]||0,totalBull:ns[3]||0,totalHarvest:ns[4]||0,spike:av?ns[5]:0,twoPt:av?ns[6]:0,threePt:av?ns[7]:0,fourPt:av?ns[8]:0,fivePt:av?ns[9]:0,sixPlusPt:av?ns[10]:0,antlerValid:av};
+        break;
+      }
+    }
+  });
+  return out;
+}
+
+// ─── FILE HANDLING ────────────────────────────────────────────────────────────
+const readBuf = f => new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsArrayBuffer(f);});
+
+async function handleFile(target, file) {
+  if (!file) return;
+  if (!S.pendingYear) { toast('Set a year first', true); return; }
+  const year = S.pendingYear;
+  if (!S.years[year]) S.years[year] = {hunts:[],files:{},harvestData:{}};
+  const yd = S.years[year];
+  try {
+    const buf = await readBuf(file);
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (target==='elkPoints'||target==='deerPoints') {
+      const sp = target==='elkPoints'?'elk':'deer';
+      const hunts = parseXlsx(buf, sp);
+      yd.hunts = yd.hunts.filter(h=>h.species!==sp);
+      yd.hunts.push(...hunts);
+      yd.files[target] = {name:file.name,loadedAt:Date.now(),count:hunts.length};
+      applyHarvest(year);
+      toast(`[${year}] ${hunts.length} ${sp} hunts loaded`);
+    } else {
+      const harvest = ext==='pdf' ? await parsePdf(buf) : parseHarvestXlsx(buf);
+      yd.harvestData[target] = harvest;
+      yd.files[target] = {name:file.name,loadedAt:Date.now(),count:Object.keys(harvest).length,matched:0};
+      applyHarvest(year);
+      toast(`[${year}] Harvest: ${yd.files[target].matched} matched`);
+    }
+    if (!S.selectedYear) S.selectedYear = year;
+    saveLocal(); render();
+    // Auto-save to cloud
+    banner('#dmBanner','','Saving to cloud…',true);
+    const ok = await fbSave(year, yd.hunts, yd.harvestData);
+    banner('#dmBanner', ok?'ok':'err', ok?'Saved to cloud ✓ — others will see this data on next load':'Cloud save failed — data is local only', false);
+  } catch(e) { console.error(e); toast('Error: '+e.message, true); }
+}
+
+// ─── LOCAL STORAGE ────────────────────────────────────────────────────────────
+function saveLocal() {
+  try { localStorage.setItem(SK, JSON.stringify({years:S.years,selectedYear:S.selectedYear,pendingYear:S.pendingYear})); } catch(e){}
+}
+function loadLocal() {
+  try {
+    const d=JSON.parse(localStorage.getItem(SK)||'null'); if(!d) return false;
+    S.years=d.years||{}; S.selectedYear=d.selectedYear||yList()[0]||null; S.pendingYear=d.pendingYear||S.selectedYear||null; return true;
+  } catch(e){ return false; }
+}
+function clearLocal() {
+  S.years={}; S.selectedYear=null; S.pendingYear=null;
+  try{localStorage.removeItem(SK);}catch(e){}
+  render(); toast('Local data cleared');
+}
+function clearYear(year) {
+  delete S.years[year];
+  if(S.selectedYear===year) S.selectedYear=yList()[0]||null;
+  if(S.pendingYear===year)  S.pendingYear=S.selectedYear;
+  saveLocal(); render(); toast('Year '+year+' removed');
+}
+
+// ─── FILTERS + SORT ───────────────────────────────────────────────────────────
+function getFilters() {
+  return {
+    sp:   $('#fSpecies').value,
+    wep:  $('#fWeapon').value,
+    pts:  $('#fMyPoints').value===''?null:Number($('#fMyPoints').value),
+    draw: $('#fDrawability').value,
+    srch: $('#fSearch').value.trim().toLowerCase()
+  };
+}
+function applyFilters(hunts) {
+  const f=getFilters();
+  return hunts.filter(h=>{
+    if(f.sp!=='all'&&h.species!==f.sp) return false;
+    if(f.wep!=='all'&&h.weapon!==f.wep) return false;
+    if(f.srch&&!(h.huntNum+' '+h.huntName).toLowerCase().includes(f.srch)) return false;
+    if(f.pts!==null&&f.draw!=='all'){
+      const p=h.pts100;
+      if(f.draw==='canDraw'&&(p===null||f.pts<p)) return false;
+      if(f.draw==='oneAway'&&(p===null||f.pts!==p-1)) return false;
+      if(f.draw==='reachable'&&(p===null||f.pts<p-3)) return false;
+    }
+    return true;
+  });
+}
+function sortHunts(hunts) {
+  const dir=S.sortDir==='asc'?1:-1, k=S.sortKey, f=getFilters();
+  return [...hunts].sort((a,b)=>{
+    let av,bv;
+    if(k==='huntNum')  {av=a.huntNum;bv=b.huntNum;}
+    else if(k==='huntName'){av=a.huntName;bv=b.huntName;}
+    else if(k==='weapon')  {av=a.weapon;bv=b.weapon;}
+    else if(k==='tags')    {av=a.tags;bv=b.tags;}
+    else if(k==='apps')    {av=a.residentApps;bv=b.residentApps;}
+    else if(k==='pts100')  {av=a.pts100;bv=b.pts100;}
+    else if(k==='success') {av=a.harvest?.successPct;bv=b.harvest?.successPct;}
+    else if(k==='myOdds')  {av=myOdds(a,f.pts);bv=myOdds(b,f.pts);}
+    const an=av==null,bn=bv==null;
+    if(an&&bn)return 0; if(an)return 1; if(bn)return -1;
+    const num=['tags','apps','pts100','success','myOdds'].includes(k);
+    return num?(av-bv)*dir:String(av).localeCompare(String(bv),undefined,{numeric:true})*dir;
+  });
+}
+
+// ─── RENDER TABLE ─────────────────────────────────────────────────────────────
+function trendHtml(cur,prev,hb,fn) {
+  if(cur==null||prev==null||cur===prev) return '';
+  const d=cur-prev, better=hb?d>0:d<0;
+  return `<span class="trend ${better?'tup':'tdn'}">${better?'▲':'▼'} ${d>0?'+':''}${fn?fn(d):Math.round(d)}</span>`;
+}
+function topBull(harv) {
+  if(!harv?.totalBull||!harv.antlerValid) return null;
+  const cls=[['Spike',harv.spike||0],['2pt',harv.twoPt||0],['3pt',harv.threePt||0],['4pt',harv.fourPt||0],['5pt',harv.fivePt||0],['6pt+',harv.sixPlusPt||0]];
+  const top=cls.slice().sort((a,b)=>b[1]-a[1])[0];
+  if(!top||!top[1]) return null;
+  return {label:top[0],pct:Math.round((top[1]/harv.totalBull)*100)};
 }
 
 function renderTable() {
-  const allHunts = getHunts();
-  const filtered = applyFilters(allHunts);
-  const sorted = sortHunts(filtered);
-  const tbody = $('#huntsBody');
-  const myPts = getFilters().myPoints;
+  const all=getH(), f=getFilters(), myPts=f.pts;
+  const filtered=applyFilters(all), sorted=sortHunts(filtered);
+  const tb=$('#huntsBody'), prev=S.compareYear||prevYr(S.selectedYear);
+  $('#rcount').textContent=all.length===0?'—':`${sorted.length} of ${all.length} hunts`;
 
-  $('#resultsCount').textContent = allHunts.length === 0 ? '—' : `${sorted.length} of ${allHunts.length} hunts`;
+  if(all.length===0){tb.innerHTML='<tr><td colspan="9" class="empty">No data loaded.</td></tr>';return;}
+  if(sorted.length===0){tb.innerHTML='<tr><td colspan="9" class="empty">No hunts match the filters.</td></tr>';return;}
 
-  const colCount = 10;
-  if (allHunts.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="${colCount}" class="empty-state">Load from cloud or upload ODFW reports to begin.</td></tr>`;
-    return;
-  }
-  if (sorted.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="${colCount}" class="empty-state">No hunts match the current filters.</td></tr>`;
-    return;
-  }
-
-  $$('#huntsTable thead th').forEach(th => {
+  $$('#huntsTable thead th').forEach(th=>{
     th.classList.remove('sorted');
-    const arrow = th.querySelector('.sort-arrow');
-    if (arrow) arrow.textContent = '▾';
-    if (th.dataset.sort === state.sortKey) {
-      th.classList.add('sorted');
-      if (arrow) arrow.textContent = state.sortDir === 'asc' ? '▴' : '▾';
-    }
+    const sa=th.querySelector('.sa'); if(sa) sa.textContent='▾';
+    if(th.dataset.sort===S.sortKey){th.classList.add('sorted');if(sa) sa.textContent=S.sortDir==='asc'?'▴':'▾';}
   });
 
-  const prevYr = state.compareYear || priorYear(state.selectedYear);
-
-  function trendHtml(curVal, prevVal, higherIsBetter, fmtFn) {
-    if (curVal == null || prevVal == null || curVal === prevVal) return '';
-    const delta = curVal - prevVal;
-    const better = higherIsBetter ? delta > 0 : delta < 0;
-    const cls = better ? 'trend-up' : 'trend-down';
-    const sign = delta > 0 ? '+' : '';
-    const val = fmtFn ? fmtFn(delta) : Math.round(delta);
-    return `<span class="trend ${cls}">${better ? '▲' : '▼'} ${sign}${val}</span>`;
-  }
-
-  function dominantBull(harv) {
-    if (!harv || !harv.totalBull || !harv.antlerValid) return null;
-    const classes = [
-      ['Spike', harv.spike || 0],
-      ['2pt', harv.twoPt || 0],
-      ['3pt', harv.threePt || 0],
-      ['4pt', harv.fourPt || 0],
-      ['5pt', harv.fivePt || 0],
-      ['6pt+', harv.sixPlusPt || 0],
-    ];
-    const top = classes.slice().sort((a, b) => b[1] - a[1])[0];
-    if (!top || !top[1]) return null;
-    const pct = harv.totalBull > 0 ? Math.round((top[1] / harv.totalBull) * 100) : 0;
-    return { label: top[0], pct, count: top[1] };
-  }
-
-  const html = sorted.map(h => {
-    const minPts = h.minPointsToDraw;
-    const drawClass = minPts === null ? 'easy' : myPts !== null && myPts >= minPts ? 'easy' : minPts <= 3 ? 'easy' : minPts <= 8 ? 'med' : 'hard';
-    const odds = h.firstChoiceOdds;
-    const success = h.harvest?.successPct;
-    const successWidth = success != null ? Math.min(100, success) : 0;
-    const bull = dominantBull(h.harvest);
-    const myOdds = calcMyOdds(h, myPts);
-
-    let prevH = null;
-    if (prevYr) prevH = findHuntInYear(prevYr, h.huntNum, h.species);
-
-    const minPtsTrend  = prevH ? trendHtml(minPts, prevH.minPointsToDraw, false) : '';
-    const oddsTrend    = prevH ? trendHtml(odds, prevH.firstChoiceOdds, true, v => Math.round(v) + '%') : '';
-    const successTrend = (prevH?.harvest) ? trendHtml(success, prevH.harvest.successPct, true, v => Math.round(v) + '%') : '';
-
-    // My Odds cell
-    let myOddsHtml = '—';
-    if (myPts !== null) {
-      if (myOdds !== null) {
-        const oddsClass = myOdds >= 50 ? 'easy' : myOdds >= 15 ? 'med' : 'hard';
-        myOddsHtml = `<span class="my-odds-cell ${oddsClass}">${fmtPct(myOdds)}</span>`;
-      } else {
-        myOddsHtml = `<span class="my-odds-cell none">&lt;1%</span>`;
-      }
+  const rows=sorted.map(h=>{
+    const p100=h.pts100;
+    const ptCls = p100===null?'ce': myPts===null?'cn': myPts>=p100?'ce': p100<=3?'ce': p100<=8?'cm':'ch';
+    const ptTxt = p100===null?'Random only':String(p100);
+    const success=h.harvest?.successPct;
+    const sw=success!=null?Math.min(100,success):0;
+    const bull=topBull(h.harvest);
+    const mo=myOdds(h,myPts);
+    let moHtml='—';
+    if(myPts!==null){
+      if(mo===null){moHtml='<span class="ch">&lt;1%</span>';}
+      else{const mc=mo>=75?'ce':mo>=25?'cm':'ch';moHtml=`<span class="${mc}">${fmtP(mo)}</span>`;}
     }
-
-    return `
-      <tr data-hunt="${h.huntNum}_${h.species}">
-        <td class="hunt-num">${h.huntNum}</td>
-        <td>${escapeHtml(h.huntName)}</td>
-        <td><span class="tag ${h.weapon}">${weaponLabel(h.weapon)}</span></td>
-        <td class="num">${fmt(h.tags)}</td>
-        <td class="num"><span class="draw-cell ${drawClass}">${minPts === null ? '—' : minPts}</span>${minPtsTrend}</td>
-        <td class="num">${odds === null ? '—' : fmtPct(odds)} ${oddsTrend}<span class="draw-cell sub">${fmt(h.residentDrawn)} res. drawn</span></td>
-        <td class="num">
-          ${success == null ? '—' :
-            `<span class="success-cell">${fmtPct(success)}</span> ${successTrend}
-             <div class="success-bar"><div class="success-bar-fill" style="width:${successWidth}%"></div></div>`}
-        </td>
-        <td class="num">${bull ? `${bull.label} <span class="draw-cell sub">${bull.pct}% of bulls</span>` : '—'}</td>
-        <td class="num">${myOddsHtml}</td>
-        <td class="num">${fmt(h.residentApps)}</td>
-      </tr>`;
+    const prevH=prev?findH(prev,h.huntNum,h.species):null;
+    const p100T=prevH?trendHtml(p100,prevH.pts100,false,v=>Math.round(v)):'';
+    const sucT=prevH?.harvest?trendHtml(success,prevH.harvest.successPct,true,v=>Math.round(v)+'%'):'';
+    return `<tr data-id="${h.huntNum}_${h.species}">
+      <td class="hnum">${h.huntNum}</td>
+      <td>${esc(h.huntName)}</td>
+      <td><span class="tag ${h.weapon}">${wLabel(h.weapon)}</span></td>
+      <td class="num">${fmt(h.tags)}</td>
+      <td class="num"><span class="${ptCls}">${ptTxt}</span>${p100T}</td>
+      <td class="num">${success==null?'—':`${fmtP(success)}${sucT}<div class="sbar"><div class="sbarf" style="width:${sw}%"></div></div>`}</td>
+      <td class="num">${bull?`${bull.label}<span class="sub">${bull.pct}% of bulls</span>`:'—'}</td>
+      <td class="num">${moHtml}</td>
+      <td class="num">${fmt(h.residentApps)}</td>
+    </tr>`;
   }).join('');
+  tb.innerHTML=rows;
+  tb.querySelectorAll('tr').forEach(tr=>tr.addEventListener('click',()=>{if(tr.dataset.id)showDetail(tr.dataset.id);}));
+}
 
-  tbody.innerHTML = html;
-  tbody.querySelectorAll('tr').forEach(tr => {
-    tr.addEventListener('click', () => { if (tr.dataset.hunt) showDetail(tr.dataset.hunt); });
+// ─── STATUS / YEARS PANEL ─────────────────────────────────────────────────────
+function renderStatus() {
+  const yd=S.pendingYear?S.years[S.pendingYear]:null, f=yd?.files||{};
+  const dot=$('#sdot'), txt=$('#stxt'), det=$('#sdet'), last=$('#slast');
+  if(!dot) return;
+  const parts=[];
+  if(f.elkPoints) parts.push(`Elk pts:${f.elkPoints.count}`);
+  if(f.deerPoints) parts.push(`Deer pts:${f.deerPoints.count}`);
+  if(f.elkRifleHarvest)    parts.push(`Elk rifle:${f.elkRifleHarvest.matched??0}`);
+  if(f.elkArcheryHarvest)  parts.push(`Elk arch:${f.elkArcheryHarvest.matched??0}`);
+  if(f.deerRifleHarvest)   parts.push(`Deer rifle:${f.deerRifleHarvest.matched??0}`);
+  if(f.deerArcheryHarvest) parts.push(`Deer arch:${f.deerArcheryHarvest.matched??0}`);
+  const hasP=f.elkPoints||f.deerPoints, hasH=f.elkRifleHarvest||f.elkArcheryHarvest||f.deerRifleHarvest||f.deerArcheryHarvest;
+  const n=yd?.hunts.length||0, yrs=yList();
+  if(!yrs.length){dot.className='sdot';txt.textContent='No data';}
+  else if(!n){dot.className='sdot';txt.textContent=`No data for ${S.pendingYear}`;}
+  else if(hasP&&hasH){dot.className='sdot ok';txt.textContent=`[${S.pendingYear}] Loaded`;}
+  else{dot.className='sdot part';txt.textContent=`[${S.pendingYear}] Partial`;}
+  det.textContent=parts.join(' · ');
+  const af=Object.values(f); last.textContent=af.length?new Date(Math.max(...af.map(x=>x.loadedAt))).toLocaleString():'—';
+  ['elkPoints','deerPoints','elkRifleHarvest','elkArcheryHarvest','deerRifleHarvest','deerArcheryHarvest'].forEach(k=>{
+    const el=document.querySelector(`[data-file="${k}"]`), zone=document.querySelector(`[data-key="${k}"]`);
+    if(!el||!zone) return;
+    if(f[k]){el.textContent='✓ '+f[k].name;zone.classList.add('hf');}
+    else{el.textContent='';zone.classList.remove('hf');}
   });
+  renderYears();
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-function showDetail(id) {
-  const [huntNum, species] = id.split('_');
-  const h = getHunts().find(x => x.huntNum === huntNum && x.species === species);
-  if (!h) return;
-
-  $('#mTitle').textContent = `${h.huntNum} — ${h.huntName}`;
-  $('#mSub').textContent = `${state.selectedYear} · ${h.species === 'elk' ? 'Elk' : 'Buck Deer'} · ${weaponLabel(h.weapon)}`;
-
-  const breakdown = [...h.pointBreakdown].sort((a,b) => b.points - a.points);
-  const minPts = h.minPointsToDraw;
-  const myPtsRaw = $('#fMyPoints').value;
-  const myPts = myPtsRaw === '' ? null : Number(myPtsRaw);
-  const prevYr = state.compareYear || priorYear(state.selectedYear);
-  const prevH = prevYr ? findHuntInYear(prevYr, h.huntNum, h.species) : null;
-  const myOdds = calcMyOdds(h, myPts);
-
-  function delta(cur, prev, higherIsBetter, suffix) {
-    if (cur == null || prev == null || cur === prev) return '';
-    const better = higherIsBetter ? cur > prev : cur < prev;
-    const cls = better ? 'trend-up' : 'trend-down';
-    const sign = (cur - prev) > 0 ? '+' : '';
-    return ` <span class="trend ${cls}">${better ? '▲' : '▼'} ${sign}${(cur - prev).toFixed(suffix === '%' ? 0 : 1)}${suffix || ''} vs ${prevYr}</span>`;
-  }
-
-  let yourTake = '';
-  if (myPts !== null) {
-    if (minPts === null) {
-      yourTake = `<p class="callout warn"><strong>With ${myPts} point${myPts===1?'':'s'}:</strong> No tags drew in the preference phase last year — only the 25% random draw applies.</p>`;
-    } else if (myPts >= minPts) {
-      const pctStr = myOdds !== null ? ` Your personal draw odds: ~${fmtPct(myOdds)}.` : '';
-      yourTake = `<p class="callout good"><strong>With ${myPts} point${myPts===1?'':'s'}:</strong> You would have drawn last year (min was ${minPts}).${pctStr}</p>`;
-    } else {
-      const away = minPts - myPts;
-      const pctStr = myOdds !== null ? ` Your random-phase odds: ~${fmtPct(myOdds)}.` : '';
-      yourTake = `<p class="callout warn"><strong>With ${myPts} point${myPts===1?'':'s'}:</strong> ${away} point${away===1?'':'s'} short of last year's minimum (${minPts}).${pctStr}</p>`;
-    }
-  }
-
-  let body = `
-    ${yourTake}
-    <div class="modal-section">
-      <h4>${state.selectedYear} Draw Results (Resident)</h4>
-      <div class="kv-grid">
-        <div class="kv"><div class="k">Tags Authorized</div><div class="v">${fmt(h.tags)}</div></div>
-        <div class="kv"><div class="k">Resident Apps</div><div class="v">${fmt(h.residentApps)}${prevH ? delta(h.residentApps, prevH.residentApps, false) : ''}</div></div>
-        <div class="kv"><div class="k">Resident Drawn</div><div class="v">${fmt(h.residentDrawn)}</div></div>
-        <div class="kv"><div class="k">1st-Choice Odds (Res.)</div><div class="v">${h.firstChoiceOdds === null ? '—' : fmtPct(h.firstChoiceOdds)}${prevH ? delta(h.firstChoiceOdds, prevH.firstChoiceOdds, true, '%') : ''}</div></div>
-        <div class="kv"><div class="k">Min. Points to Draw</div><div class="v">${minPts === null ? 'Random only' : minPts}${prevH ? delta(minPts, prevH.minPointsToDraw, false) : ''}</div></div>
-        <div class="kv"><div class="k">Non-Resident Apps</div><div class="v">${fmt(h.nonResidentApps)}</div></div>
+function renderYears() {
+  const list=$('#ylist'); if(!list) return;
+  const yrs=yList();
+  if(!yrs.length){list.innerHTML='<div class="empty" style="padding:20px">No years loaded yet.</div>';return;}
+  list.innerHTML=yrs.map(y=>{
+    const yd=S.years[y], isSel=y===S.selectedYear, isPend=y===S.pendingYear;
+    const hc=yd.harvestData?Object.values(yd.harvestData).reduce((s,h)=>s+Object.keys(h||{}).length,0):0;
+    return `<div class="yrow ${isSel?'sel':''}">
+      <div class="yr-main">
+        <div class="yrl">${y}${isSel?'<span class="bsm">Viewing</span>':''}${isPend&&!isSel?'<span class="bsma">Editing</span>':''}</div>
+        <div class="yrm">${yd.hunts.length} hunts · ${hc} harvest records</div>
+      </div>
+      <div class="yra">
+        ${!isSel?`<button class="bmini" data-vy="${y}">View</button>`:''}
+        ${!isPend?`<button class="bmini" data-ey="${y}">Edit</button>`:''}
+        <button class="bmini dan" data-dy="${y}">Delete</button>
       </div>
     </div>`;
+  }).join('');
+  list.querySelectorAll('[data-vy]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();S.selectedYear=b.dataset.vy;saveLocal();render();}));
+  list.querySelectorAll('[data-ey]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();S.pendingYear=b.dataset.ey;saveLocal();render();}));
+  list.querySelectorAll('[data-dy]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();confirm2(`Delete ${b.dataset.dy}?`,()=>clearYear(b.dataset.dy));}));
+}
 
-  if (h.harvest) {
-    const harv = h.harvest;
-    const prevHarv = prevH?.harvest;
-    body += `
-      <div class="modal-section">
-        <h4>${state.selectedYear} Harvest</h4>
-        <div class="kv-grid">
-          <div class="kv"><div class="k">Total Harvest</div><div class="v">${fmt(harv.totalHarvest)}${prevHarv ? delta(harv.totalHarvest, prevHarv.totalHarvest, true) : ''}</div></div>
-          <div class="kv"><div class="k">Bulls / Bucks</div><div class="v">${fmt(harv.totalBull)}</div></div>
-          <div class="kv"><div class="k">Antlerless</div><div class="v">${fmt(harv.antlerless)}</div></div>
-          <div class="kv"><div class="k">Success Rate</div><div class="v">${fmtPct(harv.successPct)}${prevHarv ? delta(harv.successPct, prevHarv.successPct, true, '%') : ''}</div></div>
-          <div class="kv"><div class="k">Days in Field</div><div class="v">${fmt(harv.days)}</div></div>
-        </div>
-      </div>`;
+// ─── MODAL ────────────────────────────────────────────────────────────────────
+function showDetail(id) {
+  const [num,sp]=id.split('_');
+  const h=getH().find(x=>x.huntNum===num&&x.species===sp); if(!h) return;
+  $('#mTitle').textContent=`${h.huntNum} — ${h.huntName}`;
+  $('#mSub').textContent=`${S.selectedYear} · ${h.species==='elk'?'Elk':'Buck Deer'} · ${wLabel(h.weapon)}`;
+  const myPts=$('#fMyPoints').value===''?null:Number($('#fMyPoints').value);
+  const mo=myOdds(h,myPts);
+  const prev=S.compareYear||prevYr(S.selectedYear);
+  const prevH=prev?findH(prev,num,sp):null;
 
-    if (harv.totalBull > 0 && harv.antlerValid) {
-      const classes = [
-        ['Spike', harv.spike || 0],
-        ['2-point', harv.twoPt || 0],
-        ['3-point', harv.threePt || 0],
-        ['4-point', harv.fourPt || 0],
-        ['5-point', harv.fivePt || 0],
-        ['6-point or better', harv.sixPlusPt || 0],
-      ];
-      const rows = classes.map(([label, count]) => {
-        const pctOfBulls = harv.totalBull > 0 ? (count / harv.totalBull) * 100 : 0;
-        return `<tr><td>${label}</td><td>${fmt(count)}</td><td>${fmtPct(pctOfBulls)}</td></tr>`;
-      }).join('');
-      body += `
-        <div class="modal-section">
-          <h4>Bull Size Breakdown</h4>
-          <table class="points">
-            <thead><tr><th>Antler Class</th><th>Harvested</th><th>% of Bulls</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>`;
-    } else if (harv.totalBull > 0 && !harv.antlerValid) {
-      body += `<div class="modal-section"><p style="color:var(--text-muted);font-size:12px;">Antler breakdown could not be reliably parsed from this PDF — column alignment uncertain.</p></div>`;
+  function delta(cur,prev2,hb,suf) {
+    if(cur==null||prev2==null||cur===prev2) return '';
+    const better=hb?cur>prev2:cur<prev2;
+    return ` <span class="trend ${better?'tup':'tdn'}">${better?'▲':'▼'} ${(cur-prev2)>0?'+':''}${(cur-prev2).toFixed(suf==='%'?0:1)}${suf||''} vs ${prev}</span>`;
+  }
+
+  let take='';
+  if(myPts!==null){
+    const p=h.pts100;
+    if(p===null)         take=`<p class="callout warn"><strong>With ${myPts} pt${myPts===1?'':'s'}:</strong> No preference-phase draw found. Random-phase only. Odds: ~${fmtP(mo)}.</p>`;
+    else if(myPts>=p)    take=`<p class="callout good"><strong>With ${myPts} pt${myPts===1?'':'s'}:</strong> 100% draw chance — you exceed the ${p}-pt threshold.</p>`;
+    else { const aw=p-myPts; take=`<p class="callout"><strong>With ${myPts} pt${myPts===1?'':'s'}:</strong> ${aw} pt${aw===1?'':'s'} short of 100% draw (${p} pts). Current odds: ~${fmtP(mo)}.</p>`; }
+  }
+
+  let body=`${take}
+  <div class="msec"><h4>Draw Results (Resident)</h4><div class="kvg">
+    <div class="kv"><div class="k">Tags</div><div class="v">${fmt(h.tags)}</div></div>
+    <div class="kv"><div class="k">Resident Apps</div><div class="v">${fmt(h.residentApps)}${prevH?delta(h.residentApps,prevH.residentApps,false):''}</div></div>
+    <div class="kv"><div class="k">Resident Drawn</div><div class="v">${fmt(h.residentDrawn)}</div></div>
+    <div class="kv"><div class="k">Pts for 100% Draw</div><div class="v">${h.pts100==null?'Random only':h.pts100}${prevH?delta(h.pts100,prevH.pts100,false):''}</div></div>
+    <div class="kv"><div class="k">Lowest Tier w/ Any Draw</div><div class="v">${h.minPointsToDraw??'—'}</div></div>
+    <div class="kv"><div class="k">Non-Res Apps</div><div class="v">${fmt(h.nonResidentApps)}</div></div>
+  </div></div>`;
+
+  if(h.harvest){
+    const hv=h.harvest, ph=prevH?.harvest;
+    body+=`<div class="msec"><h4>Harvest</h4><div class="kvg">
+      <div class="kv"><div class="k">Total Harvest</div><div class="v">${fmt(hv.totalHarvest)}${ph?delta(hv.totalHarvest,ph.totalHarvest,true):''}</div></div>
+      <div class="kv"><div class="k">Bulls / Bucks</div><div class="v">${fmt(hv.totalBull)}</div></div>
+      <div class="kv"><div class="k">Antlerless</div><div class="v">${fmt(hv.antlerless)}</div></div>
+      <div class="kv"><div class="k">Success Rate</div><div class="v">${fmtP(hv.successPct)}${ph?delta(hv.successPct,ph.successPct,true,'%'):''}</div></div>
+      <div class="kv"><div class="k">Days in Field</div><div class="v">${fmt(hv.days)}</div></div>
+    </div></div>`;
+    if(hv.totalBull>0&&hv.antlerValid){
+      const cls=[['Spike',hv.spike||0],['2-point',hv.twoPt||0],['3-point',hv.threePt||0],['4-point',hv.fourPt||0],['5-point',hv.fivePt||0],['6-point+',hv.sixPlusPt||0]];
+      body+=`<div class="msec"><h4>Bull Size Breakdown</h4><table class="pts"><thead><tr><th>Class</th><th>Harvested</th><th>% of Bulls</th></tr></thead><tbody>
+        ${cls.map(([l,c])=>`<tr><td>${l}</td><td>${fmt(c)}</td><td>${fmtP(hv.totalBull>0?(c/hv.totalBull)*100:0)}</td></tr>`).join('')}
+      </tbody></table></div>`;
     }
   }
 
-  if (breakdown.length) {
-    const pointsRows = breakdown.map(p => {
-      const drewHere = (p.resDrawn) > 0 && minPts !== null && p.points >= minPts;
-      const pct = p.resApps > 0 ? (p.resDrawn / p.resApps) * 100 : 0;
-      return `<tr ${drewHere ? 'class="drew"' : ''}>
-        <td>${p.points}</td>
-        <td>${fmt(p.resApps)}</td>
-        <td>${fmt(p.resDrawn)}</td>
-        <td>${fmtPct(pct)}</td>
-      </tr>`;
-    }).join('');
-    body += `
-      <div class="modal-section">
-        <h4>Resident Draw by Point Level</h4>
-        <table class="points">
-          <thead><tr><th>Points</th><th>Res. Apps</th><th>Res. Drawn</th><th>Draw %</th></tr></thead>
-          <tbody>${pointsRows}</tbody>
-        </table>
-        <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">Highlighted rows: preference phase tags awarded at this point level.</p>
-      </div>`;
+  const bd=[...h.pointBreakdown].sort((a,b)=>b.points-a.points);
+  if(bd.length){
+    body+=`<div class="msec"><h4>Resident Draw by Point Tier</h4><table class="pts">
+      <thead><tr><th>Points</th><th>Res. Apps</th><th>Res. Drawn</th><th>Draw %</th></tr></thead><tbody>
+      ${bd.map(p=>{
+        const pct=p.resApps>0?(p.resDrawn/p.resApps)*100:0;
+        const full=p.resApps>0&&p.resDrawn>=p.resApps;
+        return `<tr ${full?'class="drew"':''}><td>${p.points}</td><td>${fmt(p.resApps)}</td><td>${fmt(p.resDrawn)}</td><td>${fmtP(pct)}</td></tr>`;
+      }).join('')}
+      </tbody></table>
+      <p style="font-size:11px;color:var(--tmut);margin-top:6px">Highlighted rows = 100% draw rate at this point level.</p>
+    </div>`;
   }
 
-  $('#mBody').innerHTML = body;
+  $('#mBody').innerHTML=body;
   $('#modal').classList.add('open');
 }
 
-function switchPage(pageName) {
-  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.dataset.page === pageName));
-  document.querySelectorAll('.nav-link').forEach(b => b.classList.toggle('active', b.dataset.page === pageName));
-  window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+// ─── GLOBAL RENDER ────────────────────────────────────────────────────────────
+function switchPage(name){
+  $$('.page').forEach(p=>p.classList.toggle('active',p.dataset.page===name));
+  $$('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.page===name));
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function renderEmpty(){
+  const p=$('#emptyPrompt'), b=$('#navBadge'), empty=getH().length===0;
+  if(p) p.style.display=empty?'block':'none';
+  if(b) b.style.display=empty?'inline-block':'none';
+}
+function render(){
+  const pd=$('#pyDisp'); if(pd) pd.textContent=S.pendingYear||'none';
+  const yrs=yList();
+  const yv=$('#ySelView'), yc=$('#ySelCompare'), yctrl=$('#yctrl');
+  if(yv) yv.innerHTML=yrs.map(y=>`<option value="${y}" ${y===S.selectedYear?'selected':''}>${y}</option>`).join('');
+  if(yc) yc.innerHTML=['<option value="auto">Prior year (auto)</option>',...yrs.filter(y=>y!==S.selectedYear).map(y=>`<option value="${y}" ${y===S.compareYear?'selected':''}>${y}</option>`)].join('');
+  if(yctrl) yctrl.style.display=yrs.length>0?'flex':'none';
+  renderStatus(); renderTable(); renderEmpty();
 }
 
-function renderEmptyPrompt() {
-  const prompt = $('#emptyDataPrompt');
-  const badge  = $('#navBadge');
-  const fbBanner = $('#fbLoadBanner');
-  const empty = getHunts().length === 0;
-  if (prompt) prompt.style.display = empty ? 'block' : 'none';
-  if (badge)  badge.style.display  = empty ? 'inline-block' : 'none';
-  if (fbBanner) fbBanner.style.display = empty ? 'flex' : 'none';
+function confirm2(msg, cb){
+  const w=document.createElement('div'); w.className='modal-backdrop open';
+  w.innerHTML=`<div class="modal" style="max-width:400px"><div class="mhead"><div><h3>${esc(msg)}</h3></div></div>
+    <div class="mbody"><div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn sec" data-no>Cancel</button><button class="btn dan" data-yes>Confirm</button>
+    </div></div></div>`;
+  document.body.appendChild(w);
+  w.querySelector('[data-yes]').addEventListener('click',()=>{document.body.removeChild(w);cb();});
+  w.querySelector('[data-no]').addEventListener('click',()=>document.body.removeChild(w));
+  w.addEventListener('click',e=>{if(e.target===w)document.body.removeChild(w);});
 }
 
-function render() {
-  const pyDisp = $('#pendingYearDisplay');
-  if (pyDisp) pyDisp.textContent = state.pendingYear || 'none';
-
-  const ySelView    = $('#ySelView');
-  const ySelCompare = $('#ySelCompare');
-  const yearControls = $('#yearControls');
-  const years = getYearList();
-
-  if (ySelView) {
-    ySelView.innerHTML = years.map(y => `<option value="${y}" ${y === state.selectedYear ? 'selected' : ''}>${y}</option>`).join('');
-  }
-  if (ySelCompare) {
-    ySelCompare.innerHTML = ['<option value="auto">Prior year (auto)</option>',
-      ...years.filter(y => y !== state.selectedYear).map(y =>
-        `<option value="${y}" ${y === state.compareYear ? 'selected' : ''}>${y}</option>`)].join('');
-  }
-  if (yearControls) yearControls.style.display = years.length > 0 ? 'flex' : 'none';
-
-  renderStatus();
-  renderTable();
-  renderEmptyPrompt();
-}
-
-// ─── INIT ──────────────────────────────────────────────────────────────────────
-function init() {
-  loadState();
-  const yearInput = $('#pendingYearInput');
-  if (yearInput) {
-    yearInput.value = state.pendingYear || new Date().getFullYear();
-    if (!state.pendingYear) state.pendingYear = String(new Date().getFullYear());
-  }
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+async function init() {
+  const hadLocal = loadLocal();
+  const yi=$('#pyInput');
+  if(yi){yi.value=S.pendingYear||new Date().getFullYear();if(!S.pendingYear)S.pendingYear=String(new Date().getFullYear());}
   render();
 
-  // Firebase compat SDK loads synchronously — __fbReady is already set by now
-  if (getHunts().length === 0 && window.__fbReady) {
-    updateFbBanner('', 'No local data — loading from cloud…');
-    fbLoadAll();
-  } else if (getHunts().length === 0) {
-    updateFbBanner('error', 'Firebase failed to load. Try refreshing or upload files locally.');
+  // Auto-load from Firebase
+  if(db){
+    banner('#dbBanner','','Loading data from cloud…',true);
+    banner('#dmBanner','','Connecting to cloud…',true);
+    const data = await fbLoad();
+    if(data&&Object.keys(data).length>0){
+      Object.entries(data).forEach(([year,yd])=>{
+        S.years[year]={hunts:yd.hunts,harvestData:yd.harvestData,files:{}};
+        applyHarvest(year);
+      });
+      if(!S.selectedYear) S.selectedYear=yList()[0]||null;
+      if(!S.pendingYear)  S.pendingYear=S.selectedYear;
+      saveLocal(); render();
+      const total=Object.values(data).reduce((s,y)=>s+(y.hunts?.length||0),0);
+      banner('#dbBanner','ok',`${total} hunts loaded from cloud ✓`,false);
+      banner('#dmBanner','ok','Cloud connected ✓ — uploads auto-save for everyone',false);
+    } else if(hadLocal&&getH().length>0){
+      banner('#dbBanner','ok','Showing local data (nothing in cloud yet)',false);
+      banner('#dmBanner','ok','Local data loaded. Upload files to share with others.',false);
+    } else {
+      banner('#dbBanner','err','No data in cloud yet. Upload files in Data Manager.',false);
+      banner('#dmBanner','','No cloud data yet. Upload files to get started.',false);
+    }
   } else {
-    updateFbBanner('success', 'Local data loaded. Use "Save to Cloud" to share your uploads.');
+    banner('#dbBanner','err','Firebase unavailable. Upload files locally.',false);
+    banner('#dmBanner','err','Firebase unavailable.',false);
   }
 
   // Nav
-  document.querySelectorAll('.nav-link').forEach(btn => btn.addEventListener('click', () => switchPage(btn.dataset.page)));
-  const goData = $('#btnGoToData'); if (goData) goData.addEventListener('click', () => switchPage('data'));
-  const goDb   = $('#btnViewDatabase'); if (goDb) goDb.addEventListener('click', () => switchPage('database'));
+  $$('.nav-link').forEach(b=>b.addEventListener('click',()=>switchPage(b.dataset.page)));
+  const gd=$('#btnGoData'); if(gd) gd.addEventListener('click',()=>switchPage('data'));
+  const gdb=$('#btnViewDb'); if(gdb) gdb.addEventListener('click',()=>switchPage('database'));
 
-  // Year
-  const btnSetYear = $('#btnSetYear');
-  if (btnSetYear) {
-    btnSetYear.addEventListener('click', () => {
-      const v = (yearInput?.value || '').trim();
-      if (!/^\d{4}$/.test(v)) { toast('Enter a 4-digit year', true); return; }
-      state.pendingYear = v;
-      if (!state.selectedYear) state.selectedYear = v;
-      saveState(); render();
-      toast(`Now editing year ${v}`);
-    });
-  }
-  if (yearInput) yearInput.addEventListener('input', () => { const d = $('#pendingYearDisplay'); if (d) d.textContent = yearInput.value || 'none'; });
-
-  // Year selectors
-  const ySelView    = $('#ySelView');
-  const ySelCompare = $('#ySelCompare');
-  if (ySelView)    ySelView.addEventListener('change', () => { state.selectedYear = ySelView.value; saveState(); render(); });
-  if (ySelCompare) ySelCompare.addEventListener('change', () => { state.compareYear = ySelCompare.value === 'auto' ? null : ySelCompare.value; saveState(); render(); });
-
-  // File inputs
-  $$('input[type=file]').forEach(inp => {
-    inp.addEventListener('change', e => { handleFile(e.target.dataset.target, e.target.files[0]); e.target.value = ''; });
+  // Year picker
+  $('#btnSetYear').addEventListener('click',()=>{
+    const v=(yi?.value||'').trim();
+    if(!/^\d{4}$/.test(v)){toast('Enter a 4-digit year',true);return;}
+    S.pendingYear=v; if(!S.selectedYear)S.selectedYear=v;
+    saveLocal(); render(); toast(`Editing year ${v}`);
   });
+  if(yi) yi.addEventListener('input',()=>{const d=$('#pyDisp');if(d)d.textContent=yi.value||'none';});
 
-  // Drag and drop
-  $$('.upload-zone').forEach(zone => {
-    const input = zone.querySelector('input[type=file]');
-    ['dragenter','dragover'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); zone.classList.add('dragover'); }));
-    ['dragleave','drop'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); zone.classList.remove('dragover'); }));
-    zone.addEventListener('drop', e => { const f = e.dataTransfer?.files; if (f?.[0]) handleFile(input.dataset.target, f[0]); });
+  const ysv=$('#ySelView'), ysc=$('#ySelCompare');
+  if(ysv) ysv.addEventListener('change',()=>{S.selectedYear=ysv.value;saveLocal();render();});
+  if(ysc) ysc.addEventListener('change',()=>{S.compareYear=ysc.value==='auto'?null:ysc.value;saveLocal();render();});
+
+  // File inputs & drag-drop
+  $$('input[type=file]').forEach(inp=>inp.addEventListener('change',e=>{handleFile(e.target.dataset.target,e.target.files[0]);e.target.value='';}));
+  $$('.upload-zone').forEach(zone=>{
+    const inp=zone.querySelector('input[type=file]');
+    ['dragenter','dragover'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();zone.classList.add('dv');}));
+    ['dragleave','drop'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();zone.classList.remove('dv');}));
+    zone.addEventListener('drop',e=>{const f=e.dataTransfer?.files;if(f?.[0])handleFile(inp.dataset.target,f[0]);});
   });
 
   // Filters
-  ['fSpecies','fWeapon','fMyPoints','fDrawability','fSearch'].forEach(id => $('#' + id).addEventListener('input', () => render()));
+  ['fSpecies','fWeapon','fMyPoints','fDrawability','fSearch'].forEach(id=>$('#'+id).addEventListener('input',()=>render()));
 
-  // Sort headers
-  $$('#huntsTable thead th').forEach(th => {
-    if (!th.dataset.sort) return;
-    th.addEventListener('click', () => {
-      const k = th.dataset.sort;
-      state.sortDir = state.sortKey === k ? (state.sortDir === 'asc' ? 'desc' : 'asc') : 'desc';
-      state.sortKey = k;
-      if (['huntNum','huntName','weapon'].includes(k) && state.sortDir === 'desc') state.sortDir = 'asc';
-      render();
+  // Sort
+  $$('#huntsTable thead th').forEach(th=>{
+    if(!th.dataset.sort) return;
+    th.addEventListener('click',()=>{
+      const k=th.dataset.sort;
+      S.sortDir=S.sortKey===k?(S.sortDir==='asc'?'desc':'asc'):(['huntNum','huntName','weapon'].includes(k)?'asc':'desc');
+      S.sortKey=k; render();
     });
   });
 
-  // Firebase buttons
-  const btnSave = $('#btnSyncToCloud'); if (btnSave) btnSave.addEventListener('click', fbSaveAll);
-  const btnLoad = $('#btnLoadFromCloud'); if (btnLoad) btnLoad.addEventListener('click', fbLoadAll);
-  const btnLoadCloud = $('#btnLoadCloud'); if (btnLoadCloud) btnLoadCloud.addEventListener('click', fbLoadAll);
-  const btnFbLoad = $('#btnFbLoad'); if (btnFbLoad) btnFbLoad.addEventListener('click', fbLoadAll);
-
-  // Clear
-  $('#btnClear').addEventListener('click', () => {
-    if (Object.keys(state.years).length === 0) { toast('Nothing to clear'); return; }
-    showConfirm('Clear all local data?', 'Removes locally-parsed data from this device. Cloud data is unaffected.', () => clearAll());
-  });
-
-  // Modal
-  $('#mClose').addEventListener('click', () => $('#modal').classList.remove('open'));
-  $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') $('#modal').classList.remove('open'); });
+  $('#btnClear').addEventListener('click',()=>{if(!Object.keys(S.years).length){toast('Nothing to clear');return;}confirm2('Clear all local data?',()=>clearLocal());});
+  $('#mClose').addEventListener('click',()=>$('#modal').classList.remove('open'));
+  $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')$('#modal').classList.remove('open');});
 }
 
-function showConfirm(title, message, onYes) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'modal-backdrop open';
-  wrapper.innerHTML = `
-    <div class="modal" style="max-width:440px;">
-      <div class="modal-head"><div><h3>${escapeHtml(title)}</h3></div></div>
-      <div class="modal-body">
-        <p style="margin-top:0;">${escapeHtml(message)}</p>
-        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;">
-          <button class="btn secondary" data-no>Cancel</button>
-          <button class="btn danger" data-yes>Confirm</button>
-        </div>
-      </div>
-    </div>`;
-  document.body.appendChild(wrapper);
-  wrapper.querySelector('[data-yes]').addEventListener('click', () => { document.body.removeChild(wrapper); onYes(); });
-  wrapper.querySelector('[data-no]').addEventListener('click',  () => document.body.removeChild(wrapper));
-  wrapper.addEventListener('click', e => { if (e.target === wrapper) document.body.removeChild(wrapper); });
-}
-
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
 else init();
 </script>
 
