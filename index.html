@@ -162,6 +162,12 @@ footer a{color:#000}
 .spill:hover{background:var(–tan);color:#f0f0f0}
 .spill.active{background:var(–green);border-color:var(–gl);color:#fff}
 .spill .sarr{margin-left:5px;font-size:11px;opacity:.8}
+.spill.s2{background:#1a2a1f;border-color:var(–gl);color:var(–gl)}
+.spill.s3{background:#1a1f2a;border-color:#7da9d4;color:#7da9d4}
+.spill.s2 .sarr{opacity:1}.spill.s3 .sarr{opacity:1}
+.sort-clear{display:inline-flex;align-items:center;padding:7px 10px;border:1px solid var(–bad);background:#1f1f1f;color:var(–bad);font-family:sans-serif;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;cursor:pointer;white-space:nowrap;-webkit-appearance:none;border-radius:0}
+.sort-clear:hover{background:var(–badbg)}
+.sort-sep{color:var(–tmut);font-family:sans-serif;font-size:13px;align-self:center;margin:0 2px}
 </style>
 
 </head>
@@ -171,7 +177,7 @@ footer a{color:#000}
   <div class="site-header-inner">
     <div class="crest">ODFW</div>
     <div>
-      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v1.6</span></h1>
+      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v1.7</span></h1>
       <div class="site-subtitle">Buck Deer &amp; Elk &mdash; Draw Odds &amp; Harvest Statistics</div>
     </div>
   </div>
@@ -230,8 +236,7 @@ footer a{color:#000}
 </section>
 
 <div class="rmeta"><h2>Results</h2><div class="rcount" id="rcount">—</div></div>
-<div id="sortBar" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;font-family:sans-serif;">
-  <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--tmut);align-self:center;margin-right:2px;">Sort:</span>
+<div id="sortBar" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;font-family:sans-serif;align-items:center;">
 </div>
 <div class="twrap">
   <table class="hunts" id="huntsTable">
@@ -427,7 +432,7 @@ async function fbLoad() {
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 const SK = 'odfw_v4';
-const S = { years:{}, selectedYear:null, compareYear:null, pendingYear:null, sortKey:'huntNum', sortDir:'asc', sort2Key:null, sort2Dir:'asc', sort3Key:null, sort3Dir:'asc', elkPts:null, deerPts:null };
+const S = { years:{}, selectedYear:null, compareYear:null, pendingYear:null, sorts:[{key:'huntNum',dir:'asc'}], elkPts:null, deerPts:null };
 
 const curYD  = () => S.selectedYear ? S.years[S.selectedYear] : null;
 const getH   = () => { const y = curYD(); return y ? y.hunts : []; };
@@ -799,10 +804,11 @@ function cmpKey(a, b, k, dir, f) {
 function sortHunts(hunts) {
   const f=getFilters();
   return [...hunts].sort((a,b)=>{
-    let r = cmpKey(a,b,S.sortKey,S.sortDir,f);
-    if(r===0 && S.sort2Key) r = cmpKey(a,b,S.sort2Key,S.sort2Dir,f);
-    if(r===0 && S.sort3Key) r = cmpKey(a,b,S.sort3Key,S.sort3Dir,f);
-    return r;
+    for(const s of S.sorts){
+      const r=cmpKey(a,b,s.key,s.dir,f);
+      if(r!==0) return r;
+    }
+    return 0;
   });
 }
 
@@ -832,7 +838,7 @@ function renderTable() {
   $$('#huntsTable thead th').forEach(th=>{
     th.classList.remove('sorted');
     const sa=th.querySelector('.sa'); if(sa) sa.textContent='▾';
-    if(th.dataset.sort===S.sortKey){th.classList.add('sorted');if(sa) sa.textContent=S.sortDir==='asc'?'▴':'▾';}
+    if(th.dataset.sort===S.sorts[0]?.key){th.classList.add('sorted');if(sa) sa.textContent=S.sorts[0].dir==='asc'?'▴':'▾';}
   });
 
   const rows=sorted.map(h=>{
@@ -1108,35 +1114,114 @@ async function init() {
 
   // Sort pill buttons
   const SORT_OPTIONS = [
-    {key:'myOdds',  label:'My Odds',    defaultDir:'desc'},
-    {key:'pts100',  label:'Pts to Draw',defaultDir:'asc'},
-    {key:'success', label:'Success %',  defaultDir:'desc'},
-    {key:'tags',    label:'Tags',       defaultDir:'desc'},
-    {key:'apps',    label:'Applicants', defaultDir:'desc'},
-    {key:'huntNum', label:'Hunt #',     defaultDir:'asc'},
+    {key:'myOdds',  label:'My Odds',     defaultDir:'desc'},
+    {key:'pts100',  label:'Pts to Draw', defaultDir:'asc'},
+    {key:'success', label:'Success %',   defaultDir:'desc'},
+    {key:'tags',    label:'Tags',        defaultDir:'desc'},
+    {key:'apps',    label:'Applicants',  defaultDir:'desc'},
+    {key:'huntNum', label:'Hunt #',      defaultDir:'asc'},
   ];
+
   function renderSortBar(){
     const bar=$('#sortBar'); if(!bar) return;
-    // Keep the "Sort:" label (first child), rebuild pills after it
-    while(bar.children.length>1) bar.removeChild(bar.lastChild);
-    SORT_OPTIONS.forEach(opt=>{
-      const isActive = S.sortKey===opt.key;
-      const dir = isActive ? S.sortDir : opt.defaultDir;
-      const arrow = dir==='asc' ? '▴' : '▾';
-      const btn=document.createElement('button');
-      btn.className='spill'+(isActive?' active':'');
-      btn.innerHTML=opt.label+(isActive?`<span class="sarr">${arrow}</span>`:'');
-      btn.addEventListener('click',()=>{
-        if(S.sortKey===opt.key){
-          S.sortDir=S.sortDir==='asc'?'desc':'asc';
-        } else {
-          S.sortKey=opt.key;
-          S.sortDir=opt.defaultDir;
-        }
+    bar.innerHTML='';
+
+    // Build one row of pills per active sort level, plus an "add" row
+    const levels = S.sorts.length;
+    const LEVEL_LABELS = ['Sort by','Then by','Then by'];
+    const LEVEL_CLS    = ['active','s2','s3'];
+
+    S.sorts.forEach((s, li)=>{
+      // Label
+      const lbl=document.createElement('span');
+      lbl.style.cssText='font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--tmut);align-self:center;white-space:nowrap;';
+      lbl.textContent=LEVEL_LABELS[li]+':';
+      bar.appendChild(lbl);
+
+      // Pills for this level
+      SORT_OPTIONS.forEach(opt=>{
+        // Can't use same key as a higher level
+        const usedAbove = S.sorts.slice(0,li).some(x=>x.key===opt.key);
+        if(usedAbove) return;
+        const isActive = s.key===opt.key;
+        const arrow = isActive ? (s.dir==='asc'?'▴':'▾') : '';
+        const btn=document.createElement('button');
+        btn.className='spill'+(isActive?' '+LEVEL_CLS[li]:'');
+        btn.innerHTML=opt.label+(isActive?`<span class="sarr">${arrow}</span>`:'');
+        btn.addEventListener('click',()=>{
+          if(isActive){
+            // Flip direction
+            S.sorts[li]={key:s.key, dir:s.dir==='asc'?'desc':'asc'};
+          } else {
+            // Switch this level to this key
+            S.sorts[li]={key:opt.key, dir:opt.defaultDir};
+          }
+          renderSortBar(); renderTable();
+        });
+        bar.appendChild(btn);
+      });
+
+      // Remove (×) button for this level — but not if it's the only level
+      if(levels>1){
+        const rem=document.createElement('button');
+        rem.className='sort-clear';
+        rem.innerHTML='&#x2715;';
+        rem.title='Remove this sort level';
+        rem.addEventListener('click',()=>{
+          S.sorts.splice(li,1);
+          if(S.sorts.length===0) S.sorts=[{key:'huntNum',dir:'asc'}];
+          renderSortBar(); renderTable();
+        });
+        bar.appendChild(rem);
+      }
+
+      // Separator / break before next level
+      if(li < levels-1){
+        const sep=document.createElement('div');
+        sep.style.cssText='width:100%;height:0;';
+        bar.appendChild(sep);
+      }
+    });
+
+    // "Add sort level" button — max 3 levels
+    if(levels < 3 && levels < SORT_OPTIONS.length){
+      // Line break before it if we already have rows
+      if(levels>0){
+        const br=document.createElement('div');
+        br.style.cssText='width:100%;height:0;';
+        bar.appendChild(br);
+      }
+      const addLbl=document.createElement('span');
+      addLbl.style.cssText='font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--tmut);align-self:center;white-space:nowrap;';
+      addLbl.textContent=LEVEL_LABELS[levels]+':';
+      bar.appendChild(addLbl);
+
+      const usedKeys = S.sorts.map(x=>x.key);
+      SORT_OPTIONS.filter(o=>!usedKeys.includes(o.key)).forEach(opt=>{
+        const btn=document.createElement('button');
+        btn.className='spill';
+        btn.textContent=opt.label;
+        btn.addEventListener('click',()=>{
+          S.sorts.push({key:opt.key, dir:opt.defaultDir});
+          renderSortBar(); renderTable();
+        });
+        bar.appendChild(btn);
+      });
+    }
+
+    // Clear all sorts button — only show when something non-default is active
+    const isDefault = S.sorts.length===1 && S.sorts[0].key==='huntNum';
+    if(!isDefault){
+      const br=document.createElement('div'); br.style.cssText='width:100%;height:0;'; bar.appendChild(br);
+      const clr=document.createElement('button');
+      clr.className='sort-clear';
+      clr.innerHTML='&#x2715; Clear all sorts';
+      clr.addEventListener('click',()=>{
+        S.sorts=[{key:'huntNum',dir:'asc'}];
         renderSortBar(); renderTable();
       });
-      bar.appendChild(btn);
-    });
+      bar.appendChild(clr);
+    }
   }
   renderSortBar();
 
