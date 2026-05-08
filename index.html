@@ -22,154 +22,137 @@
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;background:#000}
 body{margin:0;font-family:'Georgia','Cambria',serif;font-size:16px;line-height:1.5;color:#f0f0f0;background:#000;-webkit-font-smoothing:antialiased}
-
-.site-header{background:var(–green);color:#fff;border-bottom:4px solid var(–gold)}
+.site-header{background:var(--green);color:#fff;border-bottom:4px solid var(--gold)}
 .site-header-inner{max-width:1300px;margin:0 auto;padding:18px 20px;display:flex;align-items:center;gap:16px}
-.crest{flex-shrink:0;width:52px;height:52px;border:2px solid var(–gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;letter-spacing:1px;color:var(–gold);background:rgba(0,0,0,.15)}
-.site-title{font-family:‘Georgia’,serif;margin:0;font-size:22px;font-weight:600;line-height:1.15}
-.ver{display:inline-block;margin-left:8px;padding:1px 7px;font-family:sans-serif;font-size:11px;font-weight:600;letter-spacing:.5px;vertical-align:middle;color:var(–gold);border:1px solid var(–gold);border-radius:2px;background:rgba(0,0,0,.3)}
+.crest{flex-shrink:0;width:52px;height:52px;border:2px solid var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;letter-spacing:1px;color:var(--gold);background:rgba(0,0,0,.15)}
+.site-title{font-family:'Georgia',serif;margin:0;font-size:22px;font-weight:600;line-height:1.15}
+.ver{display:inline-block;margin-left:8px;padding:1px 7px;font-family:sans-serif;font-size:11px;font-weight:600;letter-spacing:.5px;vertical-align:middle;color:var(--gold);border:1px solid var(--gold);border-radius:2px;background:rgba(0,0,0,.3)}
 .site-subtitle{font-size:12px;font-style:italic;opacity:.85;letter-spacing:.5px;text-transform:uppercase;margin-top:2px}
-
-.subnav{background:var(–gl);border-top:1px solid rgba(255,255,255,.1)}
+.subnav{background:var(--gl);border-top:1px solid rgba(255,255,255,.1)}
 .subnav-inner{max-width:1300px;margin:0 auto;padding:0 20px;font-family:sans-serif;display:flex}
 .nav-link{background:transparent;border:none;border-bottom:3px solid transparent;color:rgba(255,255,255,.75);font-family:inherit;font-size:13px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;padding:12px 18px;cursor:pointer;-webkit-appearance:none}
 .nav-link:hover{color:#fff}
-.nav-link.active{color:#fff;border-bottom-color:var(–gold);background:rgba(0,0,0,.2)}
-.nbadge{display:inline-block;margin-left:6px;padding:1px 6px;font-size:10px;background:var(–gold);color:var(–gl);border-radius:2px;font-weight:700}
-
+.nav-link.active{color:#fff;border-bottom-color:var(--gold);background:rgba(0,0,0,.2)}
+.nbadge{display:inline-block;margin-left:6px;padding:1px 6px;font-size:10px;background:var(--gold);color:var(--gl);border-radius:2px;font-weight:700}
 .page{display:none}.page.active{display:block}
 main{max-width:1300px;margin:0 auto;padding:24px 20px 60px}
-.page-title{font-family:‘Georgia’,serif;font-size:28px;font-weight:normal;color:var(–gl);margin:0 0 4px;border-bottom:2px solid var(–gold);padding-bottom:10px}
-.page-lede{font-style:italic;color:var(–tsec);margin:8px 0 24px;font-size:15px}
-
-.panel{background:#141414;border:1px solid var(–bor);margin-bottom:24px}
-.panel-head{background:#1f1f1f;border-bottom:1px solid var(–bor);padding:10px 16px;font-family:sans-serif;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(–gold)}
+.page-title{font-family:'Georgia',serif;font-size:28px;font-weight:normal;color:var(--gl);margin:0 0 4px;border-bottom:2px solid var(--gold);padding-bottom:10px}
+.page-lede{font-style:italic;color:var(--tsec);margin:8px 0 24px;font-size:15px}
+.panel{background:#141414;border:1px solid var(--bor);margin-bottom:24px}
+.panel-head{background:#1f1f1f;border-bottom:1px solid var(--bor);padding:10px 16px;font-family:sans-serif;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--gold)}
 .panel-body{padding:18px 16px}
-
 .data-status{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:14px;font-family:sans-serif}
 .sdot{width:10px;height:10px;border-radius:50%;background:#666;display:inline-block;margin-right:8px}
-.sdot.ok{background:var(–good)}.sdot.part{background:var(–gold)}
-
+.sdot.ok{background:var(--good)}.sdot.part{background:var(--gold)}
 .upload-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:14px}
 @media(max-width:900px){.upload-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:600px){.upload-grid{grid-template-columns:1fr}}
-.upload-zone{border:2px dashed var(–bor);background:var(–tanl);padding:18px 14px;text-align:center;cursor:pointer;transition:all .15s;font-family:sans-serif;display:flex;flex-direction:column}
-.upload-zone:hover,.upload-zone.dv{border-color:var(–green);background:#000}
-.upload-zone.hf{border-style:solid;border-color:var(–green);background:var(–goodbg)}
-.uzl{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(–gl);margin-bottom:4px}
-.uzh{font-size:12px;color:var(–tmut)}
-.uzf{font-size:12px;color:var(–good);margin-top:6px;font-weight:600;word-break:break-all}
+.upload-zone{border:2px dashed var(--bor);background:var(--tanl);padding:18px 14px;text-align:center;cursor:pointer;transition:all .15s;font-family:sans-serif;display:flex;flex-direction:column}
+.upload-zone:hover,.upload-zone.dv{border-color:var(--green);background:#000}
+.upload-zone.hf{border-style:solid;border-color:var(--green);background:var(--goodbg)}
+.uzl{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gl);margin-bottom:4px}
+.uzh{font-size:12px;color:var(--tmut)}
+.uzf{font-size:12px;color:var(--good);margin-top:6px;font-weight:600;word-break:break-all}
 .upload-zone input[type=file]{display:none}
-
-.btn{font-family:sans-serif;font-size:13px;font-weight:600;letter-spacing:.4px;padding:8px 16px;border:1px solid var(–gl);background:var(–green);color:#fff;cursor:pointer;text-transform:uppercase;-webkit-appearance:none;border-radius:0}
-.btn:hover{background:var(–gl)}.btn:disabled{background:#555;border-color:#555;cursor:not-allowed}
-.btn.sec{background:#1f1f1f;color:var(–gl);border-color:var(–gl)}.btn.sec:hover{background:var(–tan)}
-.btn.dan{background:#1f1f1f;color:var(–bad);border-color:var(–bad)}.btn.dan:hover{background:var(–badbg)}
-.bmini{font-family:sans-serif;font-size:11px;font-weight:600;text-transform:uppercase;padding:5px 10px;background:#1f1f1f;color:var(–gl);border:1px solid var(–gl);cursor:pointer;border-radius:0;-webkit-appearance:none}
-.bmini:hover{background:var(–tan)}.bmini.dan{color:var(–bad);border-color:var(–bad)}.bmini.dan:hover{background:var(–badbg)}
-.src-btn{display:block;margin-top:8px;font-family:sans-serif;font-size:12px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(–gl);background:#141414;border:1px solid var(–gl);text-decoration:none;text-align:center;padding:9px 12px;transition:background .15s}
-.src-btn:hover{background:var(–green);color:#fff}.src-btn::after{content:’ \2197’;font-weight:normal}
+.btn{font-family:sans-serif;font-size:13px;font-weight:600;letter-spacing:.4px;padding:8px 16px;border:1px solid var(--gl);background:var(--green);color:#fff;cursor:pointer;text-transform:uppercase;-webkit-appearance:none;border-radius:0}
+.btn:hover{background:var(--gl)}.btn:disabled{background:#555;border-color:#555;cursor:not-allowed}
+.btn.sec{background:#1f1f1f;color:var(--gl);border-color:var(--gl)}.btn.sec:hover{background:var(--tan)}
+.btn.dan{background:#1f1f1f;color:var(--bad);border-color:var(--bad)}.btn.dan:hover{background:var(--badbg)}
+.bmini{font-family:sans-serif;font-size:11px;font-weight:600;text-transform:uppercase;padding:5px 10px;background:#1f1f1f;color:var(--gl);border:1px solid var(--gl);cursor:pointer;border-radius:0;-webkit-appearance:none}
+.bmini:hover{background:var(--tan)}.bmini.dan{color:var(--bad);border-color:var(--bad)}.bmini.dan:hover{background:var(--badbg)}
+.src-btn{display:block;margin-top:8px;font-family:sans-serif;font-size:12px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--gl);background:#141414;border:1px solid var(--gl);text-decoration:none;text-align:center;padding:9px 12px;transition:background .15s}
+.src-btn:hover{background:var(--green);color:#fff}.src-btn::after{content:' \2197';font-weight:normal}
 .arow{margin-top:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-.htext{font-family:sans-serif;font-size:12px;color:var(–tmut);margin-top:12px;line-height:1.5}
-
+.htext{font-family:sans-serif;font-size:12px;color:var(--tmut);margin-top:12px;line-height:1.5}
 .filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;font-family:sans-serif}
-.field label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(–gl);margin-bottom:4px}
-.field input,.field select{width:100%;padding:7px 9px;border:1px solid var(–bor);background:#141414;font-family:inherit;font-size:14px;color:#f0f0f0;-webkit-text-fill-color:#f0f0f0;color-scheme:dark;border-radius:0;-webkit-appearance:none;appearance:none}
-.field input:focus,.field select:focus{outline:2px solid var(–gold);outline-offset:-1px}
-.field select{background-image:url(“data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%236bb582' stroke-width='1.5' fill='none'/></svg>”);background-repeat:no-repeat;background-position:right 8px center;padding-right:28px}
-
+.field label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gl);margin-bottom:4px}
+.field input,.field select{width:100%;padding:7px 9px;border:1px solid var(--bor);background:#141414;font-family:inherit;font-size:14px;color:#f0f0f0;-webkit-text-fill-color:#f0f0f0;color-scheme:dark;border-radius:0;-webkit-appearance:none;appearance:none}
+.field input:focus,.field select:focus{outline:2px solid var(--gold);outline-offset:-1px}
+.field select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%236bb582' stroke-width='1.5' fill='none'/></svg>");background-repeat:no-repeat;background-position:right 8px center;padding-right:28px}
 .rmeta{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px;margin:24px 0 8px;font-family:sans-serif}
-.rmeta h2{font-family:‘Georgia’,serif;font-size:20px;font-weight:normal;color:var(–gl);margin:0}
-.rcount{font-size:13px;color:var(–tmut)}
-.twrap{background:#141414;border:1px solid var(–bor);overflow-x:auto;-webkit-overflow-scrolling:touch}
+.rmeta h2{font-family:'Georgia',serif;font-size:20px;font-weight:normal;color:var(--gl);margin:0}
+.rcount{font-size:13px;color:var(--tmut)}
+.twrap{background:#141414;border:1px solid var(--bor);overflow-x:auto;-webkit-overflow-scrolling:touch}
 table.hunts{width:100%;border-collapse:collapse;font-family:sans-serif;font-size:13px}
-table.hunts thead th{background:var(–green);color:#fff;font-weight:600;text-transform:uppercase;letter-spacing:.4px;font-size:11px;padding:10px 8px;text-align:left;white-space:nowrap;border-right:1px solid var(–gl);cursor:pointer;user-select:none}
+table.hunts thead th{background:var(--green);color:#fff;font-weight:600;text-transform:uppercase;letter-spacing:.4px;font-size:11px;padding:10px 8px;text-align:left;white-space:nowrap;border-right:1px solid var(--gl);user-select:none}
 table.hunts thead th:last-child{border-right:none}
-table.hunts thead th .sa{opacity:.5;margin-left:3px;font-size:10px}
-table.hunts thead th.sorted .sa{opacity:1}
-table.hunts tbody tr{border-bottom:1px solid var(–borl);cursor:pointer}
-table.hunts tbody tr:nth-child(even){background:var(–tanl)}
-table.hunts tbody tr:hover{background:var(–tan)}
+table.hunts tbody tr{border-bottom:1px solid var(--borl);cursor:pointer}
+table.hunts tbody tr:nth-child(even){background:var(--tanl)}
+table.hunts tbody tr:hover{background:var(--tan)}
 table.hunts tbody td{padding:9px 8px;vertical-align:top}
 table.hunts tbody td.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
-table.hunts tbody td.hnum{font-family:‘Georgia’,serif;font-weight:600;font-size:14px;color:var(–gl);white-space:nowrap}
-.sub{font-weight:normal;font-size:11px;color:var(–tmut);display:block;margin-top:2px}
-
-.tag{display:inline-block;padding:1px 6px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;border:1px solid var(–bor);background:#141414}
+table.hunts tbody td.hnum{font-family:'Georgia',serif;font-weight:600;font-size:14px;color:var(--gl);white-space:nowrap}
+.sub{font-weight:normal;font-size:11px;color:var(--tmut);display:block;margin-top:2px}
+.tag{display:inline-block;padding:1px 6px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;border:1px solid var(--bor);background:#141414}
 .tag.archery{border-color:#c4a96a;color:#c4a96a}.tag.muzz{border-color:#d48b58;color:#d48b58}
-.tag.rifle{border-color:var(–gl);color:var(–gl)}.tag.youth{border-color:#7da9d4;color:#7da9d4}
-
-.ce{color:var(–good);font-weight:600;font-variant-numeric:tabular-nums}
-.cm{color:var(–warn);font-weight:600;font-variant-numeric:tabular-nums}
-.ch{color:var(–bad);font-weight:600;font-variant-numeric:tabular-nums}
-.cn{color:var(–tmut);font-variant-numeric:tabular-nums}
-.sbar{height:4px;background:var(–borl);margin-top:3px;position:relative}
-.sbarf{position:absolute;top:0;left:0;bottom:0;background:var(–green)}
-.empty{padding:40px 20px;text-align:center;color:var(–tmut);font-family:sans-serif;font-size:14px}
-
+.tag.rifle{border-color:var(--gl);color:var(--gl)}.tag.youth{border-color:#7da9d4;color:#7da9d4}
+.ce{color:var(--good);font-weight:600;font-variant-numeric:tabular-nums}
+.cm{color:var(--warn);font-weight:600;font-variant-numeric:tabular-nums}
+.ch{color:var(--bad);font-weight:600;font-variant-numeric:tabular-nums}
+.cn{color:var(--tmut);font-variant-numeric:tabular-nums}
+.sbar{height:4px;background:var(--borl);margin-top:3px;position:relative}
+.sbarf{position:absolute;top:0;left:0;bottom:0;background:var(--green)}
+.empty{padding:40px 20px;text-align:center;color:var(--tmut);font-family:sans-serif;font-size:14px}
 .trend{display:inline-block;margin-left:5px;font-size:11px;font-weight:600;font-family:sans-serif;font-variant-numeric:tabular-nums}
-.tup{color:var(–good)}.tdn{color:var(–bad)}
-
-.yctrl{display:flex;gap:14px;flex-wrap:wrap;background:#141414;border:1px solid var(–bor);padding:12px 16px;margin:0 0 20px;align-items:flex-end}
+.tup{color:var(--good)}.tdn{color:var(--bad)}
+.yctrl{display:flex;gap:14px;flex-wrap:wrap;background:#141414;border:1px solid var(--bor);padding:12px 16px;margin:0 0 20px;align-items:flex-end}
 .ycf{flex:1 1 180px;min-width:160px}
-.ycf label{display:block;font-family:sans-serif;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(–gold);margin-bottom:4px}
-.ycf select{width:100%;padding:7px 9px;border:1px solid var(–bor);background:#141414;color:#f0f0f0;-webkit-text-fill-color:#f0f0f0;color-scheme:dark;font-family:sans-serif;font-size:14px;border-radius:0;-webkit-appearance:none;appearance:none;background-image:url(“data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%236bb582' stroke-width='1.5' fill='none'/></svg>”);background-repeat:no-repeat;background-position:right 8px center;padding-right:28px}
-
-.ylist{border:1px solid var(–bor)}
-.yrow{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(–borl);font-family:sans-serif;background:#141414}
-.yrow:last-child{border-bottom:none}.yrow.sel{background:var(–goodbg);border-left:3px solid var(–gold)}
-.yrl{font-size:16px;font-family:‘Georgia’,serif;color:#f0f0f0;font-weight:600}
-.yrm{font-size:12px;color:var(–tmut);margin-top:2px}
+.ycf label{display:block;font-family:sans-serif;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gold);margin-bottom:4px}
+.ycf select{width:100%;padding:7px 9px;border:1px solid var(--bor);background:#141414;color:#f0f0f0;-webkit-text-fill-color:#f0f0f0;color-scheme:dark;font-family:sans-serif;font-size:14px;border-radius:0;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%236bb582' stroke-width='1.5' fill='none'/></svg>");background-repeat:no-repeat;background-position:right 8px center;padding-right:28px}
+.ylist{border:1px solid var(--bor)}
+.yrow{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--borl);font-family:sans-serif;background:#141414}
+.yrow:last-child{border-bottom:none}.yrow.sel{background:var(--goodbg);border-left:3px solid var(--gold)}
+.yrl{font-size:16px;font-family:'Georgia',serif;color:#f0f0f0;font-weight:600}
+.yrm{font-size:12px;color:var(--tmut);margin-top:2px}
 .yra{display:flex;gap:6px;flex-shrink:0}
-.bsm{display:inline-block;margin-left:6px;padding:1px 6px;font-family:sans-serif;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;background:var(–gold);color:#000;border-radius:2px;vertical-align:middle}
-.bsma{display:inline-block;margin-left:6px;padding:1px 6px;font-family:sans-serif;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;background:#1f1f1f;color:var(–gl);border:1px solid var(–gl);border-radius:2px;vertical-align:middle}
-
+.bsm{display:inline-block;margin-left:6px;padding:1px 6px;font-family:sans-serif;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;background:var(--gold);color:#000;border-radius:2px;vertical-align:middle}
+.bsma{display:inline-block;margin-left:6px;padding:1px 6px;font-family:sans-serif;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;background:#1f1f1f;color:var(--gl);border:1px solid var(--gl);border-radius:2px;vertical-align:middle}
 .modal-backdrop{position:fixed;inset:0;background:rgba(20,30,20,.6);display:none;align-items:flex-start;justify-content:center;z-index:100;padding:20px;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .modal-backdrop.open{display:flex}
-.modal{background:#141414;border:1px solid var(–bor);max-width:720px;width:100%;margin:20px auto;border-top:4px solid var(–gold)}
-.mhead{display:flex;justify-content:space-between;align-items:flex-start;padding:16px 20px;background:var(–tan);border-bottom:1px solid var(–bor)}
-.mhead h3{font-family:‘Georgia’,serif;font-size:20px;font-weight:normal;color:var(–gl);margin:0}
-.mhsub{font-family:sans-serif;font-size:12px;color:var(–tsec);text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
-.mclose{background:transparent;border:1px solid var(–tsec);color:var(–tsec);width:28px;height:28px;font-size:18px;line-height:1;cursor:pointer;font-family:serif;flex-shrink:0}
+.modal{background:#141414;border:1px solid var(--bor);max-width:720px;width:100%;margin:20px auto;border-top:4px solid var(--gold)}
+.mhead{display:flex;justify-content:space-between;align-items:flex-start;padding:16px 20px;background:var(--tan);border-bottom:1px solid var(--bor)}
+.mhead h3{font-family:'Georgia',serif;font-size:20px;font-weight:normal;color:var(--gl);margin:0}
+.mhsub{font-family:sans-serif;font-size:12px;color:var(--tsec);text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
+.mclose{background:transparent;border:1px solid var(--tsec);color:var(--tsec);width:28px;height:28px;font-size:18px;line-height:1;cursor:pointer;font-family:serif;flex-shrink:0}
 .mbody{padding:20px;font-family:sans-serif;font-size:14px}
 .msec{margin-bottom:20px}
-.msec h4{font-family:‘Georgia’,serif;font-size:15px;color:var(–gl);margin:0 0 8px;border-bottom:1px solid var(–borl);padding-bottom:4px;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.msec h4{font-family:'Georgia',serif;font-size:15px;color:var(--gl);margin:0 0 8px;border-bottom:1px solid var(--borl);padding-bottom:4px;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
 .kvg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px 16px}
-.kv .k{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(–tmut)}
-.kv .v{font-size:16px;font-family:‘Georgia’,serif;color:var(–text);font-variant-numeric:tabular-nums}
+.kv .k{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--tmut)}
+.kv .v{font-size:16px;font-family:'Georgia',serif;color:var(--text);font-variant-numeric:tabular-nums}
 table.pts{width:100%;border-collapse:collapse;font-size:13px}
-table.pts th,table.pts td{padding:6px 8px;border-bottom:1px solid var(–borl);text-align:right;font-variant-numeric:tabular-nums}
-table.pts th{background:var(–tanl);font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(–gl)}
+table.pts th,table.pts td{padding:6px 8px;border-bottom:1px solid var(--borl);text-align:right;font-variant-numeric:tabular-nums}
+table.pts th{background:var(--tanl);font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--gl)}
 table.pts th:first-child,table.pts td:first-child{text-align:left}
-table.pts tr.drew td{background:var(–goodbg);font-weight:600}
-.callout{padding:10px 14px;margin:0 0 16px;border-left:3px solid var(–gold);background:var(–warnbg);font-family:sans-serif;font-size:14px;color:#f0f0f0}
-.callout.good{background:var(–goodbg);border-left-color:var(–good)}
-
-.banner{font-family:sans-serif;font-size:13px;padding:10px 14px;border-left:3px solid var(–gold);background:var(–warnbg);color:#f0f0f0;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.banner.ok{border-left-color:var(–good);background:var(–goodbg)}
-.banner.err{border-left-color:var(–bad);background:var(–badbg)}
+table.pts tr.drew td{background:var(--goodbg);font-weight:600}
+.callout{padding:10px 14px;margin:0 0 16px;border-left:3px solid var(--gold);background:var(--warnbg);font-family:sans-serif;font-size:14px;color:#f0f0f0}
+.callout.good{background:var(--goodbg);border-left-color:var(--good)}
+.banner{font-family:sans-serif;font-size:13px;padding:10px 14px;border-left:3px solid var(--gold);background:var(--warnbg);color:#f0f0f0;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.banner.ok{border-left-color:var(--good);background:var(--goodbg)}
+.banner.err{border-left-color:var(--bad);background:var(--badbg)}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spin{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
-
-footer{background:var(–gl);color:rgba(255,255,255,.8);padding:30px 20px;margin-top:40px;font-family:sans-serif;font-size:12px;line-height:1.6}
+footer{background:var(--gl);color:rgba(255,255,255,.8);padding:30px 20px;margin-top:40px;font-family:sans-serif;font-size:12px;line-height:1.6}
 footer .inner{max-width:1300px;margin:0 auto}
 footer a{color:#000}
 .disc{font-style:italic;font-size:11px;opacity:.7;margin-top:16px;border-top:1px solid rgba(255,255,255,.2);padding-top:12px}
-
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(–gl);color:#fff;padding:10px 18px;font-family:sans-serif;font-size:13px;border-left:3px solid var(–gold);z-index:200;max-width:90%;display:none}
-.toast.err{background:var(–bad);border-left-color:#fff}.toast.show{display:block}
-.spill{display:inline-flex;align-items:center;gap:0;border:1px solid var(–bor);background:#1f1f1f;cursor:pointer;font-family:sans-serif;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(–tmut);padding:7px 12px;white-space:nowrap;-webkit-appearance:none;border-radius:0}
-.spill:hover{background:var(–tan);color:#f0f0f0}
-.spill.active{background:var(–green);border-color:var(–gl);color:#fff}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--gl);color:#fff;padding:10px 18px;font-family:sans-serif;font-size:13px;border-left:3px solid var(--gold);z-index:200;max-width:90%;display:none}
+.toast.err{background:var(--bad);border-left-color:#fff}.toast.show{display:block}
+.spill{display:inline-flex;align-items:center;gap:0;border:1px solid var(--bor);background:#1f1f1f;cursor:pointer;font-family:sans-serif;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--tmut);padding:7px 12px;white-space:nowrap;-webkit-appearance:none;border-radius:0}
+.spill:hover{background:var(--tan);color:#f0f0f0}
+.spill.active{background:var(--green);border-color:var(--gl);color:#fff}
 .spill .sarr{margin-left:5px;font-size:11px;opacity:.8}
-.spill.s2{background:#1a2a1f;border-color:var(–gl);color:var(–gl)}
+.spill.s2{background:#1a2a1f;border-color:var(--gl);color:var(--gl)}
 .spill.s3{background:#1a1f2a;border-color:#7da9d4;color:#7da9d4}
 .spill.s2 .sarr{opacity:1}.spill.s3 .sarr{opacity:1}
-.sort-clear{display:inline-flex;align-items:center;padding:7px 10px;border:1px solid var(–bad);background:#1f1f1f;color:var(–bad);font-family:sans-serif;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;cursor:pointer;white-space:nowrap;-webkit-appearance:none;border-radius:0}
-.sort-clear:hover{background:var(–badbg)}
-.sort-sep{color:var(–tmut);font-family:sans-serif;font-size:13px;align-self:center;margin:0 2px}
+.sort-clear{display:inline-flex;align-items:center;padding:7px 10px;border:1px solid var(--bad);background:#1f1f1f;color:var(--bad);font-family:sans-serif;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;cursor:pointer;white-space:nowrap;-webkit-appearance:none;border-radius:0}
+.sort-clear:hover{background:var(--badbg)}
+/* Favorites */
+.fav-btn{background:transparent;border:none;font-size:22px;cursor:pointer;padding:2px 6px;line-height:1;color:var(--tmut);-webkit-appearance:none;flex-shrink:0}
+.fav-btn:hover{color:var(--gold)}.fav-btn.active{color:var(--gold)}
+.fav-remove{background:transparent;border:1px solid var(--bad);color:var(--bad);font-size:11px;font-family:sans-serif;font-weight:600;text-transform:uppercase;padding:4px 8px;cursor:pointer;-webkit-appearance:none;border-radius:0}
+.fav-remove:hover{background:var(--badbg)}
 </style>
-
 </head>
 <body>
 
@@ -177,8 +160,8 @@ footer a{color:#000}
   <div class="site-header-inner">
     <div class="crest">ODFW</div>
     <div>
-      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v1.9</span></h1>
-      <div class="site-subtitle">Buck Deer &amp; Elk &mdash; Draw Odds &amp; Harvest Statistics</div>
+      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v2.0</span></h1>
+      <div class="site-subtitle">Deer &amp; Elk &mdash; Draw Odds &amp; Harvest Statistics</div>
     </div>
   </div>
 </header>
@@ -186,8 +169,8 @@ footer a{color:#000}
 <div class="subnav">
   <div class="subnav-inner">
     <button class="nav-link active" data-page="database">Hunt Database</button>
+    <button class="nav-link" data-page="favorites">Favorites ★</button>
     <button class="nav-link" data-page="data">Data Manager <span class="nbadge" id="navBadge" style="display:none">!</span></button>
-    <button class="nav-link" data-page="debug">PDF Debug</button>
   </div>
 </div>
 
@@ -197,7 +180,7 @@ footer a{color:#000}
 
   <div class="page active" data-page="database">
     <h2 class="page-title">Hunt Database</h2>
-    <p class="page-lede">Data loads automatically from the cloud. Enter your preference points to see personal draw odds.</p>
+    <p class="page-lede">Data Loaded by Jaren &mdash; Subscription Fees Apply</p>
 
 ```
 <div id="dbBanner" class="banner"><span class="spin"></span><span id="dbMsg">Loading data from cloud…</span></div>
@@ -221,7 +204,7 @@ footer a{color:#000}
   <div class="panel-body">
     <div class="filters">
       <div class="field"><label>Species</label>
-        <select id="fSpecies"><option value="all">All</option><option value="elk">Elk</option><option value="deer">Buck Deer</option></select></div>
+        <select id="fSpecies"><option value="all">All</option><option value="elk">Elk</option><option value="deer">Deer</option></select></div>
       <div class="field"><label>Weapon / Type</label>
         <select id="fWeapon"><option value="all">All</option><option value="rifle">Rifle (Any Legal)</option><option value="archery">Archery</option><option value="muzz">Muzzleloader</option><option value="youth">Youth</option></select></div>
       <div class="field"><label>My Elk Points</label>
@@ -237,26 +220,51 @@ footer a{color:#000}
 </section>
 
 <div class="rmeta"><h2>Results</h2><div class="rcount" id="rcount">—</div></div>
-<div id="sortBar" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;font-family:sans-serif;align-items:center;">
-</div>
+<div id="sortBar" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;font-family:sans-serif;align-items:center;"></div>
 <div class="twrap">
   <table class="hunts" id="huntsTable">
     <thead><tr>
-      <th data-sort="huntNum">Hunt No. <span class="sa">▾</span></th>
-      <th data-sort="huntName">Hunt Name <span class="sa">▾</span></th>
-      <th data-sort="weapon">Type <span class="sa">▾</span></th>
-      <th data-sort="tags" class="num-th">Tags <span class="sa">▾</span></th>
-      <th data-sort="pts100" class="num-th">Pts for 100% Draw <span class="sa">▾</span></th>
-      <th data-sort="success" class="num-th">Success Rate <span class="sa">▾</span></th>
-      <th class="num-th">Most Common Bull</th>
-      <th data-sort="myOdds" class="num-th">My Draw Odds <span class="sa">▾</span></th>
-      <th data-sort="apps" class="num-th">Applicants <span class="sa">▾</span></th>
+      <th>Hunt No.</th>
+      <th>Hunt Name</th>
+      <th>Type</th>
+      <th class="num-th">Pts for 100% Draw</th>
+      <th class="num-th">Success Rate</th>
+      <th class="num-th">My Draw Odds</th>
+      <th class="num-th">Trophy Size</th>
+      <th class="num-th">Applicants</th>
+      <th class="num-th">Tags</th>
     </tr></thead>
     <tbody id="huntsBody"><tr><td colspan="9" class="empty"><span class="spin"></span> Loading…</td></tr></tbody>
   </table>
 </div>
 ```
 
+  </div>
+
+  <!-- FAVORITES PAGE -->
+
+  <div class="page" data-page="favorites">
+    <h2 class="page-title">Favorites ★</h2>
+    <p class="page-lede">Your saved hunts — stored only on this device.</p>
+    <div id="favEmpty" style="display:none">
+      <section class="panel" style="border-left:4px solid var(--gold)">
+        <div class="panel-body" style="text-align:center">
+          <p style="margin:0;font-family:sans-serif;color:var(--tsec)">No favorites yet. Open any hunt and tap ★ to save it.</p>
+        </div>
+      </section>
+    </div>
+    <div class="twrap" id="favWrap" style="display:none">
+      <table class="hunts">
+        <thead><tr>
+          <th>Hunt No.</th><th>Hunt Name</th><th>Type</th>
+          <th class="num-th">Pts for 100%</th><th class="num-th">Success Rate</th>
+          <th class="num-th">My Draw Odds</th><th class="num-th">Trophy Size</th>
+          <th class="num-th">Applicants</th><th class="num-th">Tags</th>
+          <th class="num-th">Remove</th>
+        </tr></thead>
+        <tbody id="favBody"></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- DATA MANAGER -->
@@ -326,30 +334,16 @@ footer a{color:#000}
 
   </div>
 
-  <!-- DEBUG PAGE -->
-
-  <div class="page" data-page="debug">
-    <h2 class="page-title">PDF Debug</h2>
-    <p class="page-lede">After uploading a harvest PDF, use this to see exactly what numbers were extracted for each hunt. This tells us what's going wrong with antler data.</p>
-    <div class="panel">
-      <div class="panel-head">Raw PDF Parse Output</div>
-      <div class="panel-body">
-        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
-          <input type="text" id="dbgFilter" placeholder="Filter by hunt #, e.g. 254R1" style="padding:7px 9px;border:1px solid var(--bor);background:#141414;color:#f0f0f0;-webkit-text-fill-color:#f0f0f0;color-scheme:dark;font-family:sans-serif;font-size:14px;border-radius:0;width:220px;">
-          <button class="btn" id="btnRefreshDebug">Refresh</button>
-        </div>
-        <div id="dbgOut" style="font-family:monospace;font-size:12px;color:#f0f0f0;"></div>
-      </div>
-    </div>
-  </div>
-
   <!-- MODAL -->
 
   <div class="modal-backdrop" id="modal">
     <div class="modal">
       <div class="mhead">
         <div><h3 id="mTitle">—</h3><div class="mhsub" id="mSub">—</div></div>
-        <button class="mclose" id="mClose">×</button>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          <button class="fav-btn" id="modalFavBtn" title="Save to favorites">☆</button>
+          <button class="mclose" id="mClose">×</button>
+        </div>
       </div>
       <div class="mbody" id="mBody"></div>
     </div>
@@ -367,8 +361,6 @@ footer a{color:#000}
 
 <div class="toast" id="toast"></div>
 
-<!-- Firebase compat SDK — loaded synchronously before the main script -->
-
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -376,7 +368,7 @@ footer a{color:#000}
 <script>
 'use strict';
 
-// ─── FIREBASE (synchronous compat SDK) ───────────────────────────────────────
+// ─── FIREBASE ─────────────────────────────────────────────────────────────────
 let db = null;
 try {
   firebase.initializeApp({
@@ -416,15 +408,11 @@ async function fbSave(year, hunts, harvestData) {
 async function fbDeleteYear(year) {
   if (!db) return false;
   try {
-    // Delete chunks
-    const chunksSnap = await db.collection('years').doc(String(year)).collection('chunks').get();
-    for (const d of chunksSnap.docs) await d.ref.delete();
-    // Delete harvest
-    const harvestSnap = await db.collection('years').doc(String(year)).collection('harvest').get();
-    for (const d of harvestSnap.docs) await d.ref.delete();
-    // Delete year doc
+    const cs = await db.collection('years').doc(String(year)).collection('chunks').get();
+    for (const d of cs.docs) await d.ref.delete();
+    const hs = await db.collection('years').doc(String(year)).collection('harvest').get();
+    for (const d of hs.docs) await d.ref.delete();
     await db.collection('years').doc(String(year)).delete();
-    console.log('[FB] Deleted year', year);
     return true;
   } catch(e) { console.warn('[FB] Delete error:', e); return false; }
 }
@@ -450,7 +438,7 @@ async function fbLoad() {
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 const SK = 'odfw_v4';
-const S = { years:{}, selectedYear:null, compareYear:null, pendingYear:null, sorts:[{key:'huntNum',dir:'asc'}], elkPts:null, deerPts:null };
+const S = { years:{}, selectedYear:null, compareYear:null, pendingYear:null, sorts:[{key:'huntNum',dir:'asc'}] };
 
 const curYD  = () => S.selectedYear ? S.years[S.selectedYear] : null;
 const getH   = () => { const y = curYD(); return y ? y.hunts : []; };
@@ -487,7 +475,6 @@ function toast(msg, isErr) {
   t.className = 'toast show' + (isErr ? ' err' : '');
   setTimeout(() => { t.className = 'toast'; }, 3500);
 }
-
 function banner(id, type, msg, spin) {
   const el = $(id); if (!el) return;
   el.className = 'banner' + (type ? ' '+type : '');
@@ -512,14 +499,12 @@ function species(num) {
 const wLabel = w => ({rifle:'Rifle',archery:'Archery',muzz:'Muzz.',youth:'Youth'}[w]||w);
 
 // ─── DERIVE pts100 ────────────────────────────────────────────────────────────
-// pts100 = MINIMUM point tier where resDrawn >= resApps (every resident drew).
-// We iterate all tiers; if multiple qualify we want the lowest (easiest to reach).
 function derive(h) {
   h.pointBreakdown.sort((a,b) => b.points - a.points);
   let pts100 = null, minPts = null;
   for (const p of h.pointBreakdown) {
     if (p.resDrawn > 0) minPts = p.points;
-    if (p.resApps > 0 && p.resDrawn >= p.resApps) pts100 = p.points; // keep updating → ends at minimum
+    if (p.resApps > 0 && p.resDrawn >= p.resApps) pts100 = p.points;
   }
   h.pts100 = pts100;
   h.minPointsToDraw = minPts;
@@ -567,9 +552,7 @@ function parseXlsx(buf, sp) {
 }
 
 // ─── PDF HARVEST ──────────────────────────────────────────────────────────────
-// Global debug log — stores raw PDF parse info for every matched row
 window._pdfDebug = {};
-
 async function parsePdf(buf) {
   if (!window.pdfjsLib) throw new Error('PDF.js not loaded');
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -581,105 +564,48 @@ async function parsePdf(buf) {
   for (let p=1; p<=pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const tc   = await page.getTextContent();
-
-    // Sort items by Y descending (top of page first), then X ascending (left to right)
     const items = tc.items.filter(it=>it.str?.trim())
       .map(it=>({x:Math.round(it.transform[4]), y:Math.round(it.transform[5]), str:it.str.trim()}))
       .sort((a,b)=>b.y-a.y||a.x-b.x);
-
-    // Group into lines by Y proximity
     const lines=[]; let cl=null;
     items.forEach(it=>{
       if(!cl||Math.abs(cl.y-it.y)>4){cl={y:it.y,items:[]};lines.push(cl);}
       cl.items.push(it);
     });
-
     lines.forEach(line=>{
       const text = line.items.map(i=>i.str).join(' ').replace(/\s+/g,' ').trim();
       const pm = text.match(/(\d+)%\s*$/); if(!pm) return;
       const pct = Number(pm[1]);
       const hms = [...text.matchAll(huntRe)]; if(!hms.length) return;
-
       for (const m of hms) {
         const num = m[1]; if(out[num]) break;
-
-        // Log every item in this row with its X position
-        const rowItems = line.items.map(i=>({x:i.x, str:i.str}));
-
-        // Find the hunt number item to get its X position
         const huntItem = line.items.find(it=>it.str===num||it.str.includes(num));
         const huntX = huntItem ? huntItem.x : 0;
-
-        // APPROACH: collect items to the RIGHT of the hunt number item
-        // Use a threshold: anything more than 150pt right of hunt code is data
-        // This separates name column from numeric columns
         const dataItems = line.items.filter(it=>it.x > huntX + 150);
         const dataText  = dataItems.map(i=>i.str).join(' ').replace(/(\d+)%\s*$/,'').trim();
         const dataInts  = [...dataText.matchAll(/\b(\d+)\b/g)].map(x=>Number(x[1]));
-
-        // Log everything for debugging
-        window._pdfDebug[num] = {
-          rawText: text,
-          rowItems: rowItems,
-          huntX: huntX,
-          dataItems: dataItems.map(i=>({x:i.x, str:i.str})),
-          dataText: dataText,
-          dataInts: dataInts,
-          pct: pct
-        };
-
+        window._pdfDebug[num] = {rawText:text, rowItems:line.items.map(i=>({x:i.x,str:i.str})), huntX, dataInts, pct};
         let n = dataInts;
-
-        // If X-split didn't give enough, try a different threshold
         if(n.length < 8) {
-          // Try tighter threshold — maybe name is narrower
           const dataItems2 = line.items.filter(it=>it.x > huntX + 80);
           const dataText2  = dataItems2.map(i=>i.str).join(' ').replace(/(\d+)%\s*$/,'').trim();
           const dataInts2  = [...dataText2.matchAll(/\b(\d+)\b/g)].map(x=>Number(x[1]));
           window._pdfDebug[num].dataInts80 = dataInts2;
           if(dataInts2.length > n.length) n = dataInts2;
         }
-
-        if(n.length < 8) { window._pdfDebug[num].skipped='too few nums: '+n.length; continue; }
-
+        if(n.length < 8) { window._pdfDebug[num].skipped='too few: '+n.length; continue; }
         let hu,da,al,tb,th,sp,t2,t3,t4,t5,t6;
-
-        if(n.length >= 11) {
-          [hu,da,al,tb,th,sp,t2,t3,t4,t5,t6] = n.slice(n.length-11);
-        } else if(n.length === 10) {
-          [hu,da,al,tb,sp,t2,t3,t4,t5,t6] = n.slice(n.length-10);
-          th = (al||0)+(tb||0);
-        } else {
-          [hu,da,al,tb,th,sp,t2,t3,t4,t5,t6] = n;
-          th = th || (al||0)+(tb||0);
-        }
-
-        const antlerSum = (sp||0)+(t2||0)+(t3||0)+(t4||0)+(t5||0)+(t6||0);
-        // antlerValid = we got at least some antler data (partial counts are fine — 
-        // ODFW only classifies bulls that were observed/checked, not necessarily all)
+        if(n.length >= 11)      { [hu,da,al,tb,th,sp,t2,t3,t4,t5,t6] = n.slice(n.length-11); }
+        else if(n.length === 10){ [hu,da,al,tb,sp,t2,t3,t4,t5,t6] = n.slice(n.length-10); th=(al||0)+(tb||0); }
+        else                    { [hu,da,al,tb,th,sp,t2,t3,t4,t5,t6] = n; th=th||(al||0)+(tb||0); }
+        const antlerSum=(sp||0)+(t2||0)+(t3||0)+(t4||0)+(t5||0)+(t6||0);
         const av = antlerSum > 0;
-
         window._pdfDebug[num].parsed = {hu,da,al,tb,th,sp,t2,t3,t4,t5,t6,antlerSum,av,n};
-
-        out[num] = {
-          huntNum:num, hunters:hu||0, days:da||0, antlerless:al||0,
+        out[num] = { huntNum:num, hunters:hu||0, days:da||0, antlerless:al||0,
           totalBull:tb||0, totalHarvest:th||0, successPct:pct,
-          spike:sp||0, twoPt:t2||0, threePt:t3||0, fourPt:t4||0, fivePt:t5||0, sixPlusPt:t6||0,
-          antlerValid:av
-        };
+          spike:sp||0, twoPt:t2||0, threePt:t3||0, fourPt:t4||0, fivePt:t5||0, sixPlusPt:t6||0, antlerValid:av };
         break;
       }
-    });
-  }
-
-  // Print summary to console
-  console.log('[PDF] Parsed', Object.keys(out).length, 'hunts');
-  const badOnes = Object.values(out).filter(h=>!h.antlerValid&&h.totalBull>0);
-  if(badOnes.length) {
-    console.warn('[PDF] Antler data invalid for:', badOnes.map(h=>h.huntNum));
-    badOnes.forEach(h=>{
-      const d=window._pdfDebug[h.huntNum];
-      console.log(h.huntNum,'| dataInts:',d?.dataInts,'| n:',d?.parsed?.n,'| totalBull:',h.totalBull,'| antlerSum:',d?.parsed?.antlerSum);
     });
   }
   return out;
@@ -696,7 +622,7 @@ function parseHarvestXlsx(buf) {
         const num=v.trim(); let pct=null;
         for(let j=r.length-1;j>i;j--){const c=r[j];if(typeof c==='number'&&c<=1){pct=c*100;break}if(typeof c==='string'){const m=c.match(/^(\d+(?:\.\d+)?)%?$/);if(m){pct=Number(m[1]);break}}}
         const ns=r.slice(i+1).filter(c=>typeof c==='number'||(typeof c==='string'&&/^\d+$/.test(c.trim()))).map(Number);
-        const av=ns.length>=6 && (ns[5]||ns[6]||ns[7]||ns[8]||ns[9]||ns[10]||0)>0;
+        const av=ns.length>=6&&(ns[5]||ns[6]||ns[7]||ns[8]||ns[9]||ns[10]||0)>0;
         if(pct!==null&&!out[num]) out[num]={huntNum:num,successPct:pct,hunters:ns[0]||0,days:ns[1]||0,antlerless:ns[2]||0,totalBull:ns[3]||0,totalHarvest:ns[4]||0,spike:av?ns[5]:0,twoPt:av?ns[6]:0,threePt:av?ns[7]:0,fourPt:av?ns[8]:0,fivePt:av?ns[9]:0,sixPlusPt:av?ns[10]:0,antlerValid:av};
         break;
       }
@@ -734,7 +660,6 @@ async function handleFile(target, file) {
     }
     if (!S.selectedYear) S.selectedYear = year;
     saveLocal(); render();
-    // Auto-save to cloud
     banner('#dmBanner','','Saving to cloud…',true);
     const ok = await fbSave(year, yd.hunts, yd.harvestData);
     banner('#dmBanner', ok?'ok':'err', ok?'Saved to cloud ✓ — others will see this data on next load':'Cloud save failed — data is local only', false);
@@ -763,30 +688,78 @@ function clearYear(year) {
   saveLocal(); render(); toast('Year '+year+' removed');
 }
 
+// ─── FAVORITES ────────────────────────────────────────────────────────────────
+const FAV_KEY = 'odfw_favs_v1';
+function loadFavs() { try { return JSON.parse(localStorage.getItem(FAV_KEY)||'[]'); } catch(e){ return []; } }
+function saveFavs(f) { try { localStorage.setItem(FAV_KEY, JSON.stringify(f)); } catch(e){} }
+function isFav(num,sp) { return loadFavs().some(f=>f.huntNum===num&&f.species===sp); }
+function toggleFav(num,sp) {
+  let favs=loadFavs();
+  const idx=favs.findIndex(f=>f.huntNum===num&&f.species===sp);
+  if(idx>=0){ favs.splice(idx,1); }
+  else {
+    const h=getH().find(x=>x.huntNum===num&&x.species===sp);
+    if(h) favs.push({huntNum:h.huntNum,species:h.species,huntName:h.huntName,addedAt:Date.now()});
+  }
+  saveFavs(favs);
+  const btn=$('#modalFavBtn');
+  if(btn&&btn.dataset.fhunt===num&&btn.dataset.fsp===sp){
+    const now=isFav(num,sp); btn.textContent=now?'★':'☆'; btn.classList.toggle('active',now);
+  }
+}
+function renderFavs() {
+  const favs=loadFavs(), empty=$('#favEmpty'), wrap=$('#favWrap'), body=$('#favBody');
+  if(!empty||!wrap||!body) return;
+  if(!favs.length){ empty.style.display='block'; wrap.style.display='none'; return; }
+  empty.style.display='none'; wrap.style.display='block';
+  const elkEl=$('#fElkPts'), deerEl=$('#fDeerPts');
+  const f={ elkPts:elkEl&&elkEl.value!==''?Number(elkEl.value):null, deerPts:deerEl&&deerEl.value!==''?Number(deerEl.value):null };
+  const ptsFor=h=>h.species==='elk'?f.elkPts:h.species==='deer'?f.deerPts:null;
+  body.innerHTML=favs.map(fav=>{
+    const h=getH().find(x=>x.huntNum===fav.huntNum&&x.species===fav.species);
+    if(!h) return `<tr><td colspan="10" style="color:var(--tmut);font-family:sans-serif;font-size:13px;padding:10px">${esc(fav.huntNum)} — ${esc(fav.huntName)} (load data to see details)</td></tr>`;
+    const myPts=ptsFor(h), p100=h.pts100;
+    const ptCls=p100===null?'ce':myPts===null?'cn':myPts>=p100?'ce':p100<=3?'ce':p100<=8?'cm':'ch';
+    const success=h.harvest?.successPct, sw=success!=null?Math.min(100,success):0;
+    const bull=topBull(h.harvest), mo=myOdds(h,myPts);
+    let moHtml='—';
+    if(myPts!==null){ if(mo===null){moHtml='<span class="ch">&lt;1%</span>';}else{const mc=mo>=75?'ce':mo>=25?'cm':'ch';moHtml=`<span class="${mc}">${fmtP(mo)}</span>`;} }
+    return `<tr data-id="${h.huntNum}_${h.species}" class="fav-row">
+      <td class="hnum">${h.huntNum}</td><td>${esc(h.huntName)}</td>
+      <td><span class="tag ${h.weapon}">${wLabel(h.weapon)}</span></td>
+      <td class="num"><span class="${ptCls}">${p100===null?'Random only':p100}</span></td>
+      <td class="num">${success==null?'—':`${fmtP(success)}<div class="sbar"><div class="sbarf" style="width:${sw}%"></div></div>`}</td>
+      <td class="num">${moHtml}</td>
+      <td class="num">${bull?`${bull.label}<span class="sub">${bull.pct}% of harvest</span>`:'—'}</td>
+      <td class="num">${fmt(h.residentApps)}</td><td class="num">${fmt(h.tags)}</td>
+      <td class="num"><button class="fav-remove" data-fhunt="${h.huntNum}" data-fsp="${h.species}">✕</button></td>
+    </tr>`;
+  }).join('');
+  body.querySelectorAll('.fav-row').forEach(tr=>tr.addEventListener('click',e=>{
+    if(e.target.closest('.fav-remove')) return;
+    if(tr.dataset.id) showDetail(tr.dataset.id);
+  }));
+  body.querySelectorAll('.fav-remove').forEach(btn=>btn.addEventListener('click',e=>{
+    e.stopPropagation(); toggleFav(btn.dataset.fhunt,btn.dataset.fsp); renderFavs();
+  }));
+}
+
 // ─── FILTERS + SORT ───────────────────────────────────────────────────────────
 function getFilters() {
-  const elkRaw  = $('#fElkPts').value;
-  const deerRaw = $('#fDeerPts').value;
+  const elkEl=$('#fElkPts'), deerEl=$('#fDeerPts');
+  const elkRaw=elkEl?elkEl.value:'', deerRaw=deerEl?deerEl.value:'';
   return {
-    sp:      $('#fSpecies').value,
-    wep:     $('#fWeapon').value,
-    elkPts:  elkRaw  === '' ? null : Number(elkRaw),
-    deerPts: deerRaw === '' ? null : Number(deerRaw),
-    // pts = whichever is relevant given current species filter; used for generic myOdds calls
-    pts: (function(){
-      const sp = $('#fSpecies').value;
-      if (sp === 'elk')  return elkRaw  === '' ? null : Number(elkRaw);
-      if (sp === 'deer') return deerRaw === '' ? null : Number(deerRaw);
-      return null; // mixed — myOdds will use species-specific per-row
-    })(),
-    draw: $('#fDrawability').value,
-    srch: $('#fSearch').value.trim().toLowerCase()
+    sp:      ($('#fSpecies')?.value||'all'),
+    wep:     ($('#fWeapon')?.value||'all'),
+    elkPts:  elkRaw===''?null:Number(elkRaw),
+    deerPts: deerRaw===''?null:Number(deerRaw),
+    draw:    ($('#fDrawability')?.value||'all'),
+    srch:    ($('#fSearch')?.value||'').trim().toLowerCase()
   };
 }
-// Return the right points for a given hunt based on its species
-function ptsForHunt(h, f) {
-  if (h.species === 'elk')  return f.elkPts;
-  if (h.species === 'deer') return f.deerPts;
+function ptsForHunt(h,f) {
+  if(h.species==='elk')  return f.elkPts;
+  if(h.species==='deer') return f.deerPts;
   return null;
 }
 function applyFilters(hunts) {
@@ -796,9 +769,8 @@ function applyFilters(hunts) {
     if(f.wep!=='all'&&h.weapon!==f.wep) return false;
     if(f.srch&&!(h.huntNum+' '+h.huntName).toLowerCase().includes(f.srch)) return false;
     if(f.draw!=='all'){
-      const myP = ptsForHunt(h, f);
-      if(myP !== null) {
-        const p=h.pts100;
+      const myP=ptsForHunt(h,f);
+      if(myP!==null){ const p=h.pts100;
         if(f.draw==='canDraw'&&(p===null||myP<p)) return false;
         if(f.draw==='oneAway'&&(p===null||myP!==p-1)) return false;
         if(f.draw==='reachable'&&(p===null||myP<p-3)) return false;
@@ -807,7 +779,7 @@ function applyFilters(hunts) {
     return true;
   });
 }
-function getVal(h, k, f) {
+function getVal(h,k,f) {
   if(k==='huntNum')  return h.huntNum;
   if(k==='huntName') return h.huntName;
   if(k==='weapon')   return h.weapon;
@@ -815,24 +787,21 @@ function getVal(h, k, f) {
   if(k==='apps')     return h.residentApps;
   if(k==='pts100')   return h.pts100;
   if(k==='success')  return h.harvest?.successPct;
-  if(k==='myOdds')   return myOdds(h, ptsForHunt(h, f));
+  if(k==='myOdds')   return myOdds(h,ptsForHunt(h,f));
   return null;
 }
-function cmpKey(a, b, k, dir, f) {
+function cmpKey(a,b,k,dir,f) {
   const av=getVal(a,k,f), bv=getVal(b,k,f);
   const an=av==null, bn=bv==null;
-  if(an&&bn) return 0; if(an) return 1; if(bn) return -1;
-  const d = dir==='asc'?1:-1;
+  if(an&&bn)return 0; if(an)return 1; if(bn)return -1;
+  const d=dir==='asc'?1:-1;
   const num=['tags','apps','pts100','success','myOdds'].includes(k);
-  return num ? (av-bv)*d : String(av).localeCompare(String(bv),undefined,{numeric:true})*d;
+  return num?(av-bv)*d:String(av).localeCompare(String(bv),undefined,{numeric:true})*d;
 }
 function sortHunts(hunts) {
   const f=getFilters();
   return [...hunts].sort((a,b)=>{
-    for(const s of S.sorts){
-      const r=cmpKey(a,b,s.key,s.dir,f);
-      if(r!==0) return r;
-    }
+    for(const s of S.sorts){ const r=cmpKey(a,b,s.key,s.dir,f); if(r!==0) return r; }
     return 0;
   });
 }
@@ -848,7 +817,7 @@ function topBull(harv) {
   const cls=[['Spike',harv.spike||0],['2pt',harv.twoPt||0],['3pt',harv.threePt||0],['4pt',harv.fourPt||0],['5pt',harv.fivePt||0],['6pt+',harv.sixPlusPt||0]];
   const top=cls.slice().sort((a,b)=>b[1]-a[1])[0];
   if(!top||!top[1]) return null;
-  return {label:top[0],pct:Math.round((top[1]/harv.totalBull)*100)};
+  return {label:top[0], pct:Math.round((top[1]/harv.totalBull)*100)};
 }
 
 function renderTable() {
@@ -856,43 +825,27 @@ function renderTable() {
   const filtered=applyFilters(all), sorted=sortHunts(filtered);
   const tb=$('#huntsBody'), prev=S.compareYear||prevYr(S.selectedYear);
   $('#rcount').textContent=all.length===0?'—':`${sorted.length} of ${all.length} hunts`;
-
   if(all.length===0){tb.innerHTML='<tr><td colspan="9" class="empty">No data loaded.</td></tr>';return;}
   if(sorted.length===0){tb.innerHTML='<tr><td colspan="9" class="empty">No hunts match the filters.</td></tr>';return;}
-
-  $$('#huntsTable thead th').forEach(th=>{
-    th.classList.remove('sorted');
-    const sa=th.querySelector('.sa'); if(sa) sa.textContent='▾';
-    if(th.dataset.sort===S.sorts[0]?.key){th.classList.add('sorted');if(sa) sa.textContent=S.sorts[0].dir==='asc'?'▴':'▾';}
-  });
-
   const rows=sorted.map(h=>{
-    const myPts = ptsForHunt(h, f);
-    const p100=h.pts100;
-    const ptCls = p100===null?'ce': myPts===null?'cn': myPts>=p100?'ce': p100<=3?'ce': p100<=8?'cm':'ch';
-    const ptTxt = p100===null?'Random only':String(p100);
-    const success=h.harvest?.successPct;
-    const sw=success!=null?Math.min(100,success):0;
-    const bull=topBull(h.harvest);
-    const mo=myOdds(h,myPts);
+    const myPts=ptsForHunt(h,f), p100=h.pts100;
+    const ptCls=p100===null?'ce':myPts===null?'cn':myPts>=p100?'ce':p100<=3?'ce':p100<=8?'cm':'ch';
+    const success=h.harvest?.successPct, sw=success!=null?Math.min(100,success):0;
+    const bull=topBull(h.harvest), mo=myOdds(h,myPts);
     let moHtml='—';
-    if(myPts!==null){
-      if(mo===null){moHtml='<span class="ch">&lt;1%</span>';}
-      else{const mc=mo>=75?'ce':mo>=25?'cm':'ch';moHtml=`<span class="${mc}">${fmtP(mo)}</span>`;}
-    }
+    if(myPts!==null){ if(mo===null){moHtml='<span class="ch">&lt;1%</span>';}else{const mc=mo>=75?'ce':mo>=25?'cm':'ch';moHtml=`<span class="${mc}">${fmtP(mo)}</span>`;} }
     const prevH=prev?findH(prev,h.huntNum,h.species):null;
-    const p100T=prevH?trendHtml(p100,prevH.pts100,false,v=>Math.round(v)):'';
     const sucT=prevH?.harvest?trendHtml(success,prevH.harvest.successPct,true,v=>Math.round(v)+'%'):'';
     return `<tr data-id="${h.huntNum}_${h.species}">
       <td class="hnum">${h.huntNum}</td>
       <td>${esc(h.huntName)}</td>
       <td><span class="tag ${h.weapon}">${wLabel(h.weapon)}</span></td>
-      <td class="num">${fmt(h.tags)}</td>
-      <td class="num"><span class="${ptCls}">${ptTxt}</span>${p100T}</td>
+      <td class="num"><span class="${ptCls}">${p100===null?'Random only':p100}</span></td>
       <td class="num">${success==null?'—':`${fmtP(success)}${sucT}<div class="sbar"><div class="sbarf" style="width:${sw}%"></div></div>`}</td>
-      <td class="num">${bull?`${bull.label}<span class="sub">${bull.pct}% of bulls</span>`:'—'}</td>
       <td class="num">${moHtml}</td>
+      <td class="num">${bull?`${bull.label}<span class="sub">${bull.pct}% of harvest</span>`:'—'}</td>
       <td class="num">${fmt(h.residentApps)}</td>
+      <td class="num">${fmt(h.tags)}</td>
     </tr>`;
   }).join('');
   tb.innerHTML=rows;
@@ -905,15 +858,15 @@ function renderStatus() {
   const dot=$('#sdot'), txt=$('#stxt'), det=$('#sdet'), last=$('#slast');
   if(!dot) return;
   const parts=[];
-  if(f.elkPoints) parts.push(`Elk pts:${f.elkPoints.count}`);
-  if(f.deerPoints) parts.push(`Deer pts:${f.deerPoints.count}`);
+  if(f.elkPoints)      parts.push(`Elk pts:${f.elkPoints.count}`);
+  if(f.deerPoints)     parts.push(`Deer pts:${f.deerPoints.count}`);
   if(f.elkRifleHarvest)    parts.push(`Elk rifle:${f.elkRifleHarvest.matched??0}`);
   if(f.elkArcheryHarvest)  parts.push(`Elk arch:${f.elkArcheryHarvest.matched??0}`);
   if(f.deerRifleHarvest)   parts.push(`Deer rifle:${f.deerRifleHarvest.matched??0}`);
   if(f.deerArcheryHarvest) parts.push(`Deer arch:${f.deerArcheryHarvest.matched??0}`);
   const hasP=f.elkPoints||f.deerPoints, hasH=f.elkRifleHarvest||f.elkArcheryHarvest||f.deerRifleHarvest||f.deerArcheryHarvest;
-  const n=yd?.hunts.length||0, yrs=yList();
-  if(!yrs.length){dot.className='sdot';txt.textContent='No data';}
+  const n=yd?.hunts.length||0;
+  if(!yList().length){dot.className='sdot';txt.textContent='No data';}
   else if(!n){dot.className='sdot';txt.textContent=`No data for ${S.pendingYear}`;}
   else if(hasP&&hasH){dot.className='sdot ok';txt.textContent=`[${S.pendingYear}] Loaded`;}
   else{dot.className='sdot part';txt.textContent=`[${S.pendingYear}] Partial`;}
@@ -955,8 +908,8 @@ function renderYears() {
     e.stopPropagation();
     confirm2(`Delete ${b.dataset.fby} from cloud? This affects all users.`, async ()=>{
       b.textContent='Deleting…'; b.disabled=true;
-      const ok = await fbDeleteYear(b.dataset.fby);
-      toast(ok ? `Year ${b.dataset.fby} deleted from cloud` : 'Cloud delete failed', !ok);
+      const ok=await fbDeleteYear(b.dataset.fby);
+      toast(ok?`Year ${b.dataset.fby} deleted from cloud`:'Cloud delete failed',!ok);
       renderYears();
     });
   }));
@@ -967,10 +920,17 @@ function showDetail(id) {
   const [num,sp]=id.split('_');
   const h=getH().find(x=>x.huntNum===num&&x.species===sp); if(!h) return;
   $('#mTitle').textContent=`${h.huntNum} — ${h.huntName}`;
-  $('#mSub').textContent=`${S.selectedYear} · ${h.species==='elk'?'Elk':'Buck Deer'} · ${wLabel(h.weapon)}`;
-  const f2=getFilters();
-  const myPts=ptsForHunt(h,f2);
-  const mo=myOdds(h,myPts);
+  $('#mSub').textContent=`${S.selectedYear} · ${h.species==='elk'?'Elk':'Deer'} · ${wLabel(h.weapon)}`;
+
+  const favBtn=$('#modalFavBtn');
+  if(favBtn){
+    favBtn.dataset.fhunt=num; favBtn.dataset.fsp=sp;
+    const faved=isFav(num,sp);
+    favBtn.textContent=faved?'★':'☆';
+    favBtn.classList.toggle('active',faved);
+  }
+
+  const f2=getFilters(), myPts=ptsForHunt(h,f2), mo=myOdds(h,myPts);
   const prev=S.compareYear||prevYr(S.selectedYear);
   const prevH=prev?findH(prev,num,sp):null;
 
@@ -983,8 +943,8 @@ function showDetail(id) {
   let take='';
   if(myPts!==null){
     const p=h.pts100;
-    if(p===null)         take=`<p class="callout warn"><strong>With ${myPts} pt${myPts===1?'':'s'}:</strong> No preference-phase draw found. Random-phase only. Odds: ~${fmtP(mo)}.</p>`;
-    else if(myPts>=p)    take=`<p class="callout good"><strong>With ${myPts} pt${myPts===1?'':'s'}:</strong> 100% draw chance — you exceed the ${p}-pt threshold.</p>`;
+    if(p===null)      take=`<p class="callout"><strong>With ${myPts} pt${myPts===1?'':'s'}:</strong> Random-phase only. Odds: ~${fmtP(mo)}.</p>`;
+    else if(myPts>=p) take=`<p class="callout good"><strong>With ${myPts} pt${myPts===1?'':'s'}:</strong> 100% draw chance — you exceed the ${p}-pt threshold.</p>`;
     else { const aw=p-myPts; take=`<p class="callout"><strong>With ${myPts} pt${myPts===1?'':'s'}:</strong> ${aw} pt${aw===1?'':'s'} short of 100% draw (${p} pts). Current odds: ~${fmtP(mo)}.</p>`; }
   }
 
@@ -1009,13 +969,13 @@ function showDetail(id) {
     </div></div>`;
     if(hv.totalBull>0){
       const cls=[['Spike',hv.spike||0],['2-point',hv.twoPt||0],['3-point',hv.threePt||0],['4-point',hv.fourPt||0],['5-point',hv.fivePt||0],['6-point+',hv.sixPlusPt||0]];
-      const anyAntler = cls.some(([,c])=>c>0);
+      const anyAntler=cls.some(([,c])=>c>0);
       if(anyAntler){
-        body+=`<div class="msec"><h4>Bull / Buck Size Breakdown</h4><table class="pts"><thead><tr><th>Class</th><th>Harvested</th><th>% of Bulls/Bucks</th></tr></thead><tbody>
+        body+=`<div class="msec"><h4>Trophy Size Breakdown</h4><table class="pts"><thead><tr><th>Class</th><th>Harvested</th><th>% of Harvest</th></tr></thead><tbody>
           ${cls.map(([l,c])=>`<tr${c>0&&c===Math.max(...cls.map(([,x])=>x))?' class="drew"':''}><td>${l}</td><td>${fmt(c)}</td><td>${fmtP(hv.totalBull>0?(c/hv.totalBull)*100:0)}</td></tr>`).join('')}
-        </tbody></table>${!hv.antlerValid?'<p style="font-size:11px;color:var(--tmut);margin-top:4px">⚠ Antler counts may be approximate — PDF column alignment uncertain.</p>':''}</div>`;
+        </tbody></table></div>`;
       } else {
-        body+=`<div class="msec"><h4>Bull / Buck Size Breakdown</h4><p style="font-size:13px;color:var(--tmut)">Antler size data not parsed from this file.</p></div>`;
+        body+=`<div class="msec"><h4>Trophy Size Breakdown</h4><p style="font-size:13px;color:var(--tmut)">Size data not available for this hunt.</p></div>`;
       }
     }
   }
@@ -1030,7 +990,7 @@ function showDetail(id) {
         return `<tr ${full?'class="drew"':''}><td>${p.points}</td><td>${fmt(p.resApps)}</td><td>${fmt(p.resDrawn)}</td><td>${fmtP(pct)}</td></tr>`;
       }).join('')}
       </tbody></table>
-      <p style="font-size:11px;color:var(--tmut);margin-top:6px">Highlighted rows = 100% draw rate at this point level.</p>
+      <p style="font-size:11px;color:var(--tmut);margin-top:6px">Highlighted = 100% draw rate at this point level.</p>
     </div>`;
   }
 
@@ -1042,6 +1002,7 @@ function showDetail(id) {
 function switchPage(name){
   $$('.page').forEach(p=>p.classList.toggle('active',p.dataset.page===name));
   $$('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.page===name));
+  if(name==='favorites') renderFavs();
   window.scrollTo({top:0,behavior:'smooth'});
 }
 function renderEmpty(){
@@ -1059,7 +1020,6 @@ function render(){
   if(typeof renderSortBar==='function') renderSortBar();
   renderStatus(); renderTable(); renderEmpty();
 }
-
 function confirm2(msg, cb){
   const w=document.createElement('div'); w.className='modal-backdrop open';
   w.innerHTML=`<div class="modal" style="max-width:400px"><div class="mhead"><div><h3>${esc(msg)}</h3></div></div>
@@ -1077,9 +1037,15 @@ async function init() {
   const hadLocal = loadLocal();
   const yi=$('#pyInput');
   if(yi){yi.value=S.pendingYear||new Date().getFullYear();if(!S.pendingYear)S.pendingYear=String(new Date().getFullYear());}
+
+  // Wire nav FIRST — tabs work immediately before cloud load
+  $$('.nav-link').forEach(b=>b.addEventListener('click',()=>switchPage(b.dataset.page)));
+  $('#btnGoData')?.addEventListener('click',()=>switchPage('data'));
+  $('#btnViewDb')?.addEventListener('click',()=>switchPage('database'));
+
   render();
 
-  // Auto-load from Firebase
+  // Firebase load
   if(db){
     banner('#dbBanner','','Loading data from cloud…',true);
     banner('#dmBanner','','Connecting to cloud…',true);
@@ -1107,13 +1073,8 @@ async function init() {
     banner('#dmBanner','err','Firebase unavailable.',false);
   }
 
-  // Nav
-  $$('.nav-link').forEach(b=>b.addEventListener('click',()=>switchPage(b.dataset.page)));
-  const gd=$('#btnGoData'); if(gd) gd.addEventListener('click',()=>switchPage('data'));
-  const gdb=$('#btnViewDb'); if(gdb) gdb.addEventListener('click',()=>switchPage('database'));
-
   // Year picker
-  $('#btnSetYear').addEventListener('click',()=>{
+  $('#btnSetYear')?.addEventListener('click',()=>{
     const v=(yi?.value||'').trim();
     if(!/^\d{4}$/.test(v)){toast('Enter a 4-digit year',true);return;}
     S.pendingYear=v; if(!S.selectedYear)S.selectedYear=v;
@@ -1135,10 +1096,12 @@ async function init() {
   });
 
   // Filters
-  ['fSpecies','fWeapon','fElkPts','fDeerPts','fDrawability','fSearch'].forEach(id=>$('#'+id).addEventListener('input',()=>render()));
+  ['fSpecies','fWeapon','fElkPts','fDeerPts','fDrawability','fSearch'].forEach(id=>{
+    const el=$('#'+id); if(el) el.addEventListener('input',()=>render());
+  });
 
-  // Sort pill buttons
-  const SORT_OPTIONS = [
+  // Sort pills
+  const SORT_OPTIONS=[
     {key:'myOdds',  label:'My Odds',     defaultDir:'desc'},
     {key:'pts100',  label:'Pts to Draw', defaultDir:'asc'},
     {key:'success', label:'Success %',   defaultDir:'desc'},
@@ -1146,52 +1109,29 @@ async function init() {
     {key:'apps',    label:'Applicants',  defaultDir:'desc'},
     {key:'huntNum', label:'Hunt #',      defaultDir:'asc'},
   ];
-
   function renderSortBar(){
     const bar=$('#sortBar'); if(!bar) return;
     bar.innerHTML='';
-
-    // Build one row of pills per active sort level, plus an "add" row
-    const levels = S.sorts.length;
-    const LEVEL_LABELS = ['Sort by','Then by','Then by'];
-    const LEVEL_CLS    = ['active','s2','s3'];
-
-    S.sorts.forEach((s, li)=>{
-      // Label
+    const LBLS=['Sort by','Then by','Then by'], CLS=['active','s2','s3'];
+    S.sorts.forEach((s,li)=>{
       const lbl=document.createElement('span');
       lbl.style.cssText='font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--tmut);align-self:center;white-space:nowrap;';
-      lbl.textContent=LEVEL_LABELS[li]+':';
-      bar.appendChild(lbl);
-
-      // Pills for this level
+      lbl.textContent=LBLS[li]+':'; bar.appendChild(lbl);
       SORT_OPTIONS.forEach(opt=>{
-        // Can't use same key as a higher level
-        const usedAbove = S.sorts.slice(0,li).some(x=>x.key===opt.key);
-        if(usedAbove) return;
-        const isActive = s.key===opt.key;
-        const arrow = isActive ? (s.dir==='asc'?'▴':'▾') : '';
+        if(S.sorts.slice(0,li).some(x=>x.key===opt.key)) return;
+        const isActive=s.key===opt.key, arrow=isActive?(s.dir==='asc'?'▴':'▾'):'';
         const btn=document.createElement('button');
-        btn.className='spill'+(isActive?' '+LEVEL_CLS[li]:'');
+        btn.className='spill'+(isActive?' '+CLS[li]:'');
         btn.innerHTML=opt.label+(isActive?`<span class="sarr">${arrow}</span>`:'');
         btn.addEventListener('click',()=>{
-          if(isActive){
-            // Flip direction
-            S.sorts[li]={key:s.key, dir:s.dir==='asc'?'desc':'asc'};
-          } else {
-            // Switch this level to this key
-            S.sorts[li]={key:opt.key, dir:opt.defaultDir};
-          }
+          S.sorts[li]=isActive?{key:s.key,dir:s.dir==='asc'?'desc':'asc'}:{key:opt.key,dir:opt.defaultDir};
           renderSortBar(); renderTable();
         });
         bar.appendChild(btn);
       });
-
-      // Remove (×) button for this level — but not if it's the only level
-      if(levels>1){
+      if(S.sorts.length>1){
         const rem=document.createElement('button');
-        rem.className='sort-clear';
-        rem.innerHTML='&#x2715;';
-        rem.title='Remove this sort level';
+        rem.className='sort-clear'; rem.innerHTML='&#x2715;'; rem.title='Remove this sort level';
         rem.addEventListener('click',()=>{
           S.sorts.splice(li,1);
           if(S.sorts.length===0) S.sorts=[{key:'huntNum',dir:'asc'}];
@@ -1199,94 +1139,39 @@ async function init() {
         });
         bar.appendChild(rem);
       }
-
-      // Separator / break before next level
-      if(li < levels-1){
-        const sep=document.createElement('div');
-        sep.style.cssText='width:100%;height:0;';
-        bar.appendChild(sep);
-      }
+      if(li<S.sorts.length-1){ const sep=document.createElement('div'); sep.style.cssText='width:100%;height:0;'; bar.appendChild(sep); }
     });
-
-    // "Add sort level" button — max 3 levels
-    if(levels < 3 && levels < SORT_OPTIONS.length){
-      // Line break before it if we already have rows
-      if(levels>0){
-        const br=document.createElement('div');
-        br.style.cssText='width:100%;height:0;';
-        bar.appendChild(br);
-      }
+    if(S.sorts.length<3&&S.sorts.length<SORT_OPTIONS.length){
+      const br=document.createElement('div'); br.style.cssText='width:100%;height:0;'; bar.appendChild(br);
       const addLbl=document.createElement('span');
       addLbl.style.cssText='font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--tmut);align-self:center;white-space:nowrap;';
-      addLbl.textContent=LEVEL_LABELS[levels]+':';
-      bar.appendChild(addLbl);
-
-      const usedKeys = S.sorts.map(x=>x.key);
-      SORT_OPTIONS.filter(o=>!usedKeys.includes(o.key)).forEach(opt=>{
+      addLbl.textContent=LBLS[S.sorts.length]+':'; bar.appendChild(addLbl);
+      SORT_OPTIONS.filter(o=>!S.sorts.some(x=>x.key===o.key)).forEach(opt=>{
         const btn=document.createElement('button');
-        btn.className='spill';
-        btn.textContent=opt.label;
-        btn.addEventListener('click',()=>{
-          S.sorts.push({key:opt.key, dir:opt.defaultDir});
-          renderSortBar(); renderTable();
-        });
+        btn.className='spill'; btn.textContent=opt.label;
+        btn.addEventListener('click',()=>{ S.sorts.push({key:opt.key,dir:opt.defaultDir}); renderSortBar(); renderTable(); });
         bar.appendChild(btn);
       });
     }
-
-    // Clear all sorts button — only show when something non-default is active
-    const isDefault = S.sorts.length===1 && S.sorts[0].key==='huntNum';
-    if(!isDefault){
+    if(!(S.sorts.length===1&&S.sorts[0].key==='huntNum')){
       const br=document.createElement('div'); br.style.cssText='width:100%;height:0;'; bar.appendChild(br);
       const clr=document.createElement('button');
-      clr.className='sort-clear';
-      clr.innerHTML='&#x2715; Clear all sorts';
-      clr.addEventListener('click',()=>{
-        S.sorts=[{key:'huntNum',dir:'asc'}];
-        renderSortBar(); renderTable();
-      });
+      clr.className='sort-clear'; clr.innerHTML='&#x2715; Clear all sorts';
+      clr.addEventListener('click',()=>{ S.sorts=[{key:'huntNum',dir:'asc'}]; renderSortBar(); renderTable(); });
       bar.appendChild(clr);
     }
   }
   renderSortBar();
 
-  // Table headers still show sort indicator but clicks go through sort bar
-  $$('#huntsTable thead th').forEach(th=>{
-    if(!th.dataset.sort) return;
-    th.style.cursor='default';
+  // Favorites modal button
+  $('#modalFavBtn')?.addEventListener('click',()=>{
+    const btn=$('#modalFavBtn');
+    if(btn?.dataset.fhunt) toggleFav(btn.dataset.fhunt, btn.dataset.fsp);
   });
 
-  $('#btnClear').addEventListener('click',()=>{if(!Object.keys(S.years).length){toast('Nothing to clear');return;}confirm2('Clear all local data?',()=>clearLocal());});
-  $('#mClose').addEventListener('click',()=>$('#modal').classList.remove('open'));
-
-  function renderDebug(){
-    const dbg=window._pdfDebug||{}, filter=($('#dbgFilter')?.value||'').trim().toUpperCase();
-    const keys=Object.keys(dbg).filter(k=>!filter||k.includes(filter)).sort();
-    const out=$('#dbgOut'); if(!out) return;
-    if(!keys.length){out.innerHTML='<p style="color:var(--tmut)">No PDF debug data yet — upload a harvest PDF first.</p>';return;}
-    out.innerHTML=keys.map(num=>{
-      const d=dbg[num];
-      const p=d.parsed||{};
-      const ok=p.av?'<span style="color:var(--good)">✓ VALID</span>':'<span style="color:var(--bad)">✗ INVALID</span>';
-      const rows=d.rowItems.map(i=>`<span style="color:var(--tmut)">x${i.x}:</span><span style="color:#f0f0f0;margin-right:12px">${i.str}</span>`).join('');
-      return `<div style="border:1px solid var(--bor);background:#1a1a1a;padding:12px;margin-bottom:10px;">
-        <div style="font-size:14px;font-weight:700;color:var(--gl);margin-bottom:6px">${num} ${ok} &nbsp;<span style="color:var(--tmut);font-size:11px">${d.pct}% success</span></div>
-        <div style="margin-bottom:4px"><span style="color:var(--tmut)">All row items (x pos → text):</span><br>${rows}</div>
-        <div style="margin-bottom:4px"><span style="color:var(--tmut)">dataInts (x&gt;huntX+150):</span> <span style="color:var(--warn)">[${(d.dataInts||[]).join(', ')}]</span></div>
-        ${d.dataInts80?`<div style="margin-bottom:4px"><span style="color:var(--tmut)">dataInts (x&gt;huntX+80):</span> <span style="color:#7da9d4">[${d.dataInts80.join(', ')}]</span></div>`:''}
-        ${p.n?`<div style="margin-bottom:4px"><span style="color:var(--tmut)">n used:</span> <span style="color:#f0f0f0">[${p.n.join(', ')}]</span></div>`:''}
-        ${p.n?`<div style="color:var(--tmut);font-size:11px">
-          hunters=${p.hu} days=${p.da} antlerless=${p.al} totalBull=${p.tb} harvest=${p.th}<br>
-          spike=${p.sp} 2pt=${p.t2} 3pt=${p.t3} 4pt=${p.t4} 5pt=${p.t5} 6pt+=${p.t6}<br>
-          antlerSum=${p.antlerSum} vs totalBull=${p.tb} → ${ok}
-        </div>`:''}
-        ${d.skipped?`<div style="color:var(--bad)">SKIPPED: ${d.skipped}</div>`:''}
-      </div>`;
-    }).join('');
-  }
-  $('#btnRefreshDebug')?.addEventListener('click', renderDebug);
-  $('#dbgFilter')?.addEventListener('input', renderDebug);
-  $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')$('#modal').classList.remove('open');});
+  $('#btnClear')?.addEventListener('click',()=>{if(!Object.keys(S.years).length){toast('Nothing to clear');return;}confirm2('Clear all local data?',()=>clearLocal());});
+  $('#mClose')?.addEventListener('click',()=>$('#modal').classList.remove('open'));
+  $('#modal')?.addEventListener('click',e=>{if(e.target.id==='modal')$('#modal').classList.remove('open');});
 }
 
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
