@@ -160,7 +160,7 @@ footer a{color:#000}
   <div class="site-header-inner">
     <div class="crest">ODFW</div>
     <div>
-      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v2.0</span></h1>
+      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v2.1</span></h1>
       <div class="site-subtitle">Deer &amp; Elk &mdash; Draw Odds &amp; Harvest Statistics</div>
     </div>
   </div>
@@ -286,6 +286,14 @@ footer a{color:#000}
       </div>
       <div style="font-size:12px;color:var(--tmut);font-family:sans-serif">Last loaded: <span id="slast">—</span></div>
     </div>
+  </div>
+</section>
+
+<section class="panel" id="cloudFilesPanel" style="display:none">
+  <div class="panel-head">Cloud Files</div>
+  <div class="panel-body">
+    <p style="font-family:sans-serif;font-size:13px;color:var(--tsec);margin:0 0 12px">Files previously uploaded to the cloud for the selected year.</p>
+    <div id="cloudFilesList" style="font-family:sans-serif;font-size:13px;color:var(--text-muted)">Loading…</div>
   </div>
 </section>
 
@@ -417,6 +425,26 @@ async function fbDeleteYear(year) {
   } catch(e) { console.warn('[FB] Delete error:', e); return false; }
 }
 
+async function fbSavePdfMeta(year, fileKey, fileName, huntCount) {
+  if (!db) return false;
+  try {
+    await db.collection('years').doc(String(year)).collection('pdfMeta').doc(fileKey).set({
+      fileName, huntCount, uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    return true;
+  } catch(e) { console.warn('[FB] pdfMeta save error:', e); return false; }
+}
+
+async function fbLoadPdfMeta(year) {
+  if (!db) return {};
+  try {
+    const snap = await db.collection('years').doc(String(year)).collection('pdfMeta').get();
+    const out = {};
+    snap.docs.forEach(d => { out[d.id] = d.data(); });
+    return out;
+  } catch(e) { return {}; }
+}
+
 async function fbLoad() {
   if (!db) return null;
   try {
@@ -513,11 +541,16 @@ function derive(h) {
 
 function myOdds(h, myPts) {
   if (myPts === null || myPts === undefined) return null;
+  // If user's points are at or above the 100% draw threshold, it's guaranteed
+  if (h.pts100 !== null && myPts >= h.pts100) return 100;
   if (!h.pointBreakdown?.length) return h.resOdds;
+  // Find the exact tier matching user's points
   const exact = h.pointBreakdown.find(p => p.points === myPts);
   if (exact && exact.resApps > 0) return (exact.resDrawn / exact.resApps) * 100;
+  // Find the closest tier at or below user's points
   const below = h.pointBreakdown.filter(p => p.points <= myPts).sort((a,b) => b.points - a.points);
   if (below.length && below[0].resApps > 0) return (below[0].resDrawn / below[0].resApps) * 100;
+  // User is below all preference tiers — estimate random-phase odds
   if (h.residentApps > 0 && h.tags > 0) return Math.min(100, (h.tags * 0.25 / h.residentApps) * 100);
   return null;
 }
@@ -657,6 +690,8 @@ async function handleFile(target, file) {
       yd.files[target] = {name:file.name,loadedAt:Date.now(),count:Object.keys(harvest).length,matched:0};
       applyHarvest(year);
       toast(`[${year}] Harvest: ${yd.files[target].matched} matched`);
+      // Save PDF metadata to Firebase so others can see what was uploaded
+      fbSavePdfMeta(year, target, file.name, Object.keys(harvest).length);
     }
     if (!S.selectedYear) S.selectedYear = year;
     saveLocal(); render();
@@ -1033,6 +1068,34 @@ function confirm2(msg, cb){
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
+async function renderCloudFiles(year) {
+  const panel = $('#cloudFilesPanel'), list = $('#cloudFilesList');
+  if (!panel || !list || !db) return;
+  panel.style.display = 'block';
+  list.innerHTML = '<span style="color:var(--tmut)">Loading cloud file info…</span>';
+  const meta = await fbLoadPdfMeta(year);
+  const keys = Object.keys(meta);
+  if (!keys.length) {
+    list.innerHTML = '<span style="color:var(--tmut)">No files recorded for this year yet.</span>';
+    return;
+  }
+  const LABELS = {
+    elkPoints:'Elk — Preference Points', deerPoints:'Deer — Preference Points',
+    elkRifleHarvest:'Elk — Rifle Harvest', elkArcheryHarvest:'Elk — Archery Harvest',
+    deerRifleHarvest:'Deer — Rifle Harvest', deerArcheryHarvest:'Deer — Archery Harvest'
+  };
+  list.innerHTML = keys.map(k => {
+    const m = meta[k];
+    const ts = m.uploadedAt?.toDate ? m.uploadedAt.toDate().toLocaleString() : '—';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--borl);flex-wrap:wrap;gap:6px;">
+      <div>
+        <div style="font-weight:600;color:var(--gl)">${LABELS[k]||k}</div>
+        <div style="font-size:11px;color:var(--tmut)">${esc(m.fileName||'—')} &nbsp;·&nbsp; ${m.huntCount||0} hunts &nbsp;·&nbsp; Uploaded ${ts}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 async function init() {
   const hadLocal = loadLocal();
   const yi=$('#pyInput');
@@ -1061,6 +1124,8 @@ async function init() {
       const total=Object.values(data).reduce((s,y)=>s+(y.hunts?.length||0),0);
       banner('#dbBanner','ok',`${total} hunts loaded from cloud ✓`,false);
       banner('#dmBanner','ok','Cloud connected ✓ — uploads auto-save for everyone',false);
+      // Load PDF metadata for display in Data Manager
+      if(S.selectedYear) renderCloudFiles(S.selectedYear);
     } else if(hadLocal&&getH().length>0){
       banner('#dbBanner','ok','Showing local data (nothing in cloud yet)',false);
       banner('#dmBanner','ok','Local data loaded. Upload files to share with others.',false);
@@ -1083,7 +1148,7 @@ async function init() {
   if(yi) yi.addEventListener('input',()=>{const d=$('#pyDisp');if(d)d.textContent=yi.value||'none';});
 
   const ysv=$('#ySelView'), ysc=$('#ySelCompare');
-  if(ysv) ysv.addEventListener('change',()=>{S.selectedYear=ysv.value;saveLocal();render();});
+  if(ysv) ysv.addEventListener('change',()=>{S.selectedYear=ysv.value;saveLocal();render();renderCloudFiles(S.selectedYear);});
   if(ysc) ysc.addEventListener('change',()=>{S.compareYear=ysc.value==='auto'?null:ysc.value;saveLocal();render();});
 
   // File inputs & drag-drop
