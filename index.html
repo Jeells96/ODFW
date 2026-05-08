@@ -177,7 +177,7 @@ footer a{color:#000}
   <div class="site-header-inner">
     <div class="crest">ODFW</div>
     <div>
-      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v1.8</span></h1>
+      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v1.9</span></h1>
       <div class="site-subtitle">Buck Deer &amp; Elk &mdash; Draw Odds &amp; Harvest Statistics</div>
     </div>
   </div>
@@ -655,7 +655,9 @@ async function parsePdf(buf) {
         }
 
         const antlerSum = (sp||0)+(t2||0)+(t3||0)+(t4||0)+(t5||0)+(t6||0);
-        const av = tb>0 && antlerSum>0 && antlerSum>=tb*0.85 && antlerSum<=tb*1.15;
+        // antlerValid = we got at least some antler data (partial counts are fine — 
+        // ODFW only classifies bulls that were observed/checked, not necessarily all)
+        const av = antlerSum > 0;
 
         window._pdfDebug[num].parsed = {hu,da,al,tb,th,sp,t2,t3,t4,t5,t6,antlerSum,av,n};
 
@@ -694,7 +696,7 @@ function parseHarvestXlsx(buf) {
         const num=v.trim(); let pct=null;
         for(let j=r.length-1;j>i;j--){const c=r[j];if(typeof c==='number'&&c<=1){pct=c*100;break}if(typeof c==='string'){const m=c.match(/^(\d+(?:\.\d+)?)%?$/);if(m){pct=Number(m[1]);break}}}
         const ns=r.slice(i+1).filter(c=>typeof c==='number'||(typeof c==='string'&&/^\d+$/.test(c.trim()))).map(Number);
-        const av=ns.length>=11;
+        const av=ns.length>=6 && (ns[5]||ns[6]||ns[7]||ns[8]||ns[9]||ns[10]||0)>0;
         if(pct!==null&&!out[num]) out[num]={huntNum:num,successPct:pct,hunters:ns[0]||0,days:ns[1]||0,antlerless:ns[2]||0,totalBull:ns[3]||0,totalHarvest:ns[4]||0,spike:av?ns[5]:0,twoPt:av?ns[6]:0,threePt:av?ns[7]:0,fourPt:av?ns[8]:0,fivePt:av?ns[9]:0,sixPlusPt:av?ns[10]:0,antlerValid:av};
         break;
       }
@@ -842,7 +844,7 @@ function trendHtml(cur,prev,hb,fn) {
   return `<span class="trend ${better?'tup':'tdn'}">${better?'▲':'▼'} ${d>0?'+':''}${fn?fn(d):Math.round(d)}</span>`;
 }
 function topBull(harv) {
-  if(!harv?.totalBull||!harv.antlerValid) return null;
+  if(!harv?.totalBull) return null;
   const cls=[['Spike',harv.spike||0],['2pt',harv.twoPt||0],['3pt',harv.threePt||0],['4pt',harv.fourPt||0],['5pt',harv.fivePt||0],['6pt+',harv.sixPlusPt||0]];
   const top=cls.slice().sort((a,b)=>b[1]-a[1])[0];
   if(!top||!top[1]) return null;
