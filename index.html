@@ -1161,6 +1161,11 @@ async function init() {
   if(yi){yi.value=S.pendingYear||new Date().getFullYear();if(!S.pendingYear)S.pendingYear=String(new Date().getFullYear());}
   render();
 
+  // Nav — wire immediately so tabs work before cloud load finishes
+  $$('.nav-link').forEach(b=>b.addEventListener('click',()=>switchPage(b.dataset.page)));
+  const gd=$('#btnGoData'); if(gd) gd.addEventListener('click',()=>switchPage('data'));
+  const gdb=$('#btnViewDb'); if(gdb) gdb.addEventListener('click',()=>switchPage('database'));
+
   // Auto-load from Firebase
   if(db){
     banner('#dbBanner','','Loading data from cloud…',true);
@@ -1189,13 +1194,8 @@ async function init() {
     banner('#dmBanner','err','Firebase unavailable.',false);
   }
 
-  // Nav
-  $$('.nav-link').forEach(b=>b.addEventListener('click',()=>switchPage(b.dataset.page)));
-  const gd=$('#btnGoData'); if(gd) gd.addEventListener('click',()=>switchPage('data'));
-  const gdb=$('#btnViewDb'); if(gdb) gdb.addEventListener('click',()=>switchPage('database'));
-
   // Year picker
-  $('#btnSetYear').addEventListener('click',()=>{
+  $('#btnSetYear')?.addEventListener('click',()=>{
     const v=(yi?.value||'').trim();
     if(!/^\d{4}$/.test(v)){toast('Enter a 4-digit year',true);return;}
     S.pendingYear=v; if(!S.selectedYear)S.selectedYear=v;
@@ -1217,7 +1217,7 @@ async function init() {
   });
 
   // Filters
-  ['fSpecies','fWeapon','fElkPts','fDeerPts','fDrawability','fSearch'].forEach(id=>$('#'+id).addEventListener('input',()=>render()));
+  ['fSpecies','fWeapon','fElkPts','fDeerPts','fDrawability','fSearch'].forEach(id=>{const el=$('#'+id);if(el)el.addEventListener('input',()=>render());});
 
   // Sort pill buttons
   const SORT_OPTIONS = [
@@ -1338,11 +1338,11 @@ async function init() {
     th.style.cursor='default';
   });
 
-  $('#btnClear').addEventListener('click',()=>{if(!Object.keys(S.years).length){toast('Nothing to clear');return;}confirm2('Clear all local data?',()=>clearLocal());});
-  $('#mClose').addEventListener('click',()=>$('#modal').classList.remove('open'));
+  $('#btnClear')?.addEventListener('click',()=>{if(!Object.keys(S.years).length){toast('Nothing to clear');return;}confirm2('Clear all local data?',()=>clearLocal());});
+  $('#mClose')?.addEventListener('click',()=>$('#modal').classList.remove('open'));
 
 
-  $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')$('#modal').classList.remove('open');});
+  $('#modal')?.addEventListener('click',e=>{if(e.target.id==='modal')$('#modal').classList.remove('open');});
 }
 
   } catch(e) {
