@@ -1042,6 +1042,7 @@ function showDetail(id) {
 function switchPage(name){
   $$('.page').forEach(p=>p.classList.toggle('active',p.dataset.page===name));
   $$('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.page===name));
+  if(name==='favorites') try{ renderFavs(); }catch(e){ console.warn('renderFavs error:',e); }
   window.scrollTo({top:0,behavior:'smooth'});
 }
 function renderEmpty(){
@@ -1057,7 +1058,7 @@ function render(){
   if(yc) yc.innerHTML=['<option value="auto">Prior year (auto)</option>',...yrs.filter(y=>y!==S.selectedYear).map(y=>`<option value="${y}" ${y===S.compareYear?'selected':''}>${y}</option>`)].join('');
   if(yctrl) yctrl.style.display=yrs.length>0?'flex':'none';
   if(typeof renderSortBar==='function') renderSortBar();
-  renderStatus(); renderTable(); renderEmpty(); renderFavs();
+  renderStatus(); renderTable(); renderEmpty();
 }
 
 function confirm2(msg, cb){
@@ -1093,7 +1094,7 @@ function toggleFav(huntNum, species) {
     if(h) favs.push({huntNum:h.huntNum, species:h.species, huntName:h.huntName, addedAt:Date.now()});
   }
   saveFavs(favs);
-  renderFavs();
+  try{ renderFavs(); }catch(e){ console.warn('renderFavs:',e); }
   renderFavButtons();
 }
 function renderFavs() {
@@ -1102,7 +1103,9 @@ function renderFavs() {
   if(!empty||!wrap||!body) return;
   if(!favs.length){ empty.style.display='block'; wrap.style.display='none'; return; }
   empty.style.display='none'; wrap.style.display='block';
-  const f=getFilters();
+  // Safe filter read — elements may not exist if database page isn't active
+  const elkEl=$('#fElkPts'), deerEl=$('#fDeerPts');
+  const f={ elkPts: elkEl&&elkEl.value!==''?Number(elkEl.value):null, deerPts: deerEl&&deerEl.value!==''?Number(deerEl.value):null };
   body.innerHTML = favs.map(fav=>{
     const h = getH().find(x=>x.huntNum===fav.huntNum&&x.species===fav.species);
     if(!h) return `<tr><td colspan="10" style="color:var(--tmut);font-family:sans-serif;font-size:13px;padding:8px">${fav.huntNum} ${fav.huntName} — load data to see details</td></tr>`;
@@ -1152,6 +1155,7 @@ function renderFavButtons() {
 }
 
 async function init() {
+  try {
   const hadLocal = loadLocal();
   const yi=$('#pyInput');
   if(yi){yi.value=S.pendingYear||new Date().getFullYear();if(!S.pendingYear)S.pendingYear=String(new Date().getFullYear());}
@@ -1186,7 +1190,7 @@ async function init() {
   }
 
   // Nav
-  $$('.nav-link').forEach(b=>b.addEventListener('click',()=>{ switchPage(b.dataset.page); if(b.dataset.page==='favorites') renderFavs(); }));
+  $$('.nav-link').forEach(b=>b.addEventListener('click',()=>switchPage(b.dataset.page)));
   const gd=$('#btnGoData'); if(gd) gd.addEventListener('click',()=>switchPage('data'));
   const gdb=$('#btnViewDb'); if(gdb) gdb.addEventListener('click',()=>switchPage('database'));
 
@@ -1339,6 +1343,13 @@ async function init() {
 
 
   $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')$('#modal').classList.remove('open');});
+}
+
+  } catch(e) {
+    console.error('[init] Fatal error:', e);
+    const b=$('#dbBanner');
+    if(b){ b.className='banner err'; b.innerHTML='<span>App error: '+e.message+'. Try refreshing.</span>'; }
+  }
 }
 
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
