@@ -138,21 +138,14 @@ footer a{color:#000}
 .disc{font-style:italic;font-size:11px;opacity:.7;margin-top:16px;border-top:1px solid rgba(255,255,255,.2);padding-top:12px}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--gl);color:#fff;padding:10px 18px;font-family:sans-serif;font-size:13px;border-left:3px solid var(--gold);z-index:200;max-width:90%;display:none}
 .toast.err{background:var(--bad);border-left-color:#fff}.toast.show{display:block}
-.spill{display:inline-flex;align-items:center;gap:0;border:1px solid var(--bor);background:#1f1f1f;cursor:pointer;font-family:sans-serif;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--tmut);padding:7px 12px;white-space:nowrap;-webkit-appearance:none;border-radius:0}
-.spill:hover{background:var(--tan);color:#f0f0f0}
-.spill.active{background:var(--green);border-color:var(--gl);color:#fff}
-.spill .sarr{margin-left:5px;font-size:11px;opacity:.8}
-.spill.s2{background:#1a2a1f;border-color:var(--gl);color:var(--gl)}
-.spill.s3{background:#1a1f2a;border-color:#7da9d4;color:#7da9d4}
-.spill.s2 .sarr{opacity:1}.spill.s3 .sarr{opacity:1}
-.sort-clear{display:inline-flex;align-items:center;padding:7px 10px;border:1px solid var(--bad);background:#1f1f1f;color:var(--bad);font-family:sans-serif;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;cursor:pointer;white-space:nowrap;-webkit-appearance:none;border-radius:0}
-.sort-clear:hover{background:var(--badbg)}
+
 /* Favorites */
-.fav-btn{background:transparent;border:none;font-size:22px;cursor:pointer;padding:2px 6px;line-height:1;color:var(--tmut);-webkit-appearance:none;flex-shrink:0}
-.fav-btn:hover{color:var(--gold)}.fav-btn.active{color:var(--gold)}
-.fav-remove{background:transparent;border:1px solid var(--bad);color:var(--bad);font-size:11px;font-family:sans-serif;font-weight:600;text-transform:uppercase;padding:4px 8px;cursor:pointer;-webkit-appearance:none;border-radius:0}
-.fav-remove:hover{background:var(--badbg)}
+.fav-btn{background:transparent;border:none;font-size:22px;cursor:pointer;padding:2px 6px;line-height:1;color:var(–tmut);-webkit-appearance:none;flex-shrink:0}
+.fav-btn:hover{color:var(–gold)}.fav-btn.active{color:var(–gold)}
+.fav-remove{background:transparent;border:1px solid var(–bad);color:var(–bad);font-size:11px;font-family:sans-serif;font-weight:600;text-transform:uppercase;padding:4px 8px;cursor:pointer;-webkit-appearance:none;border-radius:0}
+.fav-remove:hover{background:var(–badbg)}
 </style>
+
 </head>
 <body>
 
@@ -160,7 +153,7 @@ footer a{color:#000}
   <div class="site-header-inner">
     <div class="crest">ODFW</div>
     <div>
-      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v2.1</span></h1>
+      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v2.2</span></h1>
       <div class="site-subtitle">Deer &amp; Elk &mdash; Draw Odds &amp; Harvest Statistics</div>
     </div>
   </div>
@@ -212,7 +205,9 @@ footer a{color:#000}
       <div class="field"><label>My Deer Points</label>
         <input type="number" id="fDeerPts" min="0" max="30" inputmode="numeric"></div>
       <div class="field"><label>Show Hunts</label>
-        <select id="fDrawability"><option value="all">All</option><option value="canDraw">I can draw (100% tier)</option><option value="oneAway">One point away from 100%</option><option value="reachable">Within 3 points of 100%</option></select></div>
+        <select id="fDrawability"><option value="all">All</option><option value="canDraw">I can draw (100% tier)</option><option value="oneAway">One point away from 100%</option><option value="reachable">Within N points of 100%</option></select></div>
+      <div class="field" id="reachableField" style="display:none"><label>Within how many points?</label>
+        <input type="number" id="fReachablePts" min="1" max="20" value="3" inputmode="numeric"></div>
       <div class="field" style="grid-column:span 2"><label>Search Unit / Hunt Name</label>
         <input type="text" id="fSearch" placeholder="e.g. Murderers Cr, Wenaha, 230X"></div>
     </div>
@@ -220,7 +215,6 @@ footer a{color:#000}
 </section>
 
 <div class="rmeta"><h2>Results</h2><div class="rcount" id="rcount">—</div></div>
-<div id="sortBar" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;font-family:sans-serif;align-items:center;"></div>
 <div class="twrap">
   <table class="hunts" id="huntsTable">
     <thead><tr>
@@ -466,7 +460,7 @@ async function fbLoad() {
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 const SK = 'odfw_v4';
-const S = { years:{}, selectedYear:null, compareYear:null, pendingYear:null, sorts:[{key:'huntNum',dir:'asc'}] };
+const S = { years:{}, selectedYear:null, compareYear:null, pendingYear:null };
 
 const curYD  = () => S.selectedYear ? S.years[S.selectedYear] : null;
 const getH   = () => { const y = curYD(); return y ? y.hunts : []; };
@@ -789,6 +783,7 @@ function getFilters() {
     elkPts:  elkRaw===''?null:Number(elkRaw),
     deerPts: deerRaw===''?null:Number(deerRaw),
     draw:    ($('#fDrawability')?.value||'all'),
+    reachablePts: Number($('#fReachablePts')?.value||3),
     srch:    ($('#fSearch')?.value||'').trim().toLowerCase()
   };
 }
@@ -808,36 +803,22 @@ function applyFilters(hunts) {
       if(myP!==null){ const p=h.pts100;
         if(f.draw==='canDraw'&&(p===null||myP<p)) return false;
         if(f.draw==='oneAway'&&(p===null||myP!==p-1)) return false;
-        if(f.draw==='reachable'&&(p===null||myP<p-3)) return false;
+        if(f.draw==='reachable'&&(p===null||myP<p-f.reachablePts)) return false;
       }
     }
     return true;
   });
 }
-function getVal(h,k,f) {
-  if(k==='huntNum')  return h.huntNum;
-  if(k==='huntName') return h.huntName;
-  if(k==='weapon')   return h.weapon;
-  if(k==='tags')     return h.tags;
-  if(k==='apps')     return h.residentApps;
-  if(k==='pts100')   return h.pts100;
-  if(k==='success')  return h.harvest?.successPct;
-  if(k==='myOdds')   return myOdds(h,ptsForHunt(h,f));
-  return null;
-}
-function cmpKey(a,b,k,dir,f) {
-  const av=getVal(a,k,f), bv=getVal(b,k,f);
-  const an=av==null, bn=bv==null;
-  if(an&&bn)return 0; if(an)return 1; if(bn)return -1;
-  const d=dir==='asc'?1:-1;
-  const num=['tags','apps','pts100','success','myOdds'].includes(k);
-  return num?(av-bv)*d:String(av).localeCompare(String(bv),undefined,{numeric:true})*d;
-}
+// Fixed sort: highest pts100 first (hardest draws at top), ties broken by hunt number
 function sortHunts(hunts) {
-  const f=getFilters();
   return [...hunts].sort((a,b)=>{
-    for(const s of S.sorts){ const r=cmpKey(a,b,s.key,s.dir,f); if(r!==0) return r; }
-    return 0;
+    const ap=a.pts100, bp=b.pts100;
+    // Nulls (random-only) go to the bottom
+    if(ap===null&&bp===null) return String(a.huntNum).localeCompare(String(b.huntNum),undefined,{numeric:true});
+    if(ap===null) return 1;
+    if(bp===null) return -1;
+    if(bp!==ap) return bp-ap; // highest pts first
+    return String(a.huntNum).localeCompare(String(b.huntNum),undefined,{numeric:true});
   });
 }
 
@@ -1052,7 +1033,6 @@ function render(){
   if(yv) yv.innerHTML=yrs.map(y=>`<option value="${y}" ${y===S.selectedYear?'selected':''}>${y}</option>`).join('');
   if(yc) yc.innerHTML=['<option value="auto">Prior year (auto)</option>',...yrs.filter(y=>y!==S.selectedYear).map(y=>`<option value="${y}" ${y===S.compareYear?'selected':''}>${y}</option>`)].join('');
   if(yctrl) yctrl.style.display=yrs.length>0?'flex':'none';
-  if(typeof renderSortBar==='function') renderSortBar();
   renderStatus(); renderTable(); renderEmpty();
 }
 function confirm2(msg, cb){
@@ -1164,69 +1144,17 @@ async function init() {
   ['fSpecies','fWeapon','fElkPts','fDeerPts','fDrawability','fSearch'].forEach(id=>{
     const el=$('#'+id); if(el) el.addEventListener('input',()=>render());
   });
-
-  // Sort pills
-  const SORT_OPTIONS=[
-    {key:'myOdds',  label:'My Odds',     defaultDir:'desc'},
-    {key:'pts100',  label:'Pts to Draw', defaultDir:'asc'},
-    {key:'success', label:'Success %',   defaultDir:'desc'},
-    {key:'tags',    label:'Tags',        defaultDir:'desc'},
-    {key:'apps',    label:'Applicants',  defaultDir:'desc'},
-    {key:'huntNum', label:'Hunt #',      defaultDir:'asc'},
-  ];
-  function renderSortBar(){
-    const bar=$('#sortBar'); if(!bar) return;
-    bar.innerHTML='';
-    const LBLS=['Sort by','Then by','Then by'], CLS=['active','s2','s3'];
-    S.sorts.forEach((s,li)=>{
-      const lbl=document.createElement('span');
-      lbl.style.cssText='font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--tmut);align-self:center;white-space:nowrap;';
-      lbl.textContent=LBLS[li]+':'; bar.appendChild(lbl);
-      SORT_OPTIONS.forEach(opt=>{
-        if(S.sorts.slice(0,li).some(x=>x.key===opt.key)) return;
-        const isActive=s.key===opt.key, arrow=isActive?(s.dir==='asc'?'▴':'▾'):'';
-        const btn=document.createElement('button');
-        btn.className='spill'+(isActive?' '+CLS[li]:'');
-        btn.innerHTML=opt.label+(isActive?`<span class="sarr">${arrow}</span>`:'');
-        btn.addEventListener('click',()=>{
-          S.sorts[li]=isActive?{key:s.key,dir:s.dir==='asc'?'desc':'asc'}:{key:opt.key,dir:opt.defaultDir};
-          renderSortBar(); renderTable();
-        });
-        bar.appendChild(btn);
-      });
-      if(S.sorts.length>1){
-        const rem=document.createElement('button');
-        rem.className='sort-clear'; rem.innerHTML='&#x2715;'; rem.title='Remove this sort level';
-        rem.addEventListener('click',()=>{
-          S.sorts.splice(li,1);
-          if(S.sorts.length===0) S.sorts=[{key:'huntNum',dir:'asc'}];
-          renderSortBar(); renderTable();
-        });
-        bar.appendChild(rem);
-      }
-      if(li<S.sorts.length-1){ const sep=document.createElement('div'); sep.style.cssText='width:100%;height:0;'; bar.appendChild(sep); }
-    });
-    if(S.sorts.length<3&&S.sorts.length<SORT_OPTIONS.length){
-      const br=document.createElement('div'); br.style.cssText='width:100%;height:0;'; bar.appendChild(br);
-      const addLbl=document.createElement('span');
-      addLbl.style.cssText='font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--tmut);align-self:center;white-space:nowrap;';
-      addLbl.textContent=LBLS[S.sorts.length]+':'; bar.appendChild(addLbl);
-      SORT_OPTIONS.filter(o=>!S.sorts.some(x=>x.key===o.key)).forEach(opt=>{
-        const btn=document.createElement('button');
-        btn.className='spill'; btn.textContent=opt.label;
-        btn.addEventListener('click',()=>{ S.sorts.push({key:opt.key,dir:opt.defaultDir}); renderSortBar(); renderTable(); });
-        bar.appendChild(btn);
-      });
-    }
-    if(!(S.sorts.length===1&&S.sorts[0].key==='huntNum')){
-      const br=document.createElement('div'); br.style.cssText='width:100%;height:0;'; bar.appendChild(br);
-      const clr=document.createElement('button');
-      clr.className='sort-clear'; clr.innerHTML='&#x2715; Clear all sorts';
-      clr.addEventListener('click',()=>{ S.sorts=[{key:'huntNum',dir:'asc'}]; renderSortBar(); renderTable(); });
-      bar.appendChild(clr);
-    }
+  // Show/hide custom N-points field
+  const fDrawEl=$('#fDrawability'), reachField=$('#reachableField');
+  if(fDrawEl&&reachField){
+    const toggleReach=()=>{ reachField.style.display=fDrawEl.value==='reachable'?'block':'none'; };
+    fDrawEl.addEventListener('change', toggleReach);
+    toggleReach();
   }
-  renderSortBar();
+  const fReachEl=$('#fReachablePts');
+  if(fReachEl) fReachEl.addEventListener('input',()=>render());
+
+
 
   // Favorites modal button
   $('#modalFavBtn')?.addEventListener('click',()=>{
