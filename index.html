@@ -179,7 +179,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v3.4</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v3.5</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -679,7 +679,9 @@ function trendData(h) {
   const yrs = yList().slice().reverse();
   const rows = yrs.map(y => {
     const hh = findH(y, h.huntNum, h.species);
-    return hh ? {year:y, pts100:hh.pts100, success:hh.harvest?.successPct ?? null, tags:hh.tags, apps:hh.residentApps} : null;
+    return hh ? {year:y, pts100:hh.pts100, success:hh.harvest?.successPct ?? null,
+      hunters:hh.harvest?.hunters ?? null, harvested:hh.harvest?.totalHarvest ?? null,
+      tags:hh.tags, apps:hh.residentApps} : null;
   }).filter(Boolean);
   let sentence = '', dir = '';
   const withPts = rows.filter(r => r.pts100 !== null);
@@ -1060,10 +1062,16 @@ function openDetail(id, keepSel){
     }
     const succ = b?b.succ:one.successPct, hunters=b?b.hunters:one.hunters,
           taken=b?b.taken:one.totalHarvest, days=b?b.days:(one.hunters>0?Math.round(one.days/one.hunters):null);
-    html+=`<p class="plain">${b?`Averaged over ${b.years[b.years.length-1]}–${b.years[0]}: `:`In the ${selYr} season: `}<strong>${fmtP(succ)}</strong> of the ${fmt(hunters)} hunters holding this tag brought a ${h.species==='elk'?'bull or cow':'buck'} home.</p>
+    const per=b?' per year':'', avgTag=b?' (avg/yr)':'';
+    html+=`<p class="plain">${b?`Over the ${b.n} most recent seasons with results (${b.years[b.years.length-1]}–${b.years[0]}), on average${per}:`:`In the ${selYr} season:`}</p>
+      <div class="kvg" style="margin-bottom:10px">
+        <div class="kv"><div class="k">Hunters who reported${avgTag}</div><div class="v">${fmt(hunters)}</div></div>
+        <div class="kv"><div class="k">Filled their tag${avgTag}</div><div class="v" style="color:var(--good)">${fmt(taken)}</div></div>
+      </div>
+      <p class="plain" style="margin-bottom:12px"><strong>${fmtP(succ)} success</strong> — about ${succ>=100?'every':Math.round(succ/10)+' in 10'} hunter${succ>=100?'':'s'} who held this ${h.species} tag ${succ>=100?'filled it':'brought a '+(h.species==='elk'?'bull or cow':'buck')+' home'}.</p>
       <div class="kvg">
-        <div class="kv"><div class="k">Animals taken${b?' (avg/yr)':''}</div><div class="v">${fmt(taken)}</div></div>
-        <div class="kv"><div class="k">Days per hunter (avg)</div><div class="v">${days??'—'}</div></div>
+        <div class="kv"><div class="k">Days hunted per hunter (avg)</div><div class="v">${days??'—'}</div></div>
+        <div class="kv"><div class="k">${b?'Seasons averaged':'Season'}</div><div class="v">${b?b.n:selYr}</div></div>
       </div>`;
     // antler bars: blended shares or exact year
     let shares=null, denomLbl='';
@@ -1095,8 +1103,8 @@ function openDetail(id, keepSel){
       html+=`<p class="help">Points needed for a sure tag, by year:</p><div class="trendline">${pr.map(r=>
         `<div class="tcol"><span class="tval">${r.pts100}</span><div class="tbar" style="height:${Math.max(6,r.pts100/mx*46)}px"></div><span class="tyr">${r.year}</span></div>`).join('')}</div>`;
     }
-    html+=`<table class="simple"><thead><tr><th>Year</th><th>Sure-tag pts</th><th>Success</th><th>Tags</th><th>Applicants</th></tr></thead><tbody>
-      ${t.rows.map(r=>`<tr><td>${r.year}</td><td>${r.pts100===null?'Luck':r.pts100}</td><td>${r.success==null?'—':fmtP(r.success)}</td><td>${fmt(r.tags)}</td><td>${fmt(r.apps)}</td></tr>`).join('')}
+    html+=`<table class="simple"><thead><tr><th>Year</th><th>Sure-tag pts</th><th>Reported / Filled</th><th>Success</th><th>Tags</th></tr></thead><tbody>
+      ${t.rows.map(r=>`<tr><td>${r.year}</td><td>${r.pts100===null?'Luck':r.pts100}</td><td>${r.hunters==null?'—':fmt(r.hunters)+' / '+fmt(r.harvested)}</td><td>${r.success==null?'—':fmtP(r.success)}</td><td>${fmt(r.tags)}</td></tr>`).join('')}
     </tbody></table></div>`;
   }
 
