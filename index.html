@@ -89,6 +89,11 @@ select,input[type=search],input[type=number]{width:100%;min-height:54px;font-siz
 .stat{background:var(--card2);border-radius:10px;padding:8px 6px;text-align:center}
 .stat .n{font-size:1.25rem;font-weight:800;font-variant-numeric:tabular-nums}
 .stat .l{font-size:.68rem;color:var(--dim);margin-top:1px;line-height:1.25}
+.csize{font-size:.88rem;color:var(--text);margin-top:11px;padding:7px 10px;background:var(--card2);border-radius:8px;border-left:3px solid var(--gold)}
+.csize strong{color:var(--gold)} .csize.dim{color:var(--dim);border-left-color:var(--line)}
+.hselrow{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+.hsel{min-height:46px;padding:6px 14px;font-size:.9rem;font-weight:700;background:var(--card2);border:1.5px solid var(--line);border-radius:10px;color:var(--dim)}
+.hsel.on{background:var(--gold);border-color:var(--gold);color:#1c2418}
 .cseason{font-size:.88rem;color:var(--text);margin-top:10px;padding:7px 10px;background:var(--card2);border-radius:8px}
 .cseason strong{color:var(--gold)}
 .ctrend{font-size:.83rem;color:var(--dim);margin-top:9px}
@@ -174,7 +179,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div><h1 class="serif">Oregon Hunt Planner <span class="ver">v3.2</span></h1>
+  <div><h1 class="serif">Oregon Hunt Planner <span class="ver">v3.3</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
 </div></div></header>
 
@@ -202,7 +207,12 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
       <div class="field"><label>Data year</label><select id="fYear"></select></div>
     </div>
     <label class="chkrow"><input type="checkbox" id="fCanDraw"><span>Only show hunts I can draw for sure this year</span></label>
-    <label class="chkrow"><input type="checkbox" id="fYouth"><span>Show youth-only hunts</span></label>
+    <button class="chkrow" id="spBtn" style="width:100%;border-style:solid;background:var(--card2)">
+      <span style="font-weight:700">Special hunts shown ▾</span><span class="help" id="spSum" style="margin:0;text-align:right;flex:1"></span></button>
+    <div id="spPanel" style="display:none;padding:4px 2px 2px">
+      <p class="help" style="margin:0 0 8px">Check the kinds of special hunts you want in the list:</p>
+      <div id="spChecks"></div>
+    </div>
   </div></div>
 
   <div class="count" id="rcount"></div>
@@ -422,6 +432,7 @@ const SEEN_K = 'odfw_lastseen_v1';
 const S = { years:{}, selectedYear:null, pendingYear:null };
 const P = Object.assign({ deerPts:null, elkPts:null, sp:'all', wep:'all', sort:'best', canDraw:false, ptsSet:false, showYouth:false },
   JSON.parse(localStorage.getItem(PK)||'{}'));
+P.specialShow = Object.assign({youth:P.showYouth===true, spike:true, trad:true, whitetail:true, late:true, damage:true}, P.specialShow||{});
 const savePrefs = () => { try{ localStorage.setItem(PK, JSON.stringify(P)); }catch(e){} };
 
 const curYD  = () => S.selectedYear ? S.years[S.selectedYear] : null;
@@ -531,10 +542,13 @@ function trophyIndex(h, hv) {
 // scaled by how realistic the draw is for the user's points.
 function grade(h) {
   const my = ptsFor(h);
-  const { hv } = effHarvest(h);
-  const s = hv ? Math.min((hv.successPct || 0) / 60, 1) : 0.3;
-  const ti = hv ? trophyIndex(h, hv) : null;
-  const t = ti === null ? 0.2 : Math.min(ti / 0.7, 1);
+  const b = blendHarvest(h, 3);
+  const s = b ? Math.min((b.succ || 0) / 60, 1) : 0.3;
+  let t = 0.2;
+  if (b && b.shares) {
+    const mature = h.species === 'elk' ? (b.shares.fivePt + b.shares.sixPlusPt) : b.shares.fourPt;
+    t = Math.min(mature / 0.7, 1);
+  }
   const quality = 0.6 * s + 0.4 * t;
   let d;
   if (my === null) d = 0.5;
@@ -546,17 +560,50 @@ function grade(h) {
   }
   return 100 * quality * (0.35 + 0.65 * d);
 }
-// Special hunt details worth flagging on the card
-function specialTags(h) {
-  const n = (h.huntName || '').toLowerCase(), out = [];
-  if (h.weapon === 'youth') out.push('Youth only');
-  if (/spike/.test(n)) out.push('Spike bulls only');
-  if (h.weapon === 'muzz') out.push('Muzzleloader');
-  if (/trad/.test(n)) out.push('Traditional bow');
-  if (/whitetail/.test(n)) out.push('Whitetail');
-  if (/\blate\b/.test(n)) out.push('Late season');
-  if (/emergency|damage/.test(n)) out.push('Damage hunt');
+// Special hunt requirements — keyed so each can be shown/hidden in the filter
+const SPECIAL_DEFS = [
+  {k:'youth',     label:'Youth only',        test:h=>h.weapon==='youth'},
+  {k:'spike',     label:'Spike bulls only',  test:h=>/spike/i.test(h.huntName||'')},
+  {k:'trad',      label:'Traditional bow',   test:h=>/trad/i.test(h.huntName||'')},
+  {k:'whitetail', label:'Whitetail',         test:h=>/whitetail/i.test(h.huntName||'')},
+  {k:'late',      label:'Late season',       test:h=>/\blate\b/i.test(h.huntName||'')},
+  {k:'damage',    label:'Damage hunt',       test:h=>/emergency|damage/i.test(h.huntName||'')}
+];
+function specialKeys(h){ return SPECIAL_DEFS.filter(d=>d.test(h)).map(d=>d.k); }
+function specialTags(h){ return SPECIAL_DEFS.filter(d=>d.test(h)).map(d=>d.label); }
+
+// All years (newest first) where this hunt has harvest results
+function harvestYears(h){
+  const out=[];
+  for(const y of yList()){
+    const hh=findH(y,h.huntNum,h.species);
+    if(hh&&hh.harvest) out.push({year:y,hv:hh.harvest});
+  }
   return out;
+}
+const CLASS_KEYS=['spike','twoPt','threePt','fourPt','fivePt','sixPlusPt'];
+const classLabel=(k,sp)=>({spike:'Spike',twoPt:'2-point',threePt:'3-point',
+  fourPt:'4-point'+(sp==='deer'?'+':''),fivePt:'5-point',sixPlusPt:'6-point+'}[k]);
+// Blend the most recent 3 years of harvest (2 if that's all, 1 if that's all)
+function blendHarvest(h, maxN){
+  const yrs=harvestYears(h).slice(0, maxN||3);
+  if(!yrs.length) return null;
+  const avg=a=>a.reduce((s,x)=>s+x,0)/a.length;
+  const succ=Math.round(avg(yrs.map(r=>r.hv.successPct||0)));
+  const hunters=Math.round(avg(yrs.map(r=>r.hv.hunters||0)));
+  const taken=Math.round(avg(yrs.map(r=>r.hv.totalHarvest||0)));
+  const days=Math.round(avg(yrs.map(r=>r.hv.hunters>0?r.hv.days/r.hv.hunters:0)));
+  const antlerYrs=yrs.filter(r=>r.hv.antlerValid&&r.hv.totalBull>0);
+  let shares=null, top=null;
+  if(antlerYrs.length){
+    shares={};
+    CLASS_KEYS.forEach(k=>{ shares[k]=avg(antlerYrs.map(r=>r.hv[k]/r.hv.totalBull)); });
+    const keys=h.species==='elk'?CLASS_KEYS:CLASS_KEYS.slice(0,4);
+    const pcts=Object.fromEntries(keys.map(k=>[k,Math.round(shares[k]*100)]));
+    const tk=keys.reduce((b,k)=>pcts[k]>=pcts[b]?k:b,keys[0]); // ties go to the larger class
+    if(pcts[tk]>0) top={key:tk,label:classLabel(tk,h.species),pct:pcts[tk]};
+  }
+  return {years:yrs.map(r=>r.year), n:yrs.length, succ, hunters, taken, days, shares, top};
 }
 
 // The verdict: one plain-English answer per hunt
@@ -797,8 +844,10 @@ function applyFilters(hunts) {
   return hunts.filter(h=>{
     if(P.sp!=='all' && h.species!==P.sp) return false;
     if(P.wep!=='all' && h.weapon!==P.wep) return false;
-    // Youth hunts stay hidden unless the toggle is on or Youth is picked as the weapon
-    if(h.weapon==='youth' && !P.showYouth && P.wep!=='youth') return false;
+    // Special-requirement hunts can be shown/hidden per tag (picking Youth as
+    // the weapon overrides the youth hide)
+    const hid=specialKeys(h).filter(k=>P.specialShow[k]===false&&!(k==='youth'&&P.wep==='youth'));
+    if(hid.length) return false;
     if(q && !(h.huntNum+' '+h.huntName).toLowerCase().includes(q)) return false;
     if(P.canDraw){
       const my=ptsFor(h);
@@ -877,6 +926,12 @@ function cardHTML(h){
       <div class="stat"><div class="n">${succ==null?'—':fmtP(succ)}</div><div class="l">${succLbl}</div></div>
       <div class="stat"><div class="n">${h.pts100===null?'Luck':h.pts100}</div><div class="l">Points for a sure tag</div></div>
     </div>
+    ${(()=>{const b=blendHarvest(h,3);
+      if(!b) return `<div class="csize dim">No harvest data yet for this hunt.</div>`;
+      const span=b.n>1?`${b.n}-yr avg`:`${b.years[0]} results`;
+      return b.top
+        ? `<div class="csize">Typical size: <strong>${esc(b.top.label)}</strong> — ${b.top.pct}% of ${h.species==='elk'?'bulls':'bucks'} taken (${span})</div>`
+        : `<div class="csize dim">Antler sizes not reported for this hunt.</div>`;})()}
     ${(()=>{const se=seasonOf(h);return se?`<div class="cseason">Season: <strong>${esc(se.s)}</strong></div>`:'';})()}
     ${t.sentence?`<div class="ctrend ${t.dir}">${esc(t.sentence)}</div>`:''}
     <button class="detailbtn" data-open="${esc(h.huntNum)}_${h.species}">See full details ›</button>
@@ -907,8 +962,9 @@ function wireCards(box){
 }
 
 // ─── RENDER: detail sheet ─────────────────────────────────────────────────────
-let sheetId=null;
-function openDetail(id){
+let sheetId=null, sheetHSel='avg';
+function openDetail(id, keepSel){
+  if(!keepSel) sheetHSel='avg';
   const [num,sp]=id.split('_');
   const h=getH().find(x=>x.huntNum===num&&x.species===sp); if(!h) return;
   sheetId=id;
@@ -942,26 +998,36 @@ function openDetail(id){
       </div></div>`;
   }
 
-  const eh=effHarvest(h);
-  if(eh.hv){
-    const hv=eh.hv;
+  const hyrs=harvestYears(h);
+  if(hyrs.length){
+    const selYr = sheetHSel && hyrs.some(r=>r.year===sheetHSel) ? sheetHSel : 'avg';
+    const b = selYr==='avg' ? blendHarvest(h,3) : null;
+    const one = selYr!=='avg' ? hyrs.find(r=>r.year===selYr).hv : null;
     html+=`<div class="sec"><h3>How hunters did</h3>`;
-    if(!eh.current) html+=`<p class="plain" style="color:var(--warn);font-size:.88rem">Results for ${S.selectedYear} aren't out yet — these are the most recent, from the ${eh.year} season.</p>`;
-    html+=`<p class="plain"><strong>${fmtP(hv.successPct)}</strong> of the ${fmt(hv.hunters)} hunters who held this tag brought a ${h.species==='elk'?'bull or cow':'buck'} home.</p>
+    if(hyrs.length>1||selYr!=='avg'){
+      html+=`<div class="hselrow"><button class="hsel ${selYr==='avg'?'on':''}" data-hsel="avg">Average (${blendHarvest(h,3).n} yr)</button>`+
+        hyrs.map(r=>`<button class="hsel ${selYr===r.year?'on':''}" data-hsel="${r.year}">${r.year}</button>`).join('')+`</div>`;
+    }
+    const succ = b?b.succ:one.successPct, hunters=b?b.hunters:one.hunters,
+          taken=b?b.taken:one.totalHarvest, days=b?b.days:(one.hunters>0?Math.round(one.days/one.hunters):null);
+    html+=`<p class="plain">${b?`Averaged over ${b.years[b.years.length-1]}–${b.years[0]}: `:`In the ${selYr} season: `}<strong>${fmtP(succ)}</strong> of the ${fmt(hunters)} hunters holding this tag brought a ${h.species==='elk'?'bull or cow':'buck'} home.</p>
       <div class="kvg">
-        <div class="kv"><div class="k">Animals taken</div><div class="v">${fmt(hv.totalHarvest)}</div></div>
-        <div class="kv"><div class="k">Days per hunter (avg)</div><div class="v">${hv.hunters>0?Math.round(hv.days/hv.hunters):'—'}</div></div>
+        <div class="kv"><div class="k">Animals taken${b?' (avg/yr)':''}</div><div class="v">${fmt(taken)}</div></div>
+        <div class="kv"><div class="k">Days per hunter (avg)</div><div class="v">${days??'—'}</div></div>
       </div>`;
-    if(hv.antlerValid && hv.totalBull>0){
-      const cls=[['Spike',hv.spike],['2-point',hv.twoPt],['3-point',hv.threePt],['4-point'+(h.species==='deer'?'+':''),hv.fourPt]];
-      if(h.species==='elk'){ cls.push(['5-point',hv.fivePt],['6-point+',hv.sixPlusPt]); }
-      const mx=Math.max(...cls.map(c=>c[1]));
-      html+=`<p class="plain" style="margin-top:12px">Antler sizes of the ${h.species==='elk'?'bulls':'bucks'} taken:</p>`;
-      cls.forEach(([l,c])=>{
-        const pct=hv.totalBull>0?Math.round(c/hv.totalBull*100):0;
+    // antler bars: blended shares or exact year
+    let shares=null, denomLbl='';
+    if(b&&b.shares){ shares=b.shares; denomLbl=b.n>1?` (${b.n}-year average)`:''; }
+    else if(one&&one.antlerValid&&one.totalBull>0){ shares={}; CLASS_KEYS.forEach(k=>shares[k]=one[k]/one.totalBull); }
+    if(shares){
+      const keys=h.species==='elk'?CLASS_KEYS:CLASS_KEYS.slice(0,4);
+      const mx=Math.max(...keys.map(k=>shares[k]));
+      html+=`<p class="plain" style="margin-top:12px">Antler sizes of the ${h.species==='elk'?'bulls':'bucks'} taken${denomLbl}:</p>`;
+      keys.forEach(k=>{
+        const pct=Math.round(shares[k]*100);
         html+=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-          <span style="flex:0 0 84px;font-size:.85rem">${l}</span>
-          <div class="bar" style="flex:1"><div class="barf" style="width:${pct}%;${c===mx&&c>0?'background:var(--gold)':''}"></div></div>
+          <span style="flex:0 0 84px;font-size:.85rem">${classLabel(k,h.species)}</span>
+          <div class="bar" style="flex:1"><div class="barf" style="width:${pct}%;${shares[k]===mx&&mx>0?'background:var(--gold)':''}"></div></div>
           <span style="flex:0 0 44px;text-align:right;font-size:.85rem;font-weight:700">${pct}%</span></div>`;
       });
     }
@@ -999,8 +1065,12 @@ function openDetail(id){
   }
 
   $('#shBody').innerHTML=html;
+  $('#shBody').querySelectorAll('[data-hsel]').forEach(b=>b.onclick=()=>{
+    sheetHSel=b.dataset.hsel; const keep=$('#sheet').scrollTop;
+    openDetail(sheetId,true); $('#sheet').scrollTop=keep;
+  });
   $('#sheet').classList.add('open');
-  $('#sheet').scrollTop=0;
+  if(!keepSel) $('#sheet').scrollTop=0;
   document.body.style.overflow='hidden';
 }
 function closeDetail(){ $('#sheet').classList.remove('open'); document.body.style.overflow=''; sheetId=null; }
@@ -1106,7 +1176,12 @@ function wire(){
   $('#fWeapon').value=P.wep; $('#fWeapon').onchange=e=>{P.wep=e.target.value;savePrefs();renderCards();};
   $('#fSort').value=P.sort;  $('#fSort').onchange=e=>{P.sort=e.target.value;savePrefs();renderCards();};
   $('#fCanDraw').checked=P.canDraw; $('#fCanDraw').onchange=e=>{P.canDraw=e.target.checked;savePrefs();renderCards();};
-  $('#fYouth').checked=P.showYouth; $('#fYouth').onchange=e=>{P.showYouth=e.target.checked;savePrefs();renderCards();};
+  $('#spBtn').onclick=()=>{const p=$('#spPanel');p.style.display=p.style.display==='none'?'block':'none';};
+  $('#spChecks').innerHTML=SPECIAL_DEFS.map(d=>`<label class="chkrow" style="margin-bottom:8px"><input type="checkbox" data-spk="${d.k}" ${P.specialShow[d.k]!==false?'checked':''}><span>${d.label}</span></label>`).join('');
+  const spSum=()=>{const off=SPECIAL_DEFS.filter(d=>P.specialShow[d.k]===false).map(d=>d.label);
+    $('#spSum').textContent=off.length?off.join(', ')+' hidden':'All shown';};
+  spSum();
+  $$('#spChecks input').forEach(i=>i.onchange=e=>{P.specialShow[i.dataset.spk]=e.target.checked;savePrefs();spSum();renderCards();});
   $('#fSearch').oninput=()=>renderCards();
   $('#fYear').onchange=e=>{S.selectedYear=e.target.value;saveLocal();renderCards();renderMyList();};
   // admin
