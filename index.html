@@ -1,373 +1,332 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="color-scheme" content="dark">
-<title>Oregon Controlled Hunt Planner</title>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Oregon Hunt Planner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
-:root {
-  color-scheme:dark;
-  --green:#4a8f5e; --gl:#6bb582; --gold:#d4a04a;
-  --tan:#2a2a2a; --tanl:#1f1f1f;
-  --text:#f0f0f0; --tsec:#c5c5c5; --tmut:#8a8a8a;
-  --bor:#3a3a3a; --borl:#2a2a2a;
-  --good:#6bb582; --goodbg:#1a2a1f;
-  --warn:#d4a04a; --warnbg:#2a2418;
-  --bad:#d46b6b;  --badbg:#2a1818;
+:root{
+  --bg:#141d17; --card:#1d2a21; --card2:#243428; --line:#3a4c3e;
+  --text:#f3ecdc; --dim:#b9c4b0; --gold:#d9a54e;
+  --good:#93cba3; --goodbg:#1f3627; --warn:#e2b45f; --warnbg:#37301c;
+  --luck:#c9b8a0; --luckbg:#2b2a22; --bad:#dd8f75; --badbg:#3a251e;
 }
-*{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%;background:#000}
-body{margin:0;font-family:'Georgia','Cambria',serif;font-size:16px;line-height:1.5;color:#f0f0f0;background:#000;-webkit-font-smoothing:antialiased}
-.site-header{background:var(--green);color:#fff;border-bottom:4px solid var(--gold)}
-.site-header-inner{max-width:1300px;margin:0 auto;padding:18px 20px;display:flex;align-items:center;gap:16px}
-.crest{flex-shrink:0;width:52px;height:52px;border:2px solid var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;letter-spacing:1px;color:var(--gold);background:rgba(0,0,0,.15)}
-.site-title{font-family:'Georgia',serif;margin:0;font-size:22px;font-weight:600;line-height:1.15}
-.ver{display:inline-block;margin-left:8px;padding:1px 7px;font-family:sans-serif;font-size:11px;font-weight:600;letter-spacing:.5px;vertical-align:middle;color:var(--gold);border:1px solid var(--gold);border-radius:2px;background:rgba(0,0,0,.3)}
-.site-subtitle{font-size:12px;font-style:italic;opacity:.85;letter-spacing:.5px;text-transform:uppercase;margin-top:2px}
-.subnav{background:var(--gl);border-top:1px solid rgba(255,255,255,.1)}
-.subnav-inner{max-width:1300px;margin:0 auto;padding:0 20px;font-family:sans-serif;display:flex}
-.nav-link{background:transparent;border:none;border-bottom:3px solid transparent;color:rgba(255,255,255,.75);font-family:inherit;font-size:13px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;padding:12px 18px;cursor:pointer;-webkit-appearance:none}
-.nav-link:hover{color:#fff}
-.nav-link.active{color:#fff;border-bottom-color:var(--gold);background:rgba(0,0,0,.2)}
-.nbadge{display:inline-block;margin-left:6px;padding:1px 6px;font-size:10px;background:var(--gold);color:var(--gl);border-radius:2px;font-weight:700}
-.page{display:none}.page.active{display:block}
-main{max-width:1300px;margin:0 auto;padding:24px 20px 60px}
-.page-title{font-family:'Georgia',serif;font-size:28px;font-weight:normal;color:var(--gl);margin:0 0 4px;border-bottom:2px solid var(--gold);padding-bottom:10px}
-.page-lede{font-style:italic;color:var(--tsec);margin:8px 0 24px;font-size:15px}
-.panel{background:#141414;border:1px solid var(--bor);margin-bottom:24px}
-.panel-head{background:#1f1f1f;border-bottom:1px solid var(--bor);padding:10px 16px;font-family:sans-serif;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--gold)}
-.panel-body{padding:18px 16px}
-.data-status{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:14px;font-family:sans-serif}
-.sdot{width:10px;height:10px;border-radius:50%;background:#666;display:inline-block;margin-right:8px}
-.sdot.ok{background:var(--good)}.sdot.part{background:var(--gold)}
-.upload-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:14px}
-@media(max-width:900px){.upload-grid{grid-template-columns:1fr 1fr}}
-@media(max-width:600px){.upload-grid{grid-template-columns:1fr}}
-.upload-zone{border:2px dashed var(--bor);background:var(--tanl);padding:18px 14px;text-align:center;cursor:pointer;transition:all .15s;font-family:sans-serif;display:flex;flex-direction:column}
-.upload-zone:hover,.upload-zone.dv{border-color:var(--green);background:#000}
-.upload-zone.hf{border-style:solid;border-color:var(--green);background:var(--goodbg)}
-.uzl{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gl);margin-bottom:4px}
-.uzh{font-size:12px;color:var(--tmut)}
-.uzf{font-size:12px;color:var(--good);margin-top:6px;font-weight:600;word-break:break-all}
-.upload-zone input[type=file]{display:none}
-.btn{font-family:sans-serif;font-size:13px;font-weight:600;letter-spacing:.4px;padding:8px 16px;border:1px solid var(--gl);background:var(--green);color:#fff;cursor:pointer;text-transform:uppercase;-webkit-appearance:none;border-radius:0}
-.btn:hover{background:var(--gl)}.btn:disabled{background:#555;border-color:#555;cursor:not-allowed}
-.btn.sec{background:#1f1f1f;color:var(--gl);border-color:var(--gl)}.btn.sec:hover{background:var(--tan)}
-.btn.dan{background:#1f1f1f;color:var(--bad);border-color:var(--bad)}.btn.dan:hover{background:var(--badbg)}
-.bmini{font-family:sans-serif;font-size:11px;font-weight:600;text-transform:uppercase;padding:5px 10px;background:#1f1f1f;color:var(--gl);border:1px solid var(--gl);cursor:pointer;border-radius:0;-webkit-appearance:none}
-.bmini:hover{background:var(--tan)}.bmini.dan{color:var(--bad);border-color:var(--bad)}.bmini.dan:hover{background:var(--badbg)}
-.src-btn{display:block;margin-top:8px;font-family:sans-serif;font-size:12px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--gl);background:#141414;border:1px solid var(--gl);text-decoration:none;text-align:center;padding:9px 12px;transition:background .15s}
-.src-btn:hover{background:var(--green);color:#fff}.src-btn::after{content:' \2197';font-weight:normal}
-.arow{margin-top:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-.htext{font-family:sans-serif;font-size:12px;color:var(--tmut);margin-top:12px;line-height:1.5}
-.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;font-family:sans-serif}
-.field label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gl);margin-bottom:4px}
-.field input,.field select{width:100%;padding:7px 9px;border:1px solid var(--bor);background:#141414;font-family:inherit;font-size:14px;color:#f0f0f0;-webkit-text-fill-color:#f0f0f0;color-scheme:dark;border-radius:0;-webkit-appearance:none;appearance:none}
-.field input:focus,.field select:focus{outline:2px solid var(--gold);outline-offset:-1px}
-.field select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%236bb582' stroke-width='1.5' fill='none'/></svg>");background-repeat:no-repeat;background-position:right 8px center;padding-right:28px}
-.rmeta{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px;margin:24px 0 8px;font-family:sans-serif}
-.rmeta h2{font-family:'Georgia',serif;font-size:20px;font-weight:normal;color:var(--gl);margin:0}
-.rcount{font-size:13px;color:var(--tmut)}
-.twrap{background:#141414;border:1px solid var(--bor);overflow-x:auto;-webkit-overflow-scrolling:touch}
-table.hunts{width:100%;border-collapse:collapse;font-family:sans-serif;font-size:13px}
-table.hunts thead th{background:var(--green);color:#fff;font-weight:600;text-transform:uppercase;letter-spacing:.4px;font-size:11px;padding:10px 8px;text-align:left;white-space:nowrap;border-right:1px solid var(--gl);user-select:none}
-table.hunts thead th:last-child{border-right:none}
-table.hunts tbody tr{border-bottom:1px solid var(--borl);cursor:pointer}
-table.hunts tbody tr:nth-child(even){background:var(--tanl)}
-table.hunts tbody tr:hover{background:var(--tan)}
-table.hunts tbody td{padding:9px 8px;vertical-align:top}
-table.hunts tbody td.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
-table.hunts tbody td.hnum{font-family:'Georgia',serif;font-weight:600;font-size:14px;color:var(--gl);white-space:nowrap}
-.sub{font-weight:normal;font-size:11px;color:var(--tmut);display:block;margin-top:2px}
-.tag{display:inline-block;padding:1px 6px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;border:1px solid var(--bor);background:#141414}
-.tag.archery{border-color:#c4a96a;color:#c4a96a}.tag.muzz{border-color:#d48b58;color:#d48b58}
-.tag.rifle{border-color:var(--gl);color:var(--gl)}.tag.youth{border-color:#7da9d4;color:#7da9d4}
-.ce{color:var(--good);font-weight:600;font-variant-numeric:tabular-nums}
-.cm{color:var(--warn);font-weight:600;font-variant-numeric:tabular-nums}
-.ch{color:var(--bad);font-weight:600;font-variant-numeric:tabular-nums}
-.cn{color:var(--tmut);font-variant-numeric:tabular-nums}
-.sbar{height:4px;background:var(--borl);margin-top:3px;position:relative}
-.sbarf{position:absolute;top:0;left:0;bottom:0;background:var(--green)}
-.empty{padding:40px 20px;text-align:center;color:var(--tmut);font-family:sans-serif;font-size:14px}
-.trend{display:inline-block;margin-left:5px;font-size:11px;font-weight:600;font-family:sans-serif;font-variant-numeric:tabular-nums}
-.tup{color:var(--good)}.tdn{color:var(--bad)}
-.yctrl{display:flex;gap:14px;flex-wrap:wrap;background:#141414;border:1px solid var(--bor);padding:12px 16px;margin:0 0 20px;align-items:flex-end}
-.ycf{flex:1 1 180px;min-width:160px}
-.ycf label{display:block;font-family:sans-serif;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gold);margin-bottom:4px}
-.ycf select{width:100%;padding:7px 9px;border:1px solid var(--bor);background:#141414;color:#f0f0f0;-webkit-text-fill-color:#f0f0f0;color-scheme:dark;font-family:sans-serif;font-size:14px;border-radius:0;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 4 L6 8 L10 4' stroke='%236bb582' stroke-width='1.5' fill='none'/></svg>");background-repeat:no-repeat;background-position:right 8px center;padding-right:28px}
-.ylist{border:1px solid var(--bor)}
-.yrow{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--borl);font-family:sans-serif;background:#141414}
-.yrow:last-child{border-bottom:none}.yrow.sel{background:var(--goodbg);border-left:3px solid var(--gold)}
-.yrl{font-size:16px;font-family:'Georgia',serif;color:#f0f0f0;font-weight:600}
-.yrm{font-size:12px;color:var(--tmut);margin-top:2px}
-.yra{display:flex;gap:6px;flex-shrink:0}
-.bsm{display:inline-block;margin-left:6px;padding:1px 6px;font-family:sans-serif;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;background:var(--gold);color:#000;border-radius:2px;vertical-align:middle}
-.bsma{display:inline-block;margin-left:6px;padding:1px 6px;font-family:sans-serif;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;background:#1f1f1f;color:var(--gl);border:1px solid var(--gl);border-radius:2px;vertical-align:middle}
-.modal-backdrop{position:fixed;inset:0;background:rgba(20,30,20,.6);display:none;align-items:flex-start;justify-content:center;z-index:100;padding:20px;overflow-y:auto;-webkit-overflow-scrolling:touch}
-.modal-backdrop.open{display:flex}
-.modal{background:#141414;border:1px solid var(--bor);max-width:720px;width:100%;margin:20px auto;border-top:4px solid var(--gold)}
-.mhead{display:flex;justify-content:space-between;align-items:flex-start;padding:16px 20px;background:var(--tan);border-bottom:1px solid var(--bor)}
-.mhead h3{font-family:'Georgia',serif;font-size:20px;font-weight:normal;color:var(--gl);margin:0}
-.mhsub{font-family:sans-serif;font-size:12px;color:var(--tsec);text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
-.mclose{background:transparent;border:1px solid var(--tsec);color:var(--tsec);width:28px;height:28px;font-size:18px;line-height:1;cursor:pointer;font-family:serif;flex-shrink:0}
-.mbody{padding:20px;font-family:sans-serif;font-size:14px}
-.msec{margin-bottom:20px}
-.msec h4{font-family:'Georgia',serif;font-size:15px;color:var(--gl);margin:0 0 8px;border-bottom:1px solid var(--borl);padding-bottom:4px;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
-.kvg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px 16px}
-.kv .k{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--tmut)}
-.kv .v{font-size:16px;font-family:'Georgia',serif;color:var(--text);font-variant-numeric:tabular-nums}
-table.pts{width:100%;border-collapse:collapse;font-size:13px}
-table.pts th,table.pts td{padding:6px 8px;border-bottom:1px solid var(--borl);text-align:right;font-variant-numeric:tabular-nums}
-table.pts th{background:var(--tanl);font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--gl)}
-table.pts th:first-child,table.pts td:first-child{text-align:left}
-table.pts tr.drew td{background:var(--goodbg);font-weight:600}
-.callout{padding:10px 14px;margin:0 0 16px;border-left:3px solid var(--gold);background:var(--warnbg);font-family:sans-serif;font-size:14px;color:#f0f0f0}
-.callout.good{background:var(--goodbg);border-left-color:var(--good)}
-.banner{font-family:sans-serif;font-size:13px;padding:10px 14px;border-left:3px solid var(--gold);background:var(--warnbg);color:#f0f0f0;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.banner.ok{border-left-color:var(--good);background:var(--goodbg)}
-.banner.err{border-left-color:var(--bad);background:var(--badbg)}
-@keyframes spin{to{transform:rotate(360deg)}}
-.spin{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
-footer{background:var(--gl);color:rgba(255,255,255,.8);padding:30px 20px;margin-top:40px;font-family:sans-serif;font-size:12px;line-height:1.6}
-footer .inner{max-width:1300px;margin:0 auto}
-footer a{color:#000}
-.disc{font-style:italic;font-size:11px;opacity:.7;margin-top:16px;border-top:1px solid rgba(255,255,255,.2);padding-top:12px}
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--gl);color:#fff;padding:10px 18px;font-family:sans-serif;font-size:13px;border-left:3px solid var(--gold);z-index:200;max-width:90%;display:none}
-.toast.err{background:var(--bad);border-left-color:#fff}.toast.show{display:block}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{font-size:19px}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.5;padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+.serif{font-family:'Iowan Old Style','Palatino Linotype',Georgia,serif}
+.wrap{max-width:620px;margin:0 auto;padding:0 14px}
+button{font-family:inherit;color:inherit;cursor:pointer}
+a{color:var(--gold)}
 
-/* Favorites */
-.fav-btn{background:transparent;border:none;font-size:22px;cursor:pointer;padding:2px 6px;line-height:1;color:var(--tmut);-webkit-appearance:none;flex-shrink:0}
-.fav-btn:hover{color:var(--gold)}.fav-btn.active{color:var(--gold)}
-.fav-remove{background:transparent;border:1px solid var(--bad);color:var(--bad);font-size:11px;font-family:sans-serif;font-weight:600;text-transform:uppercase;padding:4px 8px;cursor:pointer;-webkit-appearance:none;border-radius:0}
-.fav-remove:hover{background:var(--badbg)}
+/* header */
+header{background:linear-gradient(180deg,#20362a,#182720);border-bottom:2px solid var(--gold);padding:14px 0 12px}
+.hrow{display:flex;align-items:center;gap:12px}
+.roundel{width:46px;height:46px;border:2px solid var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-size:13px;color:var(--gold);letter-spacing:.5px;flex-shrink:0}
+h1{font-size:1.35rem;margin:0;font-weight:700}
+.hsub{font-size:.72rem;color:var(--dim);letter-spacing:.14em;text-transform:uppercase;margin-top:2px}
+.ver{font-size:.65rem;color:var(--dim);border:1px solid var(--line);padding:1px 6px;border-radius:4px;vertical-align:middle;margin-left:6px}
+
+/* sync note */
+.syncnote{font-size:.85rem;padding:10px 14px;background:var(--card);border-bottom:1px solid var(--line);color:var(--dim)}
+.syncnote.ok{color:var(--good)} .syncnote.new{color:var(--gold)} .syncnote.err{color:var(--bad)}
+
+/* generic */
+.page{display:none;padding-top:16px}
+.page.active{display:block}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:16px;overflow:hidden}
+.pbody{padding:16px}
+.ptitle{font-size:1.05rem;font-weight:700;margin:0 0 6px}
+.help{font-size:.85rem;color:var(--dim);margin:4px 0 0}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:56px;padding:10px 20px;font-size:1rem;font-weight:600;background:var(--card2);border:1.5px solid var(--line);border-radius:12px}
+.btn.primary{background:var(--gold);border-color:var(--gold);color:#1c2418}
+.btn.danger{background:transparent;border-color:var(--bad);color:var(--bad);min-height:44px;font-size:.85rem}
+.btn:active{opacity:.75}
+
+/* points steppers */
+.pts-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.stepper{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+.stepper .lbl{font-size:.85rem;color:var(--dim);margin-bottom:6px}
+.step-row{display:flex;align-items:center;justify-content:center;gap:6px}
+.step-btn{width:56px;height:56px;font-size:1.7rem;font-weight:700;background:var(--card);border:1.5px solid var(--line);border-radius:12px;line-height:1}
+.step-val{min-width:58px;font-size:1.9rem;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums}
+.pts-summary{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pts-summary .txt{font-size:1rem}
+.pts-summary strong{color:var(--gold)}
+.linkbtn{background:none;border:none;color:var(--gold);font-size:.95rem;text-decoration:underline;padding:10px 4px}
+
+/* filters */
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.seg button{min-height:56px;font-size:1.05rem;font-weight:700;background:var(--card2);border:1.5px solid var(--line);border-radius:12px}
+.seg button.on{background:var(--gold);border-color:var(--gold);color:#1c2418}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+select,input[type=search],input[type=number]{width:100%;min-height:54px;font-size:1rem;background:var(--card2);color:var(--text);border:1.5px solid var(--line);border-radius:12px;padding:8px 12px;font-family:inherit}
+.field label{display:block;font-size:.8rem;color:var(--dim);margin-bottom:4px}
+.chkrow{display:flex;align-items:center;gap:12px;background:var(--card2);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:6px}
+.chkrow input{width:26px;height:26px;accent-color:var(--gold);flex-shrink:0}
+.chkrow span{font-size:.95rem}
+.count{font-size:.85rem;color:var(--dim);margin:12px 2px}
+
+/* hunt cards */
+.card{width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-left:7px solid var(--line);border-radius:12px;padding:15px 15px 13px;margin-bottom:12px;display:block}
+.card.v-yes{border-left-color:var(--good)} .card.v-soon{border-left-color:var(--warn)}
+.card.v-luck{border-left-color:var(--luck)} .card.v-no{border-left-color:var(--bad)}
+.crow1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.cid{font-size:1.3rem;font-weight:800;color:var(--gold);font-family:Georgia,serif}
+.cname{font-size:1.02rem;font-weight:600;flex:1;min-width:0}
+.cstar{font-size:1.5rem;background:none;border:none;color:var(--dim);padding:2px 8px;line-height:1;flex-shrink:0}
+.cstar.on{color:var(--gold)}
+.chips{margin:4px 0 8px}
+.chip{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:6px;background:var(--card2);border:1px solid var(--line);color:var(--dim);margin-right:6px}
+.verdict{font-size:1rem;font-weight:700;margin:2px 0 10px}
+.v-yes .verdict{color:var(--good)} .v-soon .verdict{color:var(--warn)}
+.v-luck .verdict{color:var(--luck)} .v-no .verdict{color:var(--bad)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--card2);border-radius:10px;padding:8px 6px;text-align:center}
+.stat .n{font-size:1.25rem;font-weight:800;font-variant-numeric:tabular-nums}
+.stat .l{font-size:.68rem;color:var(--dim);margin-top:1px;line-height:1.25}
+.ctrend{font-size:.83rem;color:var(--dim);margin-top:9px}
+.ctrend.harder{color:var(--warn)} .ctrend.easier{color:var(--good)}
+.empty{padding:36px 16px;text-align:center;color:var(--dim);font-size:1rem;line-height:1.6}
+
+/* detail sheet */
+.sheet{display:none;position:fixed;inset:0;background:var(--bg);z-index:60;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.sheet.open{display:block}
+.shead{position:sticky;top:0;background:#20362a;border-bottom:2px solid var(--gold);padding:12px 14px;display:flex;align-items:center;gap:10px;z-index:2}
+.shead .t{flex:1;min-width:0}
+.shead h2{font-size:1.15rem;margin:0;font-family:Georgia,serif}
+.shead .sub{font-size:.8rem;color:var(--dim)}
+.closebtn{min-height:52px;min-width:92px;font-size:1rem;font-weight:700;background:var(--card2);border:1.5px solid var(--line);border-radius:12px}
+.sbody{padding:16px 14px calc(40px + env(safe-area-inset-bottom));max-width:620px;margin:0 auto}
+.callout{border-radius:12px;padding:14px 16px;font-size:1.02rem;font-weight:600;margin-bottom:16px;border:1px solid var(--line)}
+.callout.v-yes{background:var(--goodbg);color:var(--good)} .callout.v-soon{background:var(--warnbg);color:var(--warn)}
+.callout.v-luck{background:var(--luckbg);color:var(--luck)} .callout.v-no{background:var(--badbg);color:var(--bad)}
+.sec{margin-bottom:20px}
+.sec h3{font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);border-bottom:1px solid var(--line);padding-bottom:6px;margin:0 0 10px}
+.plain{font-size:.97rem;margin:0 0 10px}
+.kvg{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.kv{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.kv .k{font-size:.75rem;color:var(--dim)}
+.kv .v{font-size:1.2rem;font-weight:800;font-variant-numeric:tabular-nums}
+table.simple{width:100%;border-collapse:collapse;font-size:.92rem}
+table.simple th{text-align:left;font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);padding:7px 8px;border-bottom:1px solid var(--line)}
+table.simple td{padding:9px 8px;border-bottom:1px solid var(--card2);font-variant-numeric:tabular-nums}
+table.simple tr.hl td{background:var(--goodbg);color:var(--good);font-weight:700}
+.bar{height:9px;background:var(--card2);border-radius:5px;overflow:hidden;margin-top:4px}
+.barf{height:100%;background:var(--good)}
+.trendline{display:flex;align-items:flex-end;gap:5px;height:64px;margin:8px 0 4px}
+.tcol{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px}
+.tbar{width:100%;max-width:44px;background:var(--gold);border-radius:4px 4px 0 0;min-height:3px}
+.tyr{font-size:.68rem;color:var(--dim)}
+.tval{font-size:.75rem;font-weight:700}
+
+/* tabs */
+.tabbar{position:fixed;left:0;right:0;bottom:0;background:#1a2820;border-top:2px solid var(--gold);display:grid;grid-template-columns:repeat(3,1fr);z-index:50;padding-bottom:env(safe-area-inset-bottom)}
+.tab{min-height:64px;background:none;border:none;font-size:1rem;font-weight:700;color:var(--dim);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.tab .ic{font-size:1.25rem;line-height:1}
+.tab.on{color:var(--gold)}
+
+/* admin */
+.stepnum{display:inline-flex;width:34px;height:34px;border-radius:50%;background:var(--gold);color:#1c2418;font-weight:800;align-items:center;justify-content:center;margin-right:10px;flex-shrink:0}
+.steph{display:flex;align-items:center;font-size:1.05rem;font-weight:700;margin-bottom:8px}
+.srcbtn{display:flex;align-items:center;justify-content:center;min-height:58px;font-size:.95rem;font-weight:700;background:var(--card2);border:1.5px solid var(--gold);border-radius:12px;color:var(--gold);text-decoration:none;text-align:center;padding:8px}
+.srcgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.upzone{display:block;background:var(--card2);border:2px dashed var(--line);border-radius:12px;padding:16px 12px;text-align:center;margin-bottom:10px}
+.upzone input{display:none}
+.upzone .uzl{font-size:.98rem;font-weight:700}
+.upzone .uzh{font-size:.78rem;color:var(--dim);margin-top:2px}
+.upzone .uzf{font-size:.8rem;color:var(--good);margin-top:5px;word-break:break-all}
+.upzone.hf{border-style:solid;border-color:var(--good)}
+.yrow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 0;border-bottom:1px solid var(--card2);flex-wrap:wrap}
+.yrl{font-size:1.15rem;font-weight:800;font-family:Georgia,serif}
+.yrm{font-size:.8rem;color:var(--dim)}
+.bmini{min-height:44px;padding:6px 12px;font-size:.82rem;font-weight:600;background:var(--card2);border:1px solid var(--line);border-radius:10px}
+.bmini.dan{border-color:var(--bad);color:var(--bad)}
+.statusline{font-size:.9rem;padding:8px 0;border-bottom:1px solid var(--card2)}
+.statusline:last-child{border-bottom:none}
+.banner{display:flex;gap:10px;align-items:center;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:.9rem;margin-bottom:14px}
+.banner.ok{border-color:var(--good);color:var(--good)}
+.banner.err{border-color:var(--bad);color:var(--bad)}
+.spin{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--gold);border-radius:50%;animation:sp 1s linear infinite;flex-shrink:0}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* footer, toast, confirm */
+footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim)}
+.toast{position:fixed;left:50%;transform:translateX(-50%) translateY(20px);bottom:calc(96px + env(safe-area-inset-bottom));background:#0e150f;border:1px solid var(--gold);color:var(--text);border-radius:12px;padding:12px 20px;font-size:.95rem;opacity:0;pointer-events:none;transition:.25s;z-index:99;max-width:88vw}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{border-color:var(--bad)}
+.cbackdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:80;align-items:center;justify-content:center;padding:20px}
+.cbackdrop.open{display:flex}
+.cbox{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;max-width:380px;width:100%}
+.cbox p{font-size:1rem;margin:0 0 16px}
+.cbtns{display:flex;gap:10px;justify-content:flex-end}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:380px){.stats{grid-template-columns:1fr 1fr}.fgrid{grid-template-columns:1fr}.srcgrid{grid-template-columns:1fr}}
 </style>
-
 </head>
 <body>
 
-<header class="site-header">
-  <div class="site-header-inner">
-    <div class="crest">ODFW</div>
-    <div>
-      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v2.3</span></h1>
-      <div class="site-subtitle">Deer &amp; Elk &mdash; Draw Odds &amp; Harvest Statistics</div>
-    </div>
-  </div>
-</header>
+<header><div class="wrap"><div class="hrow">
+  <div class="roundel">ODFW</div>
+  <div><h1 class="serif">Oregon Hunt Planner <span class="ver">v3.0</span></h1>
+  <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
+</div></div></header>
 
-<div class="subnav">
-  <div class="subnav-inner">
-    <button class="nav-link active" data-page="database">Hunt Database</button>
-    <button class="nav-link" data-page="favorites">Favorites ★</button>
-    <button class="nav-link" data-page="data">Data Manager <span class="nbadge" id="navBadge" style="display:none">!</span></button>
-  </div>
+<div class="syncnote" id="syncNote">Loading hunt data…</div>
+
+<main class="wrap">
+
+<!-- ═══ HUNTS PAGE ═══ -->
+<div class="page active" data-page="hunts">
+
+  <div class="panel" id="ptsPanel"><div class="pbody" id="ptsBody"></div></div>
+
+  <div class="panel"><div class="pbody">
+    <div class="seg" id="spSeg">
+      <button data-sp="all">All</button><button data-sp="deer">Deer</button><button data-sp="elk">Elk</button>
+    </div>
+    <div class="fgrid">
+      <div class="field"><label>Weapon</label>
+        <select id="fWeapon"><option value="all">All weapons</option><option value="rifle">Rifle</option><option value="archery">Bow</option><option value="muzz">Muzzleloader</option><option value="youth">Youth</option></select></div>
+      <div class="field"><label>Sort by</label>
+        <select id="fSort"><option value="best">Best for my points</option><option value="success">Highest success rate</option><option value="easy">Easiest to draw</option><option value="hard">Hardest to draw</option><option value="num">Hunt number</option></select></div>
+    </div>
+    <div class="fgrid">
+      <div class="field"><label>Search</label><input type="search" id="fSearch" placeholder="Hunt name or number"></div>
+      <div class="field"><label>Data year</label><select id="fYear"></select></div>
+    </div>
+    <label class="chkrow"><input type="checkbox" id="fCanDraw"><span>Only show hunts I can draw for sure this year</span></label>
+  </div></div>
+
+  <div class="count" id="rcount"></div>
+  <div id="cards"></div>
 </div>
 
-<main>
-
-  <!-- DATABASE PAGE -->
-
-  <div class="page active" data-page="database">
-    <h2 class="page-title">Hunt Database</h2>
-    <p class="page-lede">Data Loaded by Jaren &mdash; Subscription Fees Apply</p>
-
-<div id="dbBanner" class="banner"><span class="spin"></span><span id="dbMsg">Loading data from cloud…</span></div>
-
-<div id="yctrl" class="yctrl" style="display:none">
-  <div class="ycf"><label>Viewing</label><select id="ySelView"></select></div>
-  <div class="ycf"><label>Compare To</label><select id="ySelCompare"></select></div>
+<!-- ═══ MY LIST ═══ -->
+<div class="page" data-page="mylist">
+  <div id="mylistCards"></div>
 </div>
 
-<div id="emptyPrompt" style="display:none">
-  <section class="panel" style="border-left:4px solid var(--gold)">
-    <div class="panel-body" style="text-align:center">
-      <p style="margin:0 0 14px;font-family:sans-serif;color:var(--tsec)">No data available yet. Go to Data Manager to upload ODFW reports.</p>
-      <button class="btn" id="btnGoData">Go to Data Manager</button>
-    </div>
-  </section>
+<!-- ═══ ABOUT ═══ -->
+<div class="page" data-page="about">
+  <div class="panel"><div class="pbody">
+    <p class="ptitle">What this app does</p>
+    <p class="plain">It takes Oregon's official controlled-hunt numbers and answers one question in plain English: <strong>which deer or elk hunts can you realistically draw, and are they worth your points?</strong></p>
+    <p class="plain">Enter your preference points on the Hunts page, and every hunt gets a color-coded answer. Tap any hunt to see the full story — your odds, hunter success rates, antler sizes, and how the hunt has changed over the years.</p>
+  </div></div>
+  <div class="panel"><div class="pbody">
+    <p class="ptitle">Where the numbers come from</p>
+    <p class="plain">Everything comes from the Oregon Department of Fish &amp; Wildlife's public reports. A helper program checks ODFW's website on the 1st of every month and loads any new reports automatically — nobody has to do anything.</p>
+    <p class="plain">Draw reports for a season are published in the fall, after the June drawing. Harvest results are published the following spring.</p>
+  </div></div>
+  <div class="panel"><div class="pbody">
+    <p class="ptitle">Words you'll see</p>
+    <p class="plain"><strong>Preference points</strong> — Every year you apply and don't draw, ODFW gives you a point. More points = better odds next year. Your points are on your ODFW account.</p>
+    <p class="plain"><strong>Points for a sure tag</strong> — Hunters who had this many points all drew a tag. If you have this many or more, the tag is yours if you apply.</p>
+    <p class="plain"><strong>Success rate</strong> — Of the hunters who held this tag, the share who brought an animal home.</p>
+    <p class="plain"><strong>Luck-of-the-draw</strong> — Some hunts never fill up with point-holders, so 25% of tags go out by pure random luck. Anyone can win one.</p>
+  </div></div>
+  <div class="panel"><div class="pbody">
+    <p class="plain" style="font-size:.85rem;color:var(--dim)">Personal reference tool. Not affiliated with ODFW. Always verify hunt numbers, dates, and boundaries in the current Oregon Big Game Regulations before applying. Application deadline is May 15 each year.</p>
+    <button class="linkbtn" id="adminLink" style="font-size:.85rem">Admin tools</button>
+  </div></div>
 </div>
 
-<section class="panel">
-  <div class="panel-head">Filter</div>
-  <div class="panel-body">
-    <div class="filters">
-      <div class="field"><label>Species</label>
-        <select id="fSpecies"><option value="all">All</option><option value="elk">Elk</option><option value="deer">Deer</option></select></div>
-      <div class="field"><label>Weapon / Type</label>
-        <select id="fWeapon"><option value="all">All</option><option value="rifle">Rifle (Any Legal)</option><option value="archery">Archery</option><option value="muzz">Muzzleloader</option><option value="youth">Youth</option></select></div>
-      <div class="field"><label>My Elk Points</label>
-        <input type="number" id="fElkPts" min="0" max="30" inputmode="numeric"></div>
-      <div class="field"><label>My Deer Points</label>
-        <input type="number" id="fDeerPts" min="0" max="30" inputmode="numeric"></div>
-      <div class="field"><label>Show Hunts</label>
-        <select id="fDrawability"><option value="all">All</option><option value="canDraw">I can draw (100% tier)</option><option value="oneAway">One point away from 100%</option><option value="reachable">Within N points of 100%</option></select></div>
-      <div class="field" id="reachableField" style="display:none"><label>Within how many points?</label>
-        <input type="number" id="fReachablePts" min="1" max="20" value="3" inputmode="numeric"></div>
-      <div class="field" style="grid-column:span 2"><label>Search Unit / Hunt Name</label>
-        <input type="text" id="fSearch" placeholder="e.g. Murderers Cr, Wenaha, 230X"></div>
-    </div>
-  </div>
-</section>
+<!-- ═══ ADMIN (hidden) ═══ -->
+<div class="page" data-page="admin">
+  <button class="btn" id="adminBack" style="margin-bottom:14px">‹ Back to the app</button>
 
-<div class="rmeta"><h2>Results</h2><div class="rcount" id="rcount">—</div></div>
-<div class="twrap">
-  <table class="hunts" id="huntsTable">
-    <thead><tr>
-      <th>Hunt No.</th>
-      <th>Hunt Name</th>
-      <th>Type</th>
-      <th class="num-th">Pts for 100% Draw</th>
-      <th class="num-th">Success Rate</th>
-      <th class="num-th">My Draw Odds</th>
-      <th class="num-th">Trophy Size</th>
-      <th class="num-th">Applicants</th>
-      <th class="num-th">Tags</th>
-    </tr></thead>
-    <tbody id="huntsBody"><tr><td colspan="9" class="empty"><span class="spin"></span> Loading…</td></tr></tbody>
-  </table>
+  <div class="banner" id="dmBanner"><span class="spin"></span><span>Connecting to cloud…</span></div>
+
+  <div class="panel"><div class="pbody">
+    <p class="ptitle">Automatic updates</p>
+    <div id="autoCard" class="help">Checking…</div>
+    <p class="help" style="margin-top:10px">A helper program checks ODFW on the 1st of each month and loads new draw reports and harvest results by itself. If a line above says <strong>NEEDS MANUAL UPLOAD</strong>, follow the steps below for that file.</p>
+  </div></div>
+
+  <div class="panel"><div class="pbody">
+    <p class="ptitle">Data on file</p>
+    <div id="ylist"></div>
+  </div></div>
+
+  <div class="panel"><div class="pbody">
+    <div class="steph"><span class="stepnum">1</span> Pick the season year</div>
+    <p class="help" style="margin-bottom:10px">This is the year printed on the ODFW file name — for example, the "2026 Buck Deer Preference Point Draw Report" is year 2026.</p>
+    <div style="display:flex;gap:10px;align-items:center">
+      <input type="number" id="pyInput" min="2000" max="2100" placeholder="2026" inputmode="numeric" style="flex:0 0 130px">
+      <button class="btn" id="btnSetYear">Use this year</button>
+    </div>
+    <p class="help" style="margin-top:8px">Now editing: <strong id="pyDisp" style="color:var(--gold)">none</strong></p>
+  </div></div>
+
+  <div class="panel"><div class="pbody">
+    <div class="steph"><span class="stepnum">2</span> Download the file from ODFW</div>
+    <p class="help" style="margin-bottom:12px">Tap a button, find the file for your year, and download it to this phone or computer.</p>
+    <div class="srcgrid">
+      <a class="srcbtn" href="https://myodfw.com/articles/point-summary-reports" target="_blank" rel="noopener">Draw reports<br>(Point Summary page)</a>
+      <a class="srcbtn" href="https://myodfw.com/articles/big-game-hunting-harvest-statistics" target="_blank" rel="noopener">Harvest results<br>(Harvest Statistics page)</a>
+    </div>
+    <p class="help" style="margin-top:12px">Draw reports: get the <strong>Preference Point Draw Report</strong> for Buck Deer and for Elk. Harvest: get the <strong>Any Legal Weapon</strong>, <strong>Archery</strong>, and <strong>Muzzleloader</strong> files for Buck Deer and Elk.</p>
+  </div></div>
+
+  <div class="panel"><div class="pbody">
+    <div class="steph"><span class="stepnum">3</span> Put the file in the matching box</div>
+    <p class="help" style="margin-bottom:12px">Tap the box that matches your file, choose the file, and wait for the green check. It saves to the cloud by itself — everyone in the family gets it.</p>
+    <label class="upzone" data-key="deerPoints"><input type="file" accept=".xlsx,.xls" data-target="deerPoints"><div class="uzl">Deer — Draw Report</div><div class="uzh">Preference Point Draw Report (XLSX)</div><div class="uzf" data-file="deerPoints"></div></label>
+    <label class="upzone" data-key="elkPoints"><input type="file" accept=".xlsx,.xls" data-target="elkPoints"><div class="uzl">Elk — Draw Report</div><div class="uzh">Preference Point Draw Report (XLSX)</div><div class="uzf" data-file="elkPoints"></div></label>
+    <label class="upzone" data-key="deerRifleHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="deerRifleHarvest"><div class="uzl">Deer — Rifle Harvest</div><div class="uzh">"Any Legal Weapon Buck Deer" (PDF)</div><div class="uzf" data-file="deerRifleHarvest"></div></label>
+    <label class="upzone" data-key="elkRifleHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="elkRifleHarvest"><div class="uzl">Elk — Rifle Harvest</div><div class="uzh">"Any Legal Weapon Elk" (PDF)</div><div class="uzf" data-file="elkRifleHarvest"></div></label>
+    <label class="upzone" data-key="deerArcheryHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="deerArcheryHarvest"><div class="uzl">Deer — Bow Harvest</div><div class="uzh">"Archery Buck Deer" (PDF)</div><div class="uzf" data-file="deerArcheryHarvest"></div></label>
+    <label class="upzone" data-key="elkArcheryHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="elkArcheryHarvest"><div class="uzl">Elk — Bow Harvest</div><div class="uzh">"Archery Elk" (PDF)</div><div class="uzf" data-file="elkArcheryHarvest"></div></label>
+    <label class="upzone" data-key="deerMuzzHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="deerMuzzHarvest"><div class="uzl">Deer — Muzzleloader Harvest</div><div class="uzh">"Muzzleloader Buck Deer" (PDF)</div><div class="uzf" data-file="deerMuzzHarvest"></div></label>
+    <label class="upzone" data-key="elkMuzzHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="elkMuzzHarvest"><div class="uzl">Elk — Muzzleloader Harvest</div><div class="uzh">"Muzzleloader Elk" (PDF)</div><div class="uzf" data-file="elkMuzzHarvest"></div></label>
+  </div></div>
+
+  <div class="panel"><div class="pbody">
+    <p class="ptitle">If something looks wrong</p>
+    <p class="plain" style="font-size:.9rem">Uploading a file again always replaces what's there — that's the fix for almost everything. If a whole year is bad, delete it from the cloud below and re-upload its files. Manual uploads are never overwritten by the automatic updater.</p>
+    <button class="btn danger" id="btnClear" style="margin-top:6px">Clear this device's local copy</button>
+  </div></div>
 </div>
-
-  </div>
-
-  <!-- FAVORITES PAGE -->
-
-  <div class="page" data-page="favorites">
-    <h2 class="page-title">Favorites ★</h2>
-    <p class="page-lede">Your saved hunts — stored only on this device.</p>
-    <div id="favEmpty" style="display:none">
-      <section class="panel" style="border-left:4px solid var(--gold)">
-        <div class="panel-body" style="text-align:center">
-          <p style="margin:0;font-family:sans-serif;color:var(--tsec)">No favorites yet. Open any hunt and tap ★ to save it.</p>
-        </div>
-      </section>
-    </div>
-    <div class="twrap" id="favWrap" style="display:none">
-      <table class="hunts">
-        <thead><tr>
-          <th>Hunt No.</th><th>Hunt Name</th><th>Type</th>
-          <th class="num-th">Pts for 100%</th><th class="num-th">Success Rate</th>
-          <th class="num-th">My Draw Odds</th><th class="num-th">Trophy Size</th>
-          <th class="num-th">Applicants</th><th class="num-th">Tags</th>
-          <th class="num-th">Remove</th>
-        </tr></thead>
-        <tbody id="favBody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- DATA MANAGER -->
-
-  <div class="page" data-page="data">
-    <h2 class="page-title">Data Manager</h2>
-    <p class="page-lede">Upload ODFW reports. Files are parsed in your browser and automatically saved to the cloud — everyone sees the data instantly.</p>
-
-<div id="dmBanner" class="banner"><span class="spin"></span><span id="dmMsg">Connecting to cloud…</span></div>
-
-<section class="panel">
-  <div class="panel-head">Status</div>
-  <div class="panel-body">
-    <div class="data-status">
-      <div>
-        <span id="sdot" class="sdot"></span><strong id="stxt">No data</strong>
-        <div id="sdet" style="font-size:12px;color:var(--tmut);margin-top:4px;font-family:sans-serif"></div>
-      </div>
-      <div style="font-size:12px;color:var(--tmut);font-family:sans-serif;text-align:right">Last loaded: <span id="slast">—</span><div id="autoStatus" style="margin-top:4px"></div></div>
-    </div>
-  </div>
-</section>
-
-<section class="panel" id="cloudFilesPanel" style="display:none">
-  <div class="panel-head">Cloud Files</div>
-  <div class="panel-body">
-    <p style="font-family:sans-serif;font-size:13px;color:var(--tsec);margin:0 0 12px">Files previously uploaded to the cloud for the selected year.</p>
-    <div id="cloudFilesList" style="font-family:sans-serif;font-size:13px;color:var(--text-muted)">Loading…</div>
-  </div>
-</section>
-
-<section class="panel">
-  <div class="panel-head">Step 1 — Choose Year</div>
-  <div class="panel-body">
-    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-      <div class="field" style="flex:0 0 140px"><label>Year</label>
-        <input type="number" id="pyInput" min="2000" max="2100" placeholder="2025" inputmode="numeric"></div>
-      <button class="btn" id="btnSetYear">Use This Year</button>
-      <span style="font-family:sans-serif;font-size:13px;color:var(--tsec)">Editing: <strong id="pyDisp" style="color:var(--gold)">none</strong></span>
-    </div>
-    <div id="ylist" class="ylist" style="margin-top:18px"></div>
-  </div>
-</section>
-
-<section class="panel">
-  <div class="panel-head">Step 2 — Download from ODFW</div>
-  <div class="panel-body">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <a class="src-btn" href="https://myodfw.com/articles/point-summary-reports" target="_blank" rel="noopener">Point Summary Reports</a>
-      <a class="src-btn" href="https://myodfw.com/articles/big-game-hunting-harvest-statistics" target="_blank" rel="noopener">Harvest Statistics</a>
-      <a class="src-btn" href="https://odfw.huntfishoregon.com/reportdownloads" target="_blank" rel="noopener">ODFW Report Downloads (login)</a>
-      <a class="src-btn" href="https://myodfw.com/articles/eastern-oregon-deer-hunts" target="_blank" rel="noopener">2026 Deer Hunt Area Guide</a>
-    </div>
-    <p class="htext">Grab the <strong>Preference Point Draw Report</strong> XLSX for each species (posted each fall after the June draw), and the harvest PDFs when seasons wrap up. The auto-updater also checks the Point Summary page monthly and loads new draw reports for you.</p>
-  </div>
-</section>
-
-<section class="panel">
-  <div class="panel-head">Step 3 — Upload Files</div>
-  <div class="panel-body">
-    <div class="upload-grid">
-      <label class="upload-zone" data-key="elkPoints"><input type="file" accept=".xlsx,.xls" data-target="elkPoints"><div class="uzl">Elk — Preference Points</div><div class="uzh">Draw report XLSX</div><div class="uzf" data-file="elkPoints"></div></label>
-      <label class="upload-zone" data-key="deerPoints"><input type="file" accept=".xlsx,.xls" data-target="deerPoints"><div class="uzl">Deer — Preference Points</div><div class="uzh">Draw report XLSX</div><div class="uzf" data-file="deerPoints"></div></label>
-      <label class="upload-zone" data-key="elkRifleHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="elkRifleHarvest"><div class="uzl">Elk — Rifle Harvest</div><div class="uzh">PDF or XLSX</div><div class="uzf" data-file="elkRifleHarvest"></div></label>
-      <label class="upload-zone" data-key="elkArcheryHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="elkArcheryHarvest"><div class="uzl">Elk — Archery Harvest</div><div class="uzh">PDF or XLSX</div><div class="uzf" data-file="elkArcheryHarvest"></div></label>
-      <label class="upload-zone" data-key="deerRifleHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="deerRifleHarvest"><div class="uzl">Deer — Rifle Harvest</div><div class="uzh">PDF or XLSX</div><div class="uzf" data-file="deerRifleHarvest"></div></label>
-      <label class="upload-zone" data-key="deerArcheryHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="deerArcheryHarvest"><div class="uzl">Deer — Archery Harvest</div><div class="uzh">PDF or XLSX</div><div class="uzf" data-file="deerArcheryHarvest"></div></label>
-    </div>
-    <div class="arow">
-      <button class="btn" id="btnViewDb">View Hunt Database</button>
-      <button class="btn dan" id="btnClear">Clear Local Data</button>
-    </div>
-    <p class="htext">Files parse in your browser, then auto-save to cloud. Everyone sees the data on their next page load — no manual sync needed.</p>
-  </div>
-</section>
-
-  </div>
-
-  <!-- MODAL -->
-
-  <div class="modal-backdrop" id="modal">
-    <div class="modal">
-      <div class="mhead">
-        <div><h3 id="mTitle">—</h3><div class="mhsub" id="mSub">—</div></div>
-        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-          <button class="fav-btn" id="modalFavBtn" title="Save to favorites">☆</button>
-          <button class="mclose" id="mClose">×</button>
-        </div>
-      </div>
-      <div class="mbody" id="mBody"></div>
-    </div>
-  </div>
 
 </main>
 
 <footer>
-  <div class="inner">
-    <strong>Oregon Controlled Hunt Planner</strong> — Personal reference tool. Data from public ODFW reports. Not affiliated with ODFW.
-    <a href="https://myodfw.com" target="_blank" rel="noopener">myodfw.com</a>
-    <div class="disc">Always verify hunt numbers, dates, and regulations against the current Oregon Big Game Regulations before applying.</div>
-  </div>
+  <div>Oregon Hunt Planner — data from public ODFW reports · <a href="https://myodfw.com" target="_blank" rel="noopener">myodfw.com</a></div>
+  <button class="linkbtn" id="adminLink2" style="font-size:.72rem;color:var(--dim)">Admin</button>
 </footer>
+
+<!-- tab bar -->
+<nav class="tabbar">
+  <button class="tab on" data-tab="hunts"><span class="ic">◎</span>Hunts</button>
+  <button class="tab" data-tab="mylist"><span class="ic">★</span>My List</button>
+  <button class="tab" data-tab="about"><span class="ic">?</span>About</button>
+</nav>
+
+<!-- detail sheet -->
+<div class="sheet" id="sheet">
+  <div class="shead">
+    <div class="t"><h2 id="shTitle">—</h2><div class="sub" id="shSub">—</div></div>
+    <button class="cstar" id="shStar" style="font-size:1.8rem">☆</button>
+    <button class="closebtn" id="shClose">Close</button>
+  </div>
+  <div class="sbody" id="shBody"></div>
+</div>
+
+<div class="cbackdrop" id="confirmBox"><div class="cbox">
+  <p id="confirmMsg"></p>
+  <div class="cbtns"><button class="btn" id="confirmNo">Cancel</button><button class="btn danger" id="confirmYes" style="min-height:56px">Yes, do it</button></div>
+</div></div>
 
 <div class="toast" id="toast"></div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
 <script>
 'use strict';
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // ─── FIREBASE ─────────────────────────────────────────────────────────────────
 let db = null;
@@ -381,7 +340,6 @@ try {
     appId:             '1:84034970737:web:d470b1daca7b56ce6227d0'
   });
   db = firebase.firestore();
-  console.log('[FB] Ready');
 } catch(e) { console.warn('[FB] Init failed:', e); }
 
 const CHUNK = 150;
@@ -401,11 +359,9 @@ async function fbSave(year, hunts, harvestData) {
     }
     await db.collection('years').doc(String(year)).collection('harvest').doc('all')
       .set({ data: JSON.stringify(harvestData), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-    console.log('[FB] Saved', year, hunts.length, 'hunts');
     return true;
   } catch(e) { console.warn('[FB] Save error:', e); return false; }
 }
-
 async function fbDeleteYear(year) {
   if (!db) return false;
   try {
@@ -413,37 +369,26 @@ async function fbDeleteYear(year) {
     for (const d of cs.docs) await d.ref.delete();
     const hs = await db.collection('years').doc(String(year)).collection('harvest').get();
     for (const d of hs.docs) await d.ref.delete();
+    const ps = await db.collection('years').doc(String(year)).collection('pdfMeta').get();
+    for (const d of ps.docs) await d.ref.delete();
     await db.collection('years').doc(String(year)).delete();
     return true;
-  } catch(e) { console.warn('[FB] Delete error:', e); return false; }
+  } catch(e) { return false; }
 }
-
 async function fbSavePdfMeta(year, fileKey, fileName, huntCount) {
   if (!db) return false;
   try {
     await db.collection('years').doc(String(year)).collection('pdfMeta').doc(fileKey).set({
-      fileName, huntCount, uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
+      fileName, huntCount, uploadedAt: firebase.firestore.FieldValue.serverTimestamp(), source: 'manual'
     });
     return true;
-  } catch(e) { console.warn('[FB] pdfMeta save error:', e); return false; }
+  } catch(e) { return false; }
 }
-
-async function fbLoadPdfMeta(year) {
-  if (!db) return {};
-  try {
-    const snap = await db.collection('years').doc(String(year)).collection('pdfMeta').get();
-    const out = {};
-    snap.docs.forEach(d => { out[d.id] = d.data(); });
-    return out;
-  } catch(e) { return {}; }
-}
-
 async function fbLoadAutoMeta() {
   if (!db) return null;
   try { const d = await db.collection('meta').doc('autoUpdate').get(); return d.exists ? d.data() : null; }
   catch(e) { return null; }
 }
-
 async function fbLoad() {
   if (!db) return null;
   try {
@@ -465,7 +410,12 @@ async function fbLoad() {
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 const SK = 'odfw_v4';
-const S = { years:{}, selectedYear:null, compareYear:null, pendingYear:null };
+const PK = 'odfw_prefs_v3';
+const SEEN_K = 'odfw_lastseen_v1';
+const S = { years:{}, selectedYear:null, pendingYear:null };
+const P = Object.assign({ deerPts:null, elkPts:null, sp:'all', wep:'all', sort:'best', canDraw:false, ptsSet:false },
+  JSON.parse(localStorage.getItem(PK)||'{}'));
+const savePrefs = () => { try{ localStorage.setItem(PK, JSON.stringify(P)); }catch(e){} };
 
 const curYD  = () => S.selectedYear ? S.years[S.selectedYear] : null;
 const getH   = () => { const y = curYD(); return y ? y.hunts : []; };
@@ -473,14 +423,15 @@ const yList  = () => Object.keys(S.years).sort().reverse();
 const prevYr = yr  => { const a=yList(), i=a.indexOf(yr); return i>=0&&i<a.length-1?a[i+1]:null; };
 const findH  = (yr,num,sp) => { const y=S.years[yr]; return y?y.hunts.find(h=>h.huntNum===num&&h.species===sp):null; };
 
+// ─── HARVEST MATCHING (6 files; muzz/archery files override the rifle file) ──
+const HKEY_ORDER = ['deerRifleHarvest','elkRifleHarvest','deerMuzzHarvest','elkMuzzHarvest','deerArcheryHarvest','elkArcheryHarvest'];
 function applyHarvest(year) {
   const y = S.years[year]; if (!y) return;
   y.hunts.forEach(h => { h.harvest = null; });
-  Object.entries(y.harvestData || {}).forEach(([key, data]) => {
-    if (!data) return;
+  HKEY_ORDER.forEach(key => {
+    const data = (y.harvestData||{})[key]; if (!data) return;
     const sp = key.startsWith('elk') ? 'elk' : 'deer';
-    const arch = key.endsWith('ArcheryHarvest');
-    const weps = arch ? ['archery'] : ['rifle','youth','muzz'];
+    const weps = key.includes('Archery') ? ['archery'] : key.includes('Muzz') ? ['muzz'] : ['rifle','youth','muzz'];
     let matched = 0;
     y.hunts.forEach(h => {
       if (h.species !== sp || !weps.includes(h.weapon)) return;
@@ -490,41 +441,43 @@ function applyHarvest(year) {
   });
 }
 
-// ─── UTILS ───────────────────────────────────────────────────────────────────
+// ─── UTILS ────────────────────────────────────────────────────────────────────
 const $  = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const fmt  = n => (n==null||isNaN(n)) ? '—' : Number(n).toLocaleString();
 const fmtP = n => (n==null||isNaN(n)) ? '—' : Math.round(n)+'%';
 const esc  = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-
 function toast(msg, isErr) {
   const t = $('#toast'); t.textContent = msg;
   t.className = 'toast show' + (isErr ? ' err' : '');
-  setTimeout(() => { t.className = 'toast'; }, 3500);
+  setTimeout(() => { t.className = 'toast'; }, 3800);
 }
-function banner(id, type, msg, spin) {
-  const el = $(id); if (!el) return;
+function banner(type, msg, spin) {
+  const el = $('#dmBanner'); if (!el) return;
   el.className = 'banner' + (type ? ' '+type : '');
   el.innerHTML = (spin ? '<span class="spin"></span>' : '') + '<span>' + esc(msg) + '</span>';
 }
+function confirm2(msg, cb){
+  $('#confirmMsg').textContent = msg;
+  const box = $('#confirmBox'); box.classList.add('open');
+  const yes = $('#confirmYes'), no = $('#confirmNo');
+  const close = () => { box.classList.remove('open'); yes.onclick = no.onclick = null; };
+  yes.onclick = () => { close(); cb(); };
+  no.onclick = close;
+}
 
-// ─── CLASSIFICATION ───────────────────────────────────────────────────────────
+// ─── CLASSIFICATION + DERIVATION ─────────────────────────────────────────────
 function weapon(num, name) {
   const n=String(num||'').toUpperCase(), na=String(name||'').toLowerCase();
   if (na.includes('youth')) return 'youth';
   if (na.includes('muzzleload')) return 'muzz';
   if (na.includes('archery')||na.includes('bow')||na.includes('trad')) return 'archery';
-  // Suffix letter must follow a digit: catches 130R, NE101R1, 123M2, DG102T
-  // without misfiring on herd prefixes like CR101, JT101, ST101, MC102 (rifle)
   if (/\dT\d*$/.test(n)) return 'youth';
   if (/\dM\d*$/.test(n)) return 'muzz';
   if (/\dR\d*$/.test(n)) return 'archery';
   return 'rifle';
 }
-// species() removed in v2.3 — species comes from the upload zone, not the hunt ID
-const wLabel = w => ({rifle:'Rifle',archery:'Archery',muzz:'Muzz.',youth:'Youth'}[w]||w);
-
-// ─── DERIVE pts100 ────────────────────────────────────────────────────────────
+const wLabel = w => ({rifle:'Rifle',archery:'Bow',muzz:'Muzzleloader',youth:'Youth'}[w]||w);
 function derive(h) {
   h.pointBreakdown.sort((a,b) => b.points - a.points);
   let pts100 = null, minPts = null;
@@ -532,150 +485,171 @@ function derive(h) {
     if (p.resDrawn > 0) minPts = p.points;
     if (p.resApps > 0 && p.resDrawn >= p.resApps) pts100 = p.points;
   }
-  h.pts100 = pts100;
-  h.minPointsToDraw = minPts;
+  h.pts100 = pts100; h.minPointsToDraw = minPts;
   h.resOdds = h.residentApps > 0 ? (h.residentDrawn / h.residentApps) * 100 : null;
 }
-
 function myOdds(h, myPts) {
   if (myPts === null || myPts === undefined) return null;
-  // If user's points are at or above the 100% draw threshold, it's guaranteed
   if (h.pts100 !== null && myPts >= h.pts100) return 100;
   if (!h.pointBreakdown?.length) return h.resOdds;
-  // Find the exact tier matching user's points
   const exact = h.pointBreakdown.find(p => p.points === myPts);
   if (exact && exact.resApps > 0) return (exact.resDrawn / exact.resApps) * 100;
-  // Find the closest tier at or below user's points
   const below = h.pointBreakdown.filter(p => p.points <= myPts).sort((a,b) => b.points - a.points);
   if (below.length && below[0].resApps > 0) return (below[0].resDrawn / below[0].resApps) * 100;
-  // User is below all preference tiers — estimate random-phase odds
   if (h.residentApps > 0 && h.tags > 0) return Math.min(100, (h.tags * 0.25 / h.residentApps) * 100);
   return null;
 }
+const ptsFor = h => h.species==='elk' ? P.elkPts : P.deerPts;
 
-// ─── XLSX ────────────────────────────────────────────────────────────────────
-// Universal parser: handles BOTH the pre-2026 grouped layout (hunt header row +
-// blank continuation rows carrying only point tiers) AND the 2026+ denormalized
-// layout (every row repeats full hunt info + one point tier). Hunt numbers may
-// be numeric (112), classic strings (119A), or 2026 herd-range IDs (NE101,
-// DG103M, MC101-2). Species always comes from the upload zone, never the ID.
+// The verdict: one plain-English answer per hunt
+function verdict(h) {
+  const my = ptsFor(h), p = h.pts100, mo = myOdds(h, my);
+  if (my === null) {
+    if (p === null) return {cls:'v-luck', text:'Luck-of-the-draw hunt — anyone can win a tag.'};
+    return {cls:'v-luck', text:`Takes ${p} point${p===1?'':'s'} for a sure tag. Enter your points above to see where you stand.`};
+  }
+  if (p !== null && my >= p) return {cls:'v-yes', text:'You have enough points — apply and this tag is yours.'};
+  if (p === null) {
+    if (mo !== null && mo >= 20) return {cls:'v-luck', text:`Luck-of-the-draw — about a ${fmtP(mo)} chance for you.`};
+    return {cls:'v-luck', text:`Luck-of-the-draw — a long shot (${mo===null?'under 1%':'about '+fmtP(mo)}).`};
+  }
+  const gap = p - my;
+  if (mo !== null && mo >= 50) return {cls:'v-soon', text:`Good chance this year — about ${fmtP(mo)}. A sure tag takes ${gap} more point${gap===1?'':'s'}.`};
+  if (gap <= 2) return {cls:'v-soon', text:`Close — about ${gap} more year${gap===1?'':'s'} of waiting for a sure tag. Your odds now: ${mo===null?'under 1%':'about '+fmtP(mo)}.`};
+  return {cls:'v-no', text:`A long wait — about ${gap} more years of points for a sure tag. Your odds now: ${mo===null?'under 1%':'about '+fmtP(mo)}.`};
+}
+
+// Multi-year trend for a hunt
+function trendData(h) {
+  const yrs = yList().slice().reverse();
+  const rows = yrs.map(y => {
+    const hh = findH(y, h.huntNum, h.species);
+    return hh ? {year:y, pts100:hh.pts100, success:hh.harvest?.successPct ?? null, tags:hh.tags, apps:hh.residentApps} : null;
+  }).filter(Boolean);
+  let sentence = '', dir = '';
+  const withPts = rows.filter(r => r.pts100 !== null);
+  if (withPts.length >= 2) {
+    const d = withPts[withPts.length-1].pts100 - withPts[0].pts100;
+    if (d >= 2)      { sentence = `Getting harder to draw — needed ${withPts[0].pts100} points in ${withPts[0].year}, now ${withPts[withPts.length-1].pts100}.`; dir='harder'; }
+    else if (d === 1){ sentence = `Slowly getting harder — up 1 point since ${withPts[0].year}.`; dir='harder'; }
+    else if (d <= -1){ sentence = `Getting easier — needed ${withPts[0].pts100} points in ${withPts[0].year}, now ${withPts[withPts.length-1].pts100}.`; dir='easier'; }
+    else             { sentence = `Steady — has taken about ${withPts[0].pts100} points since ${withPts[0].year}.`; }
+  }
+  return { rows, sentence, dir };
+}
+
+// ─── PARSERS ──────────────────────────────────────────────────────────────────
+// Draw report XLSX: handles pre-2026 grouped layout AND 2026+ denormalized layout
 function parseXlsx(buf, sp) {
   const wb = XLSX.read(buf, {type:'array'});
   let ws = null;
   for (const n of wb.SheetNames) { if (/draw|point/i.test(n)){ws=wb.Sheets[n];break;} }
   if (!ws) ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, {header:1,raw:true,defval:null});
-
-  // Detect wrong report type (e.g. "Applicants by Hunt Choice") before parsing
   for (let i = 0; i < Math.min(rows.length, 8); i++) {
     const joined = (rows[i]||[]).map(c=>String(c??'')).join(' ');
     if (/hunt choice/i.test(joined) || /1st Choice/i.test(joined))
-      throw new Error('This is the "Applicants by Hunt Choice" report. Upload the "Preference Point Draw Report" XLSX instead.');
+      throw new Error('This is the "Applicants by Hunt Choice" file. Upload the "Preference Point Draw Report" instead.');
   }
-
   const byNum = new Map(); let last = null;
   const isNum = v => typeof v === 'number' && isFinite(v);
   for (const r of rows) {
     if (!r || !r.length) continue;
-    const rawNum = r[0], rawName = r[1];
-    const hasId = rawNum !== null && rawNum !== undefined && String(rawNum).trim() !== '';
-    const hasName = typeof rawName === 'string' && rawName.trim() !== '';
-    // A row carries hunt info if it has an ID, a text name, and numeric tags.
-    // Header rows fail this (r[2] is the text "Tags Authorized").
+    const hasId = r[0] !== null && r[0] !== undefined && String(r[0]).trim() !== '';
+    const hasName = typeof r[1] === 'string' && r[1].trim() !== '';
     if (hasId && hasName && isNum(r[2])) {
-      const key = String(rawNum).trim();
+      const key = String(r[0]).trim();
       let h = byNum.get(key);
       if (!h) {
-        h = {
-          huntNum:key, huntName:String(rawName).trim(), tags:Number(r[2])||0,
+        h = { huntNum:key, huntName:String(r[1]).trim(), tags:Number(r[2])||0,
           residentApps:Number(r[3])||0, residentDrawn:Number(r[4])||0,
           nonResidentApps:Number(r[5])||0, nonResidentDrawn:Number(r[6])||0,
           totalApps:Number(r[7])||0, totalDrawn:Number(r[8])||0,
-          species:sp, weapon:weapon(key,rawName), pointBreakdown:[], harvest:null
-        };
+          species:sp, weapon:weapon(key,r[1]), pointBreakdown:[], harvest:null };
         byNum.set(key, h);
       }
       last = h;
       if (isNum(r[12]) && !h.pointBreakdown.some(p=>p.points===Number(r[12])))
         h.pointBreakdown.push({points:Number(r[12]),apps:Number(r[13])||0,resApps:Number(r[14])||0,resDrawn:Number(r[15])||0,nrApps:Number(r[16])||0,nrDrawn:Number(r[17])||0});
     } else if (last && isNum(r[12])) {
-      // Old-format continuation row: point tier only, belongs to previous hunt
       if (!last.pointBreakdown.some(p=>p.points===Number(r[12])))
         last.pointBreakdown.push({points:Number(r[12]),apps:Number(r[13])||0,resApps:Number(r[14])||0,resDrawn:Number(r[15])||0,nrApps:Number(r[16])||0,nrDrawn:Number(r[17])||0});
     }
   }
   const hunts = [...byNum.values()];
   hunts.forEach(derive);
-  if (!hunts.length) throw new Error('No hunts found — is this a Preference Point Draw Report XLSX?');
-  const noTiers = hunts.filter(h=>!h.pointBreakdown.length).length;
-  if (noTiers > 0) console.warn(`[parse] ${noTiers} hunts have no point-tier rows`);
+  if (!hunts.length) throw new Error('No hunts found — is this a Preference Point Draw Report?');
   return hunts;
 }
 
-// ─── PDF HARVEST ──────────────────────────────────────────────────────────────
-window._pdfDebug = {};
-async function parsePdf(buf) {
-  if (!window.pdfjsLib) throw new Error('PDF.js not loaded');
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+// Harvest PDF: line-based, layout-tolerant, aggregates hunts split across units
+const HARV_ID_RE = /^(\d{3}(?:[A-Z]\d{0,2})?|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/;
+const HARV_NUM_RE = /^\d{1,6}$/;
+function parseHarvestLines(lines, defaultK) {
+  const all = lines.join('\n');
+  let k = defaultK;
+  if (/6\s*pt\s*\+/i.test(all)) k = 11;
+  else if (/4\s*\+\s*pt/i.test(all)) k = 9;
+  const agg = new Map();
+  for (const raw of lines) {
+    const line = raw.trim();
+    const pm = line.match(/(\d+)\s*%$/);
+    if (!pm) continue;
+    const toks = line.replace(/\s*\d+\s*%$/, '').trim().split(/\s+/);
+    let id = null, idIdx = -1;
+    for (let i = 0; i < toks.length; i++) {
+      const t = toks[i];
+      if (HARV_ID_RE.test(t)) { id = t; idIdx = i; break; }
+      if (HARV_NUM_RE.test(t)) break;
+      if (/^general$/i.test(t) || t === 'w/') break;
+    }
+    if (!id) continue;
+    const nums = [];
+    for (let i = idIdx + 1; i < toks.length; i++)
+      if (HARV_NUM_RE.test(toks[i])) nums.push(Number(toks[i]));
+    if (nums.length < k) continue;
+    const n = nums.slice(-k);
+    let hu,da,al,tb,th,sp,t2,t3,t4,t5,t6;
+    if (k === 11) [hu,da,al,tb,th,sp,t2,t3,t4,t5,t6] = n;
+    else { [hu,da,al,tb,th,sp,t2,t3,t4] = n.slice(0,9); t5=0; t6=0; }
+    const cur = agg.get(id) || {huntNum:id,hunters:0,days:0,antlerless:0,totalBull:0,totalHarvest:0,spike:0,twoPt:0,threePt:0,fourPt:0,fivePt:0,sixPlusPt:0};
+    cur.hunters+=hu; cur.days+=da; cur.antlerless+=al; cur.totalBull+=tb; cur.totalHarvest+=th;
+    cur.spike+=sp; cur.twoPt+=t2; cur.threePt+=t3; cur.fourPt+=t4; cur.fivePt+=t5; cur.sixPlusPt+=t6;
+    agg.set(id, cur);
+  }
   const out = {};
-  // Matches classic IDs (139R2, 216) and 2026+ herd-range IDs (NE101, DG103M, MC101-2)
-  const huntRe = /\b([A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?|\d{3}[A-Z]\d{0,2})\b/g;
-  window._pdfDebug = {};
-
-  for (let p=1; p<=pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
-    const tc   = await page.getTextContent();
-    const items = tc.items.filter(it=>it.str?.trim())
-      .map(it=>({x:Math.round(it.transform[4]), y:Math.round(it.transform[5]), str:it.str.trim()}))
-      .sort((a,b)=>b.y-a.y||a.x-b.x);
-    const lines=[]; let cl=null;
-    items.forEach(it=>{
-      if(!cl||Math.abs(cl.y-it.y)>4){cl={y:it.y,items:[]};lines.push(cl);}
-      cl.items.push(it);
-    });
-    lines.forEach(line=>{
-      const text = line.items.map(i=>i.str).join(' ').replace(/\s+/g,' ').trim();
-      const pm = text.match(/(\d+)%\s*$/); if(!pm) return;
-      const pct = Number(pm[1]);
-      const hms = [...text.matchAll(huntRe)]; if(!hms.length) return;
-      for (const m of hms) {
-        const num = m[1]; if(out[num]) break;
-        const huntItem = line.items.find(it=>it.str===num||it.str.includes(num));
-        const huntX = huntItem ? huntItem.x : 0;
-        const dataItems = line.items.filter(it=>it.x > huntX + 150);
-        const dataText  = dataItems.map(i=>i.str).join(' ').replace(/(\d+)%\s*$/,'').trim();
-        const dataInts  = [...dataText.matchAll(/\b(\d+)\b/g)].map(x=>Number(x[1]));
-        window._pdfDebug[num] = {rawText:text, rowItems:line.items.map(i=>({x:i.x,str:i.str})), huntX, dataInts, pct};
-        let n = dataInts;
-        if(n.length < 8) {
-          const dataItems2 = line.items.filter(it=>it.x > huntX + 80);
-          const dataText2  = dataItems2.map(i=>i.str).join(' ').replace(/(\d+)%\s*$/,'').trim();
-          const dataInts2  = [...dataText2.matchAll(/\b(\d+)\b/g)].map(x=>Number(x[1]));
-          window._pdfDebug[num].dataInts80 = dataInts2;
-          if(dataInts2.length > n.length) n = dataInts2;
-        }
-        if(n.length < 8) { window._pdfDebug[num].skipped='too few: '+n.length; continue; }
-        let hu,da,al,tb,th,sp,t2,t3,t4,t5,t6;
-        if(n.length >= 11)      { [hu,da,al,tb,th,sp,t2,t3,t4,t5,t6] = n.slice(n.length-11); }
-        else if(n.length === 10){ [hu,da,al,tb,sp,t2,t3,t4,t5,t6] = n.slice(n.length-10); th=(al||0)+(tb||0); }
-        else                    { [hu,da,al,tb,th,sp,t2,t3,t4,t5,t6] = n; th=th||(al||0)+(tb||0); }
-        const antlerSum=(sp||0)+(t2||0)+(t3||0)+(t4||0)+(t5||0)+(t6||0);
-        const av = antlerSum > 0;
-        window._pdfDebug[num].parsed = {hu,da,al,tb,th,sp,t2,t3,t4,t5,t6,antlerSum,av,n};
-        out[num] = { huntNum:num, hunters:hu||0, days:da||0, antlerless:al||0,
-          totalBull:tb||0, totalHarvest:th||0, successPct:pct,
-          spike:sp||0, twoPt:t2||0, threePt:t3||0, fourPt:t4||0, fivePt:t5||0, sixPlusPt:t6||0, antlerValid:av };
-        break;
-      }
-    });
+  for (const [id, h] of agg) {
+    h.successPct = h.hunters>0 ? Math.round((h.totalHarvest/h.hunters)*100) : 0;
+    h.antlerValid = (h.spike+h.twoPt+h.threePt+h.fourPt+h.fivePt+h.sixPlusPt) > 0;
+    out[id] = h;
   }
   return out;
 }
-
+async function parsePdf(buf, defaultK) {
+  const doc = await pdfjsLib.getDocument({data:buf}).promise;
+  const lines = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    const page = await doc.getPage(p);
+    const tc = await page.getTextContent();
+    const rows = new Map();
+    for (const it of tc.items) {
+      if (!it.str || !it.str.trim()) continue;
+      const y = Math.round(it.transform[5] / 3) * 3;
+      if (!rows.has(y)) rows.set(y, []);
+      rows.get(y).push({x: it.transform[4], str: it.str.trim()});
+    }
+    for (const y of [...rows.keys()].sort((a,b)=>b-a)) {
+      const items = rows.get(y).sort((a,b)=>a.x-b.x);
+      lines.push(items.map(i=>i.str).join(' ').replace(/\s+/g,' ').trim());
+    }
+  }
+  return parseHarvestLines(lines, defaultK);
+}
+// Harvest XLSX (rare, kept as fallback)
 function parseHarvestXlsx(buf) {
   const wb=XLSX.read(buf,{type:'array'}), ws=wb.Sheets[wb.SheetNames[0]];
-  const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null}), out={}, re=/^(\d{3}[A-Z]?\d*|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/;
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null}), out={},
+    re=/^(\d{3}[A-Z]?\d*|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/;
   rows.forEach(r=>{
     if(!r) return;
     for(let i=0;i<r.length;i++){
@@ -694,12 +668,11 @@ function parseHarvestXlsx(buf) {
   return out;
 }
 
-// ─── FILE HANDLING ────────────────────────────────────────────────────────────
+// ─── FILE HANDLING (admin uploads) ────────────────────────────────────────────
 const readBuf = f => new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsArrayBuffer(f);});
-
 async function handleFile(target, file) {
   if (!file) return;
-  if (!S.pendingYear) { toast('Set a year first', true); return; }
+  if (!S.pendingYear) { toast('Pick a year first (Step 1)', true); return; }
   const year = S.pendingYear;
   if (!S.years[year]) S.years[year] = {hunts:[],files:{},harvestData:{}};
   const yd = S.years[year];
@@ -713,22 +686,24 @@ async function handleFile(target, file) {
       yd.hunts.push(...hunts);
       yd.files[target] = {name:file.name,loadedAt:Date.now(),count:hunts.length};
       applyHarvest(year);
-      toast(`[${year}] ${hunts.length} ${sp} hunts loaded`);
+      toast(`Loaded ${hunts.length} ${sp} hunts for ${year} ✓`);
     } else {
-      const harvest = ext==='pdf' ? await parsePdf(buf) : parseHarvestXlsx(buf);
+      const defaultK = target.startsWith('elk') ? 11 : 9;
+      const harvest = ext==='pdf' ? await parsePdf(buf, defaultK) : parseHarvestXlsx(buf);
+      const n = Object.keys(harvest).length;
+      if (n < 10) { toast('That file only had '+n+' hunts in it — double-check it\'s the right one', true); return; }
       yd.harvestData[target] = harvest;
-      yd.files[target] = {name:file.name,loadedAt:Date.now(),count:Object.keys(harvest).length,matched:0};
+      yd.files[target] = {name:file.name,loadedAt:Date.now(),count:n,matched:0};
       applyHarvest(year);
-      toast(`[${year}] Harvest: ${yd.files[target].matched} matched`);
-      // Save PDF metadata to Firebase so others can see what was uploaded
-      fbSavePdfMeta(year, target, file.name, Object.keys(harvest).length);
+      toast(`Harvest loaded — ${yd.files[target].matched} hunts matched ✓`);
+      fbSavePdfMeta(year, target, file.name, n);
     }
     if (!S.selectedYear) S.selectedYear = year;
-    saveLocal(); render();
-    banner('#dmBanner','','Saving to cloud…',true);
+    saveLocal(); renderAll();
+    banner('', 'Saving to cloud…', true);
     const ok = await fbSave(year, yd.hunts, yd.harvestData);
-    banner('#dmBanner', ok?'ok':'err', ok?'Saved to cloud ✓ — others will see this data on next load':'Cloud save failed — data is local only', false);
-  } catch(e) { console.error(e); toast('Error: '+e.message, true); }
+    banner(ok?'ok':'err', ok?'Saved to cloud ✓ — the whole family will see this data':'Cloud save failed — data is only on this device', false);
+  } catch(e) { console.error(e); toast('Problem with that file: '+e.message, true); }
 }
 
 // ─── LOCAL STORAGE ────────────────────────────────────────────────────────────
@@ -741,17 +716,6 @@ function loadLocal() {
     S.years=d.years||{}; S.selectedYear=d.selectedYear||yList()[0]||null; S.pendingYear=d.pendingYear||S.selectedYear||null; return true;
   } catch(e){ return false; }
 }
-function clearLocal() {
-  S.years={}; S.selectedYear=null; S.pendingYear=null;
-  try{localStorage.removeItem(SK);}catch(e){}
-  render(); toast('Local data cleared');
-}
-function clearYear(year) {
-  delete S.years[year];
-  if(S.selectedYear===year) S.selectedYear=yList()[0]||null;
-  if(S.pendingYear===year)  S.pendingYear=S.selectedYear;
-  saveLocal(); render(); toast('Year '+year+' removed');
-}
 
 // ─── FAVORITES ────────────────────────────────────────────────────────────────
 const FAV_KEY = 'odfw_favs_v1';
@@ -761,462 +725,374 @@ function isFav(num,sp) { return loadFavs().some(f=>f.huntNum===num&&f.species===
 function toggleFav(num,sp) {
   let favs=loadFavs();
   const idx=favs.findIndex(f=>f.huntNum===num&&f.species===sp);
-  if(idx>=0){ favs.splice(idx,1); }
+  if(idx>=0){ favs.splice(idx,1); toast('Removed from My List'); }
   else {
     const h=getH().find(x=>x.huntNum===num&&x.species===sp);
-    if(h) favs.push({huntNum:h.huntNum,species:h.species,huntName:h.huntName,addedAt:Date.now()});
+    if(h){ favs.push({huntNum:h.huntNum,species:h.species,huntName:h.huntName,addedAt:Date.now()}); toast('Saved to My List ★'); }
   }
   saveFavs(favs);
-  const btn=$('#modalFavBtn');
-  if(btn&&btn.dataset.fhunt===num&&btn.dataset.fsp===sp){
-    const now=isFav(num,sp); btn.textContent=now?'★':'☆'; btn.classList.toggle('active',now);
-  }
-}
-function renderFavs() {
-  const favs=loadFavs(), empty=$('#favEmpty'), wrap=$('#favWrap'), body=$('#favBody');
-  if(!empty||!wrap||!body) return;
-  if(!favs.length){ empty.style.display='block'; wrap.style.display='none'; return; }
-  empty.style.display='none'; wrap.style.display='block';
-  const elkEl=$('#fElkPts'), deerEl=$('#fDeerPts');
-  const f={ elkPts:elkEl&&elkEl.value!==''?Number(elkEl.value):null, deerPts:deerEl&&deerEl.value!==''?Number(deerEl.value):null };
-  const ptsFor=h=>h.species==='elk'?f.elkPts:h.species==='deer'?f.deerPts:null;
-  body.innerHTML=favs.map(fav=>{
-    const h=getH().find(x=>x.huntNum===fav.huntNum&&x.species===fav.species);
-    if(!h) return `<tr><td colspan="10" style="color:var(--tmut);font-family:sans-serif;font-size:13px;padding:10px">${esc(fav.huntNum)} — ${esc(fav.huntName)} (load data to see details)</td></tr>`;
-    const myPts=ptsFor(h), p100=h.pts100;
-    const ptCls=p100===null?'ce':myPts===null?'cn':myPts>=p100?'ce':p100<=3?'ce':p100<=8?'cm':'ch';
-    const success=h.harvest?.successPct, sw=success!=null?Math.min(100,success):0;
-    const bull=topBull(h.harvest), mo=myOdds(h,myPts);
-    let moHtml='—';
-    if(myPts!==null){ if(mo===null){moHtml='<span class="ch">&lt;1%</span>';}else{const mc=mo>=75?'ce':mo>=25?'cm':'ch';moHtml=`<span class="${mc}">${fmtP(mo)}</span>`;} }
-    return `<tr data-id="${h.huntNum}_${h.species}" class="fav-row">
-      <td class="hnum">${h.huntNum}</td><td>${esc(h.huntName)}</td>
-      <td><span class="tag ${h.weapon}">${wLabel(h.weapon)}</span></td>
-      <td class="num"><span class="${ptCls}">${p100===null?'Random only':p100}</span></td>
-      <td class="num">${success==null?'—':`${fmtP(success)}<div class="sbar"><div class="sbarf" style="width:${sw}%"></div></div>`}</td>
-      <td class="num">${moHtml}</td>
-      <td class="num">${bull?`${bull.label}<span class="sub">${bull.pct}% of harvest</span>`:'—'}</td>
-      <td class="num">${fmt(h.residentApps)}</td><td class="num">${fmt(h.tags)}</td>
-      <td class="num"><button class="fav-remove" data-fhunt="${h.huntNum}" data-fsp="${h.species}">✕</button></td>
-    </tr>`;
-  }).join('');
-  body.querySelectorAll('.fav-row').forEach(tr=>tr.addEventListener('click',e=>{
-    if(e.target.closest('.fav-remove')) return;
-    if(tr.dataset.id) showDetail(tr.dataset.id);
-  }));
-  body.querySelectorAll('.fav-remove').forEach(btn=>btn.addEventListener('click',e=>{
-    e.stopPropagation(); toggleFav(btn.dataset.fhunt,btn.dataset.fsp); renderFavs();
-  }));
 }
 
-// ─── FILTERS + SORT ───────────────────────────────────────────────────────────
-function getFilters() {
-  const elkEl=$('#fElkPts'), deerEl=$('#fDeerPts');
-  const elkRaw=elkEl?elkEl.value:'', deerRaw=deerEl?deerEl.value:'';
-  return {
-    sp:      ($('#fSpecies')?.value||'all'),
-    wep:     ($('#fWeapon')?.value||'all'),
-    elkPts:  elkRaw===''?null:Number(elkRaw),
-    deerPts: deerRaw===''?null:Number(deerRaw),
-    draw:    ($('#fDrawability')?.value||'all'),
-    reachablePts: Number($('#fReachablePts')?.value||3),
-    srch:    ($('#fSearch')?.value||'').trim().toLowerCase()
-  };
-}
-function ptsForHunt(h,f) {
-  if(h.species==='elk')  return f.elkPts;
-  if(h.species==='deer') return f.deerPts;
-  return null;
-}
+// ─── FILTER + SORT ────────────────────────────────────────────────────────────
 function applyFilters(hunts) {
-  const f=getFilters();
+  const q = ($('#fSearch')?.value||'').trim().toLowerCase();
   return hunts.filter(h=>{
-    if(f.sp!=='all'&&h.species!==f.sp) return false;
-    if(f.wep!=='all'&&h.weapon!==f.wep) return false;
-    if(f.srch&&!(h.huntNum+' '+h.huntName).toLowerCase().includes(f.srch)) return false;
-    if(f.draw!=='all'){
-      const myP=ptsForHunt(h,f);
-      if(myP!==null){ const p=h.pts100;
-        if(f.draw==='canDraw'&&(p===null||myP<p)) return false;
-        if(f.draw==='oneAway'&&(p===null||myP!==p-1)) return false;
-        if(f.draw==='reachable'&&(p===null||myP<p-f.reachablePts)) return false;
-      }
+    if(P.sp!=='all' && h.species!==P.sp) return false;
+    if(P.wep!=='all' && h.weapon!==P.wep) return false;
+    if(q && !(h.huntNum+' '+h.huntName).toLowerCase().includes(q)) return false;
+    if(P.canDraw){
+      const my=ptsFor(h);
+      if(my===null || h.pts100===null || my<h.pts100) return false;
     }
     return true;
   });
 }
-// Fixed sort: highest pts100 first (hardest draws at top), ties broken by hunt number
 function sortHunts(hunts) {
-  return [...hunts].sort((a,b)=>{
-    const ap=a.pts100, bp=b.pts100;
-    // Nulls (random-only) go to the bottom
-    if(ap===null&&bp===null) return String(a.huntNum).localeCompare(String(b.huntNum),undefined,{numeric:true});
-    if(ap===null) return 1;
-    if(bp===null) return -1;
-    if(bp!==ap) return bp-ap; // highest pts first
-    return String(a.huntNum).localeCompare(String(b.huntNum),undefined,{numeric:true});
+  const cmpNum=(a,b)=>String(a.huntNum).localeCompare(String(b.huntNum),undefined,{numeric:true});
+  const arr=[...hunts];
+  if(P.sort==='num') return arr.sort(cmpNum);
+  if(P.sort==='success') return arr.sort((a,b)=>{
+    const sa=a.harvest?.successPct??-1, sb=b.harvest?.successPct??-1;
+    return sb-sa || cmpNum(a,b);
+  });
+  if(P.sort==='easy') return arr.sort((a,b)=>{
+    const pa=a.pts100===null?-1:a.pts100, pb=b.pts100===null?-1:b.pts100;
+    return pa-pb || (b.resOdds??0)-(a.resOdds??0) || cmpNum(a,b);
+  });
+  if(P.sort==='hard') return arr.sort((a,b)=>{
+    const pa=a.pts100===null?-1:a.pts100, pb=b.pts100===null?-1:b.pts100;
+    return pb-pa || cmpNum(a,b);
+  });
+  // 'best' — sure tags first, then by your odds, then success
+  return arr.sort((a,b)=>{
+    const ma=ptsFor(a), mb=ptsFor(b);
+    const da=(a.pts100!==null&&ma!==null&&ma>=a.pts100)?1:0;
+    const db=(b.pts100!==null&&mb!==null&&mb>=b.pts100)?1:0;
+    if(db!==da) return db-da;
+    const oa=myOdds(a,ma)??-1, ob=myOdds(b,mb)??-1;
+    if(Math.round(ob)!==Math.round(oa)) return ob-oa;
+    return (b.harvest?.successPct??-1)-(a.harvest?.successPct??-1) || cmpNum(a,b);
   });
 }
 
-// ─── RENDER TABLE ─────────────────────────────────────────────────────────────
-function trendHtml(cur,prev,hb,fn) {
-  if(cur==null||prev==null||cur===prev) return '';
-  const d=cur-prev, better=hb?d>0:d<0;
-  return `<span class="trend ${better?'tup':'tdn'}">${better?'▲':'▼'} ${d>0?'+':''}${fn?fn(d):Math.round(d)}</span>`;
-}
-function topBull(harv) {
-  if(!harv?.totalBull) return null;
-  const cls=[['Spike',harv.spike||0],['2pt',harv.twoPt||0],['3pt',harv.threePt||0],['4pt',harv.fourPt||0],['5pt',harv.fivePt||0],['6pt+',harv.sixPlusPt||0]];
-  const top=cls.slice().sort((a,b)=>b[1]-a[1])[0];
-  if(!top||!top[1]) return null;
-  return {label:top[0], pct:Math.round((top[1]/harv.totalBull)*100)};
-}
-
-function renderTable() {
-  const all=getH(), f=getFilters();
-  const filtered=applyFilters(all), sorted=sortHunts(filtered);
-  const tb=$('#huntsBody'), prev=S.compareYear||prevYr(S.selectedYear);
-  $('#rcount').textContent=all.length===0?'—':`${sorted.length} of ${all.length} hunts`;
-  if(all.length===0){tb.innerHTML='<tr><td colspan="9" class="empty">No data loaded.</td></tr>';return;}
-  if(sorted.length===0){tb.innerHTML='<tr><td colspan="9" class="empty">No hunts match the filters.</td></tr>';return;}
-  const rows=sorted.map(h=>{
-    const myPts=ptsForHunt(h,f), p100=h.pts100;
-    const ptCls=p100===null?'ce':myPts===null?'cn':myPts>=p100?'ce':p100<=3?'ce':p100<=8?'cm':'ch';
-    const success=h.harvest?.successPct, sw=success!=null?Math.min(100,success):0;
-    const bull=topBull(h.harvest), mo=myOdds(h,myPts);
-    let moHtml='—';
-    if(myPts!==null){ if(mo===null){moHtml='<span class="ch">&lt;1%</span>';}else{const mc=mo>=75?'ce':mo>=25?'cm':'ch';moHtml=`<span class="${mc}">${fmtP(mo)}</span>`;} }
-    const prevH=prev?findH(prev,h.huntNum,h.species):null;
-    const sucT=prevH?.harvest?trendHtml(success,prevH.harvest.successPct,true,v=>Math.round(v)+'%'):'';
-    return `<tr data-id="${h.huntNum}_${h.species}">
-      <td class="hnum">${h.huntNum}</td>
-      <td>${esc(h.huntName)}</td>
-      <td><span class="tag ${h.weapon}">${wLabel(h.weapon)}</span></td>
-      <td class="num"><span class="${ptCls}">${p100===null?'Random only':p100}</span></td>
-      <td class="num">${success==null?'—':`${fmtP(success)}${sucT}<div class="sbar"><div class="sbarf" style="width:${sw}%"></div></div>`}</td>
-      <td class="num">${moHtml}</td>
-      <td class="num">${bull?`${bull.label}<span class="sub">${bull.pct}% of harvest</span>`:'—'}</td>
-      <td class="num">${fmt(h.residentApps)}</td>
-      <td class="num">${fmt(h.tags)}</td>
-    </tr>`;
-  }).join('');
-  tb.innerHTML=rows;
-  tb.querySelectorAll('tr').forEach(tr=>tr.addEventListener('click',()=>{if(tr.dataset.id)showDetail(tr.dataset.id);}));
-}
-
-// ─── STATUS / YEARS PANEL ─────────────────────────────────────────────────────
-function renderStatus() {
-  const yd=S.pendingYear?S.years[S.pendingYear]:null, f=yd?.files||{};
-  const dot=$('#sdot'), txt=$('#stxt'), det=$('#sdet'), last=$('#slast');
-  if(!dot) return;
-  const parts=[];
-  if(f.elkPoints)      parts.push(`Elk pts:${f.elkPoints.count}`);
-  if(f.deerPoints)     parts.push(`Deer pts:${f.deerPoints.count}`);
-  if(f.elkRifleHarvest)    parts.push(`Elk rifle:${f.elkRifleHarvest.matched??0}`);
-  if(f.elkArcheryHarvest)  parts.push(`Elk arch:${f.elkArcheryHarvest.matched??0}`);
-  if(f.deerRifleHarvest)   parts.push(`Deer rifle:${f.deerRifleHarvest.matched??0}`);
-  if(f.deerArcheryHarvest) parts.push(`Deer arch:${f.deerArcheryHarvest.matched??0}`);
-  const hasP=f.elkPoints||f.deerPoints, hasH=f.elkRifleHarvest||f.elkArcheryHarvest||f.deerRifleHarvest||f.deerArcheryHarvest;
-  const n=yd?.hunts.length||0;
-  if(!yList().length){dot.className='sdot';txt.textContent='No data';}
-  else if(!n){dot.className='sdot';txt.textContent=`No data for ${S.pendingYear}`;}
-  else if(hasP&&hasH){dot.className='sdot ok';txt.textContent=`[${S.pendingYear}] Loaded`;}
-  else{dot.className='sdot part';txt.textContent=`[${S.pendingYear}] Partial`;}
-  det.textContent=parts.join(' · ');
-  const af=Object.values(f); last.textContent=af.length?new Date(Math.max(...af.map(x=>x.loadedAt))).toLocaleString():'—';
-  ['elkPoints','deerPoints','elkRifleHarvest','elkArcheryHarvest','deerRifleHarvest','deerArcheryHarvest'].forEach(k=>{
-    const el=document.querySelector(`[data-file="${k}"]`), zone=document.querySelector(`[data-key="${k}"]`);
-    if(!el||!zone) return;
-    if(f[k]){el.textContent='✓ '+f[k].name;zone.classList.add('hf');}
-    else{el.textContent='';zone.classList.remove('hf');}
+// ─── RENDER: points panel ─────────────────────────────────────────────────────
+function renderPts() {
+  const el=$('#ptsBody');
+  if(P.ptsSet && (P.deerPts!==null||P.elkPts!==null)){
+    el.innerHTML=`<div class="pts-summary">
+      <div class="txt">Your points: <strong>Deer ${P.deerPts??'—'}</strong> · <strong>Elk ${P.elkPts??'—'}</strong></div>
+      <button class="linkbtn" id="ptsChange">Change</button></div>`;
+    $('#ptsChange').onclick=()=>{P.ptsSet=false;savePrefs();renderPts();};
+    return;
+  }
+  const step=(sp,val)=>`<div class="stepper"><div class="lbl">${sp==='deer'?'Deer':'Elk'} points</div>
+    <div class="step-row">
+      <button class="step-btn" data-step="${sp}" data-d="-1" aria-label="fewer">−</button>
+      <span class="step-val" id="sv-${sp}">${val??0}</span>
+      <button class="step-btn" data-step="${sp}" data-d="1" aria-label="more">+</button>
+    </div></div>`;
+  el.innerHTML=`<p class="ptitle">Your preference points</p>
+    <p class="help" style="margin-bottom:12px">These are on your ODFW account. Set them once and every hunt below gets a personal answer.</p>
+    <div class="pts-grid">${step('deer',P.deerPts)}${step('elk',P.elkPts)}</div>
+    <button class="btn primary" id="ptsDone" style="width:100%;margin-top:12px">Done — show my chances</button>`;
+  $$('[data-step]').forEach(b=>b.onclick=()=>{
+    const sp=b.dataset.step, d=Number(b.dataset.d);
+    const cur=(sp==='deer'?P.deerPts:P.elkPts)??0;
+    const nv=Math.max(0,Math.min(30,cur+d));
+    if(sp==='deer')P.deerPts=nv; else P.elkPts=nv;
+    $('#sv-'+sp).textContent=nv;
+    savePrefs(); renderCards();
   });
-  renderYears();
+  $('#ptsDone').onclick=()=>{ if(P.deerPts===null)P.deerPts=0; if(P.elkPts===null)P.elkPts=0; P.ptsSet=true; savePrefs(); renderPts(); renderCards(); };
 }
 
-function renderYears() {
-  const list=$('#ylist'); if(!list) return;
-  const yrs=yList();
-  if(!yrs.length){list.innerHTML='<div class="empty" style="padding:20px">No years loaded yet.</div>';return;}
-  list.innerHTML=yrs.map(y=>{
-    const yd=S.years[y], isSel=y===S.selectedYear, isPend=y===S.pendingYear;
-    const hc=yd.harvestData?Object.values(yd.harvestData).reduce((s,h)=>s+Object.keys(h||{}).length,0):0;
-    return `<div class="yrow ${isSel?'sel':''}">
-      <div class="yr-main">
-        <div class="yrl">${y}${isSel?'<span class="bsm">Viewing</span>':''}${isPend&&!isSel?'<span class="bsma">Editing</span>':''}</div>
-        <div class="yrm">${yd.hunts.length} hunts · ${hc} harvest records</div>
-      </div>
-      <div class="yra">
-        ${!isSel?`<button class="bmini" data-vy="${y}">View</button>`:''}
-        ${!isPend?`<button class="bmini" data-ey="${y}">Edit</button>`:''}
-        <button class="bmini dan" data-dy="${y}">Delete Local</button>
-        <button class="bmini dan" data-fby="${y}">Delete Cloud</button>
-      </div>
-    </div>`;
-  }).join('');
-  list.querySelectorAll('[data-vy]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();S.selectedYear=b.dataset.vy;saveLocal();render();}));
-  list.querySelectorAll('[data-ey]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();S.pendingYear=b.dataset.ey;saveLocal();render();}));
-  list.querySelectorAll('[data-dy]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();confirm2(`Delete ${b.dataset.dy} locally?`,()=>clearYear(b.dataset.dy));}));
-  list.querySelectorAll('[data-fby]').forEach(b=>b.addEventListener('click',async e=>{
-    e.stopPropagation();
-    confirm2(`Delete ${b.dataset.fby} from cloud? This affects all users.`, async ()=>{
-      b.textContent='Deleting…'; b.disabled=true;
-      const ok=await fbDeleteYear(b.dataset.fby);
-      toast(ok?`Year ${b.dataset.fby} deleted from cloud`:'Cloud delete failed',!ok);
-      renderYears();
-    });
+// ─── RENDER: hunt cards ───────────────────────────────────────────────────────
+function cardHTML(h){
+  const v=verdict(h), my=ptsFor(h), mo=myOdds(h,my);
+  const succ=h.harvest?.successPct;
+  const t=trendData(h);
+  const moTxt = my===null?'—':(mo===null?'<1%':fmtP(mo));
+  return `<button class="card ${v.cls}" data-id="${esc(h.huntNum)}_${h.species}">
+    <div class="crow1"><span class="cid">${esc(h.huntNum)}</span><span class="cname">${esc(h.huntName)}</span>
+      <span class="cstar ${isFav(h.huntNum,h.species)?'on':''}" data-fav="${esc(h.huntNum)}_${h.species}">${isFav(h.huntNum,h.species)?'★':'☆'}</span></div>
+    <div class="chips"><span class="chip">${wLabel(h.weapon)}</span><span class="chip">${h.species==='elk'?'Elk':'Deer'}</span></div>
+    <div class="verdict">${v.text}</div>
+    <div class="stats">
+      <div class="stat"><div class="n">${moTxt}</div><div class="l">Your chance this year</div></div>
+      <div class="stat"><div class="n">${succ==null?'—':fmtP(succ)}</div><div class="l">Hunters who got one</div></div>
+      <div class="stat"><div class="n">${h.pts100===null?'Luck':h.pts100}</div><div class="l">Points for a sure tag</div></div>
+    </div>
+    ${t.sentence?`<div class="ctrend ${t.dir}">${esc(t.sentence)}</div>`:''}
+  </button>`;
+}
+function renderCards(){
+  const all=getH();
+  const box=$('#cards');
+  if(!all.length){
+    box.innerHTML=`<div class="empty">No hunt data yet.<br>It loads automatically — check back in a minute, or pull to refresh.</div>`;
+    $('#rcount').textContent=''; return;
+  }
+  const rows=sortHunts(applyFilters(all));
+  const spTxt=P.sp==='all'?'':P.sp+' ';
+  $('#rcount').textContent=`Showing ${rows.length} of ${all.length} ${spTxt}hunts · ${S.selectedYear} season data`;
+  if(!rows.length){ box.innerHTML=`<div class="empty">Nothing matches those filters.<br>Try "All weapons" or turn off the sure-tag switch.</div>`; return; }
+  box.innerHTML=rows.slice(0,200).map(cardHTML).join('')+(rows.length>200?`<div class="empty">…and ${rows.length-200} more. Use search to narrow down.</div>`:'');
+  wireCards(box);
+}
+function wireCards(box){
+  box.querySelectorAll('.card').forEach(c=>c.addEventListener('click',e=>{
+    const fav=e.target.closest('[data-fav]');
+    if(fav){ e.stopPropagation(); const [n,s]=fav.dataset.fav.split('_'); toggleFav(n,s);
+      fav.textContent=isFav(n,s)?'★':'☆'; fav.classList.toggle('on',isFav(n,s)); renderMyList(); return; }
+    openDetail(c.dataset.id);
   }));
 }
 
-// ─── MODAL ────────────────────────────────────────────────────────────────────
-function showDetail(id) {
+// ─── RENDER: detail sheet ─────────────────────────────────────────────────────
+let sheetId=null;
+function openDetail(id){
   const [num,sp]=id.split('_');
   const h=getH().find(x=>x.huntNum===num&&x.species===sp); if(!h) return;
-  $('#mTitle').textContent=`${h.huntNum} — ${h.huntName}`;
-  $('#mSub').textContent=`${S.selectedYear} · ${h.species==='elk'?'Elk':'Deer'} · ${wLabel(h.weapon)}`;
+  sheetId=id;
+  $('#shTitle').textContent=`${h.huntNum} — ${h.huntName}`;
+  $('#shSub').textContent=`${S.selectedYear} season · ${h.species==='elk'?'Elk':'Deer'} · ${wLabel(h.weapon)}`;
+  const star=$('#shStar');
+  star.textContent=isFav(num,sp)?'★':'☆'; star.classList.toggle('on',isFav(num,sp));
 
-  const favBtn=$('#modalFavBtn');
-  if(favBtn){
-    favBtn.dataset.fhunt=num; favBtn.dataset.fsp=sp;
-    const faved=isFav(num,sp);
-    favBtn.textContent=faved?'★':'☆';
-    favBtn.classList.toggle('active',faved);
+  const v=verdict(h), my=ptsFor(h), mo=myOdds(h,my);
+  const t=trendData(h);
+  let html=`<div class="callout ${v.cls}">${v.text}</div>`;
+
+  html+=`<div class="sec"><h3>The basics</h3>
+    <p class="plain">A ${wLabel(h.weapon).toLowerCase()} ${h.species} hunt. In ${S.selectedYear}, ODFW gave out <strong>${fmt(h.tags)} tags</strong> and <strong>${fmt(h.residentApps)} Oregon residents</strong> put it as a choice. ${h.resOdds!=null?`Overall, about ${fmtP(h.resOdds)} of resident applicants drew it.`:''}</p>
+  </div>`;
+
+  if(my!==null){
+    html+=`<div class="sec"><h3>Your odds</h3>
+      <div class="kvg">
+        <div class="kv"><div class="k">Your points</div><div class="v">${my}</div></div>
+        <div class="kv"><div class="k">Chance this year</div><div class="v">${mo===null?'<1%':fmtP(mo)}</div></div>
+        <div class="kv"><div class="k">Points for a sure tag</div><div class="v">${h.pts100===null?'Luck only':h.pts100}</div></div>
+        <div class="kv"><div class="k">Lowest points that drew</div><div class="v">${h.minPointsToDraw??'—'}</div></div>
+      </div></div>`;
   }
-
-  const f2=getFilters(), myPts=ptsForHunt(h,f2), mo=myOdds(h,myPts);
-  const prev=S.compareYear||prevYr(S.selectedYear);
-  const prevH=prev?findH(prev,num,sp):null;
-
-  function delta(cur,prev2,hb,suf) {
-    if(cur==null||prev2==null||cur===prev2) return '';
-    const better=hb?cur>prev2:cur<prev2;
-    return ` <span class="trend ${better?'tup':'tdn'}">${better?'▲':'▼'} ${(cur-prev2)>0?'+':''}${(cur-prev2).toFixed(suf==='%'?0:1)}${suf||''} vs ${prev}</span>`;
-  }
-
-  let take='';
-  if(myPts!==null){
-    const p=h.pts100;
-    if(p===null)      take=`<p class="callout"><strong>With ${myPts} pt${myPts===1?'':'s'}:</strong> Random-phase only. Odds: ~${fmtP(mo)}.</p>`;
-    else if(myPts>=p) take=`<p class="callout good"><strong>With ${myPts} pt${myPts===1?'':'s'}:</strong> 100% draw chance — you exceed the ${p}-pt threshold.</p>`;
-    else { const aw=p-myPts; take=`<p class="callout"><strong>With ${myPts} pt${myPts===1?'':'s'}:</strong> ${aw} pt${aw===1?'':'s'} short of 100% draw (${p} pts). Current odds: ~${fmtP(mo)}.</p>`; }
-  }
-
-  let body=`${take}
-  <div class="msec"><h4>Draw Results (Resident)</h4><div class="kvg">
-    <div class="kv"><div class="k">Tags</div><div class="v">${fmt(h.tags)}</div></div>
-    <div class="kv"><div class="k">Resident Apps</div><div class="v">${fmt(h.residentApps)}${prevH?delta(h.residentApps,prevH.residentApps,false):''}</div></div>
-    <div class="kv"><div class="k">Resident Drawn</div><div class="v">${fmt(h.residentDrawn)}</div></div>
-    <div class="kv"><div class="k">Pts for 100% Draw</div><div class="v">${h.pts100==null?'Random only':h.pts100}${prevH?delta(h.pts100,prevH.pts100,false):''}</div></div>
-    <div class="kv"><div class="k">Lowest Tier w/ Any Draw</div><div class="v">${h.minPointsToDraw??'—'}</div></div>
-    <div class="kv"><div class="k">Non-Res Apps</div><div class="v">${fmt(h.nonResidentApps)}</div></div>
-  </div></div>`;
 
   if(h.harvest){
-    const hv=h.harvest, ph=prevH?.harvest;
-    body+=`<div class="msec"><h4>Harvest</h4><div class="kvg">
-      <div class="kv"><div class="k">Total Harvest</div><div class="v">${fmt(hv.totalHarvest)}${ph?delta(hv.totalHarvest,ph.totalHarvest,true):''}</div></div>
-      <div class="kv"><div class="k">Bulls / Bucks</div><div class="v">${fmt(hv.totalBull)}</div></div>
-      <div class="kv"><div class="k">Antlerless</div><div class="v">${fmt(hv.antlerless)}</div></div>
-      <div class="kv"><div class="k">Success Rate</div><div class="v">${fmtP(hv.successPct)}${ph?delta(hv.successPct,ph.successPct,true,'%'):''}</div></div>
-      <div class="kv"><div class="k">Days in Field</div><div class="v">${fmt(hv.days)}</div></div>
-    </div></div>`;
-    if(hv.totalBull>0){
-      const cls=[['Spike',hv.spike||0],['2-point',hv.twoPt||0],['3-point',hv.threePt||0],['4-point',hv.fourPt||0],['5-point',hv.fivePt||0],['6-point+',hv.sixPlusPt||0]];
-      const anyAntler=cls.some(([,c])=>c>0);
-      if(anyAntler){
-        body+=`<div class="msec"><h4>Trophy Size Breakdown</h4><table class="pts"><thead><tr><th>Class</th><th>Harvested</th><th>% of Harvest</th></tr></thead><tbody>
-          ${cls.map(([l,c])=>`<tr${c>0&&c===Math.max(...cls.map(([,x])=>x))?' class="drew"':''}><td>${l}</td><td>${fmt(c)}</td><td>${fmtP(hv.totalBull>0?(c/hv.totalBull)*100:0)}</td></tr>`).join('')}
-        </tbody></table></div>`;
-      } else {
-        body+=`<div class="msec"><h4>Trophy Size Breakdown</h4><p style="font-size:13px;color:var(--tmut)">Size data not available for this hunt.</p></div>`;
-      }
+    const hv=h.harvest;
+    html+=`<div class="sec"><h3>How hunters did</h3>
+      <p class="plain"><strong>${fmtP(hv.successPct)}</strong> of the ${fmt(hv.hunters)} hunters who held this tag brought a ${h.species==='elk'?'bull or cow':'buck'} home.</p>
+      <div class="kvg">
+        <div class="kv"><div class="k">Animals taken</div><div class="v">${fmt(hv.totalHarvest)}</div></div>
+        <div class="kv"><div class="k">Days per hunter (avg)</div><div class="v">${hv.hunters>0?Math.round(hv.days/hv.hunters):'—'}</div></div>
+      </div>`;
+    if(hv.antlerValid && hv.totalBull>0){
+      const cls=[['Spike',hv.spike],['2-point',hv.twoPt],['3-point',hv.threePt],['4-point'+(h.species==='deer'?'+':''),hv.fourPt]];
+      if(h.species==='elk'){ cls.push(['5-point',hv.fivePt],['6-point+',hv.sixPlusPt]); }
+      const mx=Math.max(...cls.map(c=>c[1]));
+      html+=`<p class="plain" style="margin-top:12px">Antler sizes of the ${h.species==='elk'?'bulls':'bucks'} taken:</p>`;
+      cls.forEach(([l,c])=>{
+        const pct=hv.totalBull>0?Math.round(c/hv.totalBull*100):0;
+        html+=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <span style="flex:0 0 84px;font-size:.85rem">${l}</span>
+          <div class="bar" style="flex:1"><div class="barf" style="width:${pct}%;${c===mx&&c>0?'background:var(--gold)':''}"></div></div>
+          <span style="flex:0 0 44px;text-align:right;font-size:.85rem;font-weight:700">${pct}%</span></div>`;
+      });
     }
+    html+=`</div>`;
+  } else {
+    html+=`<div class="sec"><h3>How hunters did</h3><p class="plain" style="color:var(--dim)">Harvest results for ${S.selectedYear} aren't out yet — ODFW publishes them the following spring.</p></div>`;
+  }
+
+  if(t.rows.length>=2){
+    const pr=t.rows.filter(r=>r.pts100!==null);
+    html+=`<div class="sec"><h3>Over the years</h3>`;
+    if(t.sentence) html+=`<p class="plain" style="${t.dir==='harder'?'color:var(--warn)':t.dir==='easier'?'color:var(--good)':''}">${esc(t.sentence)}</p>`;
+    if(pr.length>=2){
+      const mx=Math.max(...pr.map(r=>r.pts100),1);
+      html+=`<p class="help">Points needed for a sure tag, by year:</p><div class="trendline">${pr.map(r=>
+        `<div class="tcol"><span class="tval">${r.pts100}</span><div class="tbar" style="height:${Math.max(6,r.pts100/mx*46)}px"></div><span class="tyr">${r.year}</span></div>`).join('')}</div>`;
+    }
+    html+=`<table class="simple"><thead><tr><th>Year</th><th>Sure-tag pts</th><th>Success</th><th>Tags</th><th>Applicants</th></tr></thead><tbody>
+      ${t.rows.map(r=>`<tr><td>${r.year}</td><td>${r.pts100===null?'Luck':r.pts100}</td><td>${r.success==null?'—':fmtP(r.success)}</td><td>${fmt(r.tags)}</td><td>${fmt(r.apps)}</td></tr>`).join('')}
+    </tbody></table></div>`;
   }
 
   const bd=[...h.pointBreakdown].sort((a,b)=>b.points-a.points);
   if(bd.length){
-    body+=`<div class="msec"><h4>Resident Draw by Point Tier</h4><table class="pts">
-      <thead><tr><th>Points</th><th>Res. Apps</th><th>Res. Drawn</th><th>Draw %</th></tr></thead><tbody>
+    html+=`<div class="sec"><h3>Draw results by point level</h3>
+      <p class="help" style="margin-bottom:8px">What happened to Oregon residents at each point level in the ${S.selectedYear} drawing. Green rows: everyone at that level drew a tag.</p>
+      <table class="simple"><thead><tr><th>Points held</th><th>Applied</th><th>Drew a tag</th><th>Odds</th></tr></thead><tbody>
       ${bd.map(p=>{
         const pct=p.resApps>0?(p.resDrawn/p.resApps)*100:0;
         const full=p.resApps>0&&p.resDrawn>=p.resApps;
-        return `<tr ${full?'class="drew"':''}><td>${p.points}</td><td>${fmt(p.resApps)}</td><td>${fmt(p.resDrawn)}</td><td>${fmtP(pct)}</td></tr>`;
+        const mine=my!==null&&p.points===my?' style="outline:2px solid var(--gold)"':'';
+        return `<tr ${full?'class="hl"':''}${mine}><td>${p.points}${my!==null&&p.points===my?' ← you':''}</td><td>${fmt(p.resApps)}</td><td>${fmt(p.resDrawn)}</td><td>${fmtP(pct)}</td></tr>`;
       }).join('')}
-      </tbody></table>
-      <p style="font-size:11px;color:var(--tmut);margin-top:6px">Highlighted = 100% draw rate at this point level.</p>
-    </div>`;
+      </tbody></table></div>`;
   }
 
-  $('#mBody').innerHTML=body;
-  $('#modal').classList.add('open');
+  $('#shBody').innerHTML=html;
+  $('#sheet').classList.add('open');
+  $('#sheet').scrollTop=0;
+  document.body.style.overflow='hidden';
+}
+function closeDetail(){ $('#sheet').classList.remove('open'); document.body.style.overflow=''; sheetId=null; }
+
+// ─── RENDER: My List ──────────────────────────────────────────────────────────
+function renderMyList(){
+  const box=$('#mylistCards'); if(!box) return;
+  const favs=loadFavs();
+  if(!favs.length){ box.innerHTML=`<div class="empty">Your list is empty.<br><br>Tap the <span style="font-size:1.3rem">☆</span> star on any hunt to save it here for quick comparison.</div>`; return; }
+  const cards=favs.map(f=>{
+    const h=getH().find(x=>x.huntNum===f.huntNum&&x.species===f.species);
+    if(!h) return `<div class="card v-luck" style="cursor:default"><div class="crow1"><span class="cid">${esc(f.huntNum)}</span><span class="cname">${esc(f.huntName)}</span></div><div class="help">Not in the ${S.selectedYear} data — this hunt may have been renamed or retired.</div></div>`;
+    return cardHTML(h);
+  }).join('');
+  box.innerHTML=cards;
+  wireCards(box);
+}
+
+// ─── RENDER: admin ────────────────────────────────────────────────────────────
+async function renderAdmin(){
+  $('#pyDisp').textContent=S.pendingYear||'none';
+  if($('#pyInput')&&!$('#pyInput').value&&S.pendingYear) $('#pyInput').value=S.pendingYear;
+  // years list
+  const list=$('#ylist'), yrs=yList();
+  if(!yrs.length){ list.innerHTML='<p class="help">No data yet. The automatic updater will fill this in, or add files below.</p>'; }
+  else{
+    list.innerHTML=yrs.map(y=>{
+      const yd=S.years[y];
+      const hc=yd.harvestData?Object.values(yd.harvestData).reduce((s,h)=>s+Object.keys(h||{}).length,0):0;
+      return `<div class="yrow"><div><div class="yrl">${y}</div><div class="yrm">${yd.hunts.length} hunts · ${hc} harvest records</div></div>
+        <div style="display:flex;gap:6px"><button class="bmini dan" data-fby="${y}">Delete from cloud</button></div></div>`;
+    }).join('');
+    list.querySelectorAll('[data-fby]').forEach(b=>b.addEventListener('click',()=>{
+      confirm2(`Delete all ${b.dataset.fby} data from the cloud? Everyone loses it.`, async ()=>{
+        b.textContent='Deleting…'; b.disabled=true;
+        const ok=await fbDeleteYear(b.dataset.fby);
+        if(ok){ delete S.years[b.dataset.fby];
+          if(S.selectedYear===b.dataset.fby)S.selectedYear=yList()[0]||null;
+          if(S.pendingYear===b.dataset.fby)S.pendingYear=S.selectedYear;
+          saveLocal(); }
+        toast(ok?'Deleted from cloud':'Delete failed',!ok);
+        renderAll(); renderAdmin();
+      });
+    }));
+  }
+  // upload zone file labels
+  ['elkPoints','deerPoints','elkRifleHarvest','elkArcheryHarvest','elkMuzzHarvest','deerRifleHarvest','deerArcheryHarvest','deerMuzzHarvest'].forEach(k=>{
+    const yd=S.pendingYear?S.years[S.pendingYear]:null, f=yd?.files?.[k];
+    const el=document.querySelector(`[data-file="${k}"]`), zone=document.querySelector(`[data-key="${k}"]`);
+    if(!el||!zone) return;
+    if(f){el.textContent='✓ '+f.name;zone.classList.add('hf');}
+    else{el.textContent='';zone.classList.remove('hf');}
+  });
+  // auto-update card
+  const m=await fbLoadAutoMeta();
+  const card=$('#autoCard');
+  if(!m){ card.innerHTML='The automatic updater hasn\'t run yet.'; return; }
+  const when=m.lastRun?.toDate?m.lastRun.toDate().toLocaleDateString():(m.lastRunStr||'—');
+  const dets=(m.details||'').split(' | ').filter(x=>x&&x!=='—');
+  card.innerHTML=`<div class="statusline"><strong>Last check:</strong> ${esc(when)} — ${esc(m.summary||'')}</div>`+
+    dets.map(d=>`<div class="statusline" style="${/FAILED|NEEDS MANUAL/.test(d)?'color:var(--bad)':''}">${esc(d)}</div>`).join('');
+}
+
+// ─── SYNC NOTE ────────────────────────────────────────────────────────────────
+function setSyncNote(cls,msg){ const el=$('#syncNote'); el.className='syncnote '+(cls||''); el.textContent=msg; }
+function snapshot(){ const o={}; yList().forEach(y=>{ const yd=S.years[y]; o[y]=yd.hunts.length+':'+Object.values(yd.harvestData||{}).reduce((s,h)=>s+Object.keys(h||{}).length,0); }); return o; }
+function diffSnapshot(prev){
+  const now=snapshot(); const changed=[];
+  for(const y of Object.keys(now)) if(prev[y]!==now[y]) changed.push(y);
+  return changed;
+}
+
+// ─── PAGES + TABS ─────────────────────────────────────────────────────────────
+function showPage(name){
+  $$('.page').forEach(p=>p.classList.toggle('active',p.dataset.page===name));
+  $$('.tab').forEach(t=>t.classList.toggle('on',t.dataset.tab===name));
+  if(name==='mylist') renderMyList();
+  if(name==='admin') renderAdmin();
+  window.scrollTo(0,0);
 }
 
 // ─── GLOBAL RENDER ────────────────────────────────────────────────────────────
-function switchPage(name){
-  $$('.page').forEach(p=>p.classList.toggle('active',p.dataset.page===name));
-  $$('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.page===name));
-  if(name==='favorites') renderFavs();
-  window.scrollTo({top:0,behavior:'smooth'});
+function renderYearSelect(){
+  const sel=$('#fYear'), yrs=yList();
+  sel.innerHTML=yrs.map(y=>`<option value="${y}" ${y===S.selectedYear?'selected':''}>${y}</option>`).join('');
 }
-function renderEmpty(){
-  const p=$('#emptyPrompt'), b=$('#navBadge'), empty=getH().length===0;
-  if(p) p.style.display=empty?'block':'none';
-  if(b) b.style.display=empty?'inline-block':'none';
-}
-function render(){
-  const pd=$('#pyDisp'); if(pd) pd.textContent=S.pendingYear||'none';
-  const yrs=yList();
-  const yv=$('#ySelView'), yc=$('#ySelCompare'), yctrl=$('#yctrl');
-  if(yv) yv.innerHTML=yrs.map(y=>`<option value="${y}" ${y===S.selectedYear?'selected':''}>${y}</option>`).join('');
-  if(yc) yc.innerHTML=['<option value="auto">Prior year (auto)</option>',...yrs.filter(y=>y!==S.selectedYear).map(y=>`<option value="${y}" ${y===S.compareYear?'selected':''}>${y}</option>`)].join('');
-  if(yctrl) yctrl.style.display=yrs.length>0?'flex':'none';
-  renderStatus(); renderTable(); renderEmpty();
-}
-function confirm2(msg, cb){
-  const w=document.createElement('div'); w.className='modal-backdrop open';
-  w.innerHTML=`<div class="modal" style="max-width:400px"><div class="mhead"><div><h3>${esc(msg)}</h3></div></div>
-    <div class="mbody"><div style="display:flex;gap:10px;justify-content:flex-end">
-      <button class="btn sec" data-no>Cancel</button><button class="btn dan" data-yes>Confirm</button>
-    </div></div></div>`;
-  document.body.appendChild(w);
-  w.querySelector('[data-yes]').addEventListener('click',()=>{document.body.removeChild(w);cb();});
-  w.querySelector('[data-no]').addEventListener('click',()=>document.body.removeChild(w));
-  w.addEventListener('click',e=>{if(e.target===w)document.body.removeChild(w);});
+function renderAll(){ renderPts(); renderYearSelect(); renderCards(); renderMyList(); }
+
+// ─── WIRING ───────────────────────────────────────────────────────────────────
+function wire(){
+  $$('.tab').forEach(t=>t.onclick=()=>showPage(t.dataset.tab));
+  $('#adminLink').onclick=()=>showPage('admin');
+  $('#adminLink2').onclick=()=>showPage('admin');
+  $('#adminBack').onclick=()=>showPage('hunts');
+  $('#shClose').onclick=closeDetail;
+  $('#shStar').onclick=()=>{ if(!sheetId)return; const [n,s]=sheetId.split('_'); toggleFav(n,s);
+    $('#shStar').textContent=isFav(n,s)?'★':'☆'; renderCards(); renderMyList(); };
+  // filters
+  const spSeg=$('#spSeg');
+  const paintSeg=()=>spSeg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.sp===P.sp));
+  paintSeg();
+  spSeg.querySelectorAll('button').forEach(b=>b.onclick=()=>{P.sp=b.dataset.sp;savePrefs();paintSeg();renderCards();});
+  $('#fWeapon').value=P.wep; $('#fWeapon').onchange=e=>{P.wep=e.target.value;savePrefs();renderCards();};
+  $('#fSort').value=P.sort;  $('#fSort').onchange=e=>{P.sort=e.target.value;savePrefs();renderCards();};
+  $('#fCanDraw').checked=P.canDraw; $('#fCanDraw').onchange=e=>{P.canDraw=e.target.checked;savePrefs();renderCards();};
+  $('#fSearch').oninput=()=>renderCards();
+  $('#fYear').onchange=e=>{S.selectedYear=e.target.value;saveLocal();renderCards();renderMyList();};
+  // admin
+  $('#btnSetYear').onclick=()=>{
+    const v=$('#pyInput').value.trim();
+    if(!/^\d{4}$/.test(v)){toast('Type a 4-digit year like 2026',true);return;}
+    S.pendingYear=v; saveLocal(); renderAdmin(); toast('Now editing '+v);
+  };
+  $$('.upzone input[type=file]').forEach(inp=>inp.addEventListener('change',e=>{
+    handleFile(inp.dataset.target, e.target.files[0]); e.target.value='';
+  }));
+  $('#btnClear').onclick=()=>confirm2('Clear the copy on this device? Cloud data is untouched and will reload.',()=>{
+    S.years={};S.selectedYear=null;S.pendingYear=null;
+    try{localStorage.removeItem(SK);}catch(e){}
+    renderAll(); toast('Cleared — reloading from cloud…'); init(false);
+  });
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
-async function renderCloudFiles(year) {
-  const panel = $('#cloudFilesPanel'), list = $('#cloudFilesList');
-  if (!panel || !list || !db) return;
-  panel.style.display = 'block';
-  list.innerHTML = '<span style="color:var(--tmut)">Loading cloud file info…</span>';
-  const meta = await fbLoadPdfMeta(year);
-  const keys = Object.keys(meta);
-  if (!keys.length) {
-    list.innerHTML = '<span style="color:var(--tmut)">No files recorded for this year yet.</span>';
-    return;
-  }
-  const LABELS = {
-    elkPoints:'Elk — Preference Points', deerPoints:'Deer — Preference Points',
-    elkRifleHarvest:'Elk — Rifle Harvest', elkArcheryHarvest:'Elk — Archery Harvest',
-    deerRifleHarvest:'Deer — Rifle Harvest', deerArcheryHarvest:'Deer — Archery Harvest'
-  };
-  list.innerHTML = keys.map(k => {
-    const m = meta[k];
-    const ts = m.uploadedAt?.toDate ? m.uploadedAt.toDate().toLocaleString() : '—';
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--borl);flex-wrap:wrap;gap:6px;">
-      <div>
-        <div style="font-weight:600;color:var(--gl)">${LABELS[k]||k}</div>
-        <div style="font-size:11px;color:var(--tmut)">${esc(m.fileName||'—')} &nbsp;·&nbsp; ${m.huntCount||0} hunts &nbsp;·&nbsp; Uploaded ${ts}</div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-async function init() {
-  const hadLocal = loadLocal();
-  const yi=$('#pyInput');
-  if(yi){yi.value=S.pendingYear||new Date().getFullYear();if(!S.pendingYear)S.pendingYear=String(new Date().getFullYear());}
-
-  // Wire nav FIRST — tabs work immediately before cloud load
-  $$('.nav-link').forEach(b=>b.addEventListener('click',()=>switchPage(b.dataset.page)));
-  $('#btnGoData')?.addEventListener('click',()=>switchPage('data'));
-  $('#btnViewDb')?.addEventListener('click',()=>switchPage('database'));
-
-  render();
-
-  // Firebase load
-  if(db){
-    banner('#dbBanner','','Loading data from cloud…',true);
-    banner('#dmBanner','','Connecting to cloud…',true);
-    const data = await fbLoad();
-    if(data&&Object.keys(data).length>0){
-      Object.entries(data).forEach(([year,yd])=>{
-        S.years[year]={hunts:yd.hunts,harvestData:yd.harvestData,files:{}};
-        applyHarvest(year);
-      });
-      if(!S.selectedYear) S.selectedYear=yList()[0]||null;
-      if(!S.pendingYear)  S.pendingYear=S.selectedYear;
-      saveLocal(); render();
-      const total=Object.values(data).reduce((s,y)=>s+(y.hunts?.length||0),0);
-      const newest=yList()[0], curYr=new Date().getFullYear();
-      const fresh=newest&&Number(newest)<curYr-1?` · Newest data: ${newest} — check ODFW for newer reports`:` · Newest data: ${newest}`;
-      banner('#dbBanner','ok',`${total} hunts loaded from cloud ✓${fresh}`,false);
-      banner('#dmBanner','ok','Cloud connected ✓ — uploads auto-save for everyone',false);
-      // Load PDF metadata for display in Data Manager
-      if(S.selectedYear) renderCloudFiles(S.selectedYear);
-    } else if(hadLocal&&getH().length>0){
-      banner('#dbBanner','ok','Showing local data (nothing in cloud yet)',false);
-      banner('#dmBanner','ok','Local data loaded. Upload files to share with others.',false);
-    } else {
-      banner('#dbBanner','err','No data in cloud yet. Upload files in Data Manager.',false);
-      banner('#dmBanner','','No cloud data yet. Upload files to get started.',false);
+async function init(firstRun){
+  if(firstRun){ loadLocal(); renderAll(); }
+  const before=snapshot();
+  setSyncNote('','Checking the cloud for new hunt data…');
+  const data=await fbLoad();
+  if(data && Object.keys(data).length){
+    for(const y of Object.keys(data)){
+      const localFiles=S.years[y]?.files||{};
+      S.years[y]={hunts:data[y].hunts,harvestData:data[y].harvestData,files:localFiles};
+      applyHarvest(y);
     }
+    if(!S.selectedYear||!S.years[S.selectedYear]) S.selectedYear=yList()[0];
+    if(!S.pendingYear) S.pendingYear=S.selectedYear;
+    saveLocal(); renderAll();
+    banner('ok','Cloud connected ✓',false);
+    const changed=diffSnapshot(before);
+    const m=await fbLoadAutoMeta();
+    const checkStr=m&&(m.lastRun?.toDate?m.lastRun.toDate().toLocaleDateString():m.lastRunStr)||null;
+    if(changed.length && !firstRunEmpty(before)){
+      setSyncNote('new',`✓ New data was added for ${changed.join(', ')} — you're seeing the latest.`);
+    } else {
+      const extra=m&&/no new data/.test(m.summary||'')?` ODFW checked ${checkStr}: no new reports yet.`:(checkStr?` Last ODFW check: ${checkStr}.`:'');
+      setSyncNote('ok',`✓ You have the latest data (newest season: ${yList()[0]}).${extra}`);
+    }
+  } else if(yList().length){
+    setSyncNote('err','Couldn\'t reach the cloud — showing this device\'s saved copy.');
   } else {
-    banner('#dbBanner','err','Firebase unavailable. Upload files locally.',false);
-    banner('#dmBanner','err','Firebase unavailable.',false);
+    setSyncNote('err','Couldn\'t load hunt data. Check your connection and reopen the app.');
+    banner('err','Cloud unreachable',false);
   }
-
-  // Auto-updater status (GitHub Actions writes meta/autoUpdate)
-  fbLoadAutoMeta().then(m=>{
-    const el=$('#autoStatus'); if(!el) return;
-    if(!m){ el.innerHTML='<span style="color:var(--tmut)">Auto-update: not run yet</span>'; return; }
-    const when=m.lastRun?.toDate ? m.lastRun.toDate().toLocaleDateString() : (m.lastRunStr||'—');
-    const what=m.summary||'checked ODFW';
-    el.innerHTML=`<span style="color:var(--gl)">Auto-update:</span> ${esc(when)} — ${esc(what)}`;
-  });
-
-  // Year picker
-  $('#btnSetYear')?.addEventListener('click',()=>{
-    const v=(yi?.value||'').trim();
-    if(!/^\d{4}$/.test(v)){toast('Enter a 4-digit year',true);return;}
-    S.pendingYear=v; if(!S.selectedYear)S.selectedYear=v;
-    saveLocal(); render(); toast(`Editing year ${v}`);
-  });
-  if(yi) yi.addEventListener('input',()=>{const d=$('#pyDisp');if(d)d.textContent=yi.value||'none';});
-
-  const ysv=$('#ySelView'), ysc=$('#ySelCompare');
-  if(ysv) ysv.addEventListener('change',()=>{S.selectedYear=ysv.value;saveLocal();render();renderCloudFiles(S.selectedYear);});
-  if(ysc) ysc.addEventListener('change',()=>{S.compareYear=ysc.value==='auto'?null:ysc.value;saveLocal();render();});
-
-  // File inputs & drag-drop
-  $$('input[type=file]').forEach(inp=>inp.addEventListener('change',e=>{handleFile(e.target.dataset.target,e.target.files[0]);e.target.value='';}));
-  $$('.upload-zone').forEach(zone=>{
-    const inp=zone.querySelector('input[type=file]');
-    ['dragenter','dragover'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();zone.classList.add('dv');}));
-    ['dragleave','drop'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();zone.classList.remove('dv');}));
-    zone.addEventListener('drop',e=>{const f=e.dataTransfer?.files;if(f?.[0])handleFile(inp.dataset.target,f[0]);});
-  });
-
-  // Filters
-  ['fSpecies','fWeapon','fElkPts','fDeerPts','fDrawability','fSearch'].forEach(id=>{
-    const el=$('#'+id); if(el) el.addEventListener('input',()=>render());
-  });
-  // Show/hide custom N-points field
-  const fDrawEl=$('#fDrawability'), reachField=$('#reachableField');
-  if(fDrawEl&&reachField){
-    const toggleReach=()=>{ reachField.style.display=fDrawEl.value==='reachable'?'block':'none'; };
-    fDrawEl.addEventListener('change', toggleReach);
-    toggleReach();
-  }
-  const fReachEl=$('#fReachablePts');
-  if(fReachEl) fReachEl.addEventListener('input',()=>render());
-
-
-
-  // Favorites modal button
-  $('#modalFavBtn')?.addEventListener('click',()=>{
-    const btn=$('#modalFavBtn');
-    if(btn?.dataset.fhunt) toggleFav(btn.dataset.fhunt, btn.dataset.fsp);
-  });
-
-  $('#btnClear')?.addEventListener('click',()=>{if(!Object.keys(S.years).length){toast('Nothing to clear');return;}confirm2('Clear all local data?',()=>clearLocal());});
-  $('#mClose')?.addEventListener('click',()=>$('#modal').classList.remove('open'));
-  $('#modal')?.addEventListener('click',e=>{if(e.target.id==='modal')$('#modal').classList.remove('open');});
 }
+function firstRunEmpty(before){ return Object.keys(before).length===0; }
 
-if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
-else init();
+wire();
+init(true);
 </script>
-
 </body>
 </html>
