@@ -1,0 +1,25 @@
+name: ODFW Data Auto-Update
+
+on:
+  schedule:
+    # 1st of every month, 9:15 AM Pacific (16:15 UTC). Draw reports post in fall;
+    # monthly checks catch them within ~30 days of release at near-zero cost.
+    - cron: '15 16 1 * *'
+  workflow_dispatch: {}
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install xlsx@0.18.5 --no-save
+
+      - name: Fetch ODFW draw reports and sync to Firebase
+        run: node ODFW/scripts/fetch-odfw.mjs
