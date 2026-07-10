@@ -140,10 +140,10 @@ footer a{color:#000}
 .toast.err{background:var(--bad);border-left-color:#fff}.toast.show{display:block}
 
 /* Favorites */
-.fav-btn{background:transparent;border:none;font-size:22px;cursor:pointer;padding:2px 6px;line-height:1;color:var(–tmut);-webkit-appearance:none;flex-shrink:0}
-.fav-btn:hover{color:var(–gold)}.fav-btn.active{color:var(–gold)}
-.fav-remove{background:transparent;border:1px solid var(–bad);color:var(–bad);font-size:11px;font-family:sans-serif;font-weight:600;text-transform:uppercase;padding:4px 8px;cursor:pointer;-webkit-appearance:none;border-radius:0}
-.fav-remove:hover{background:var(–badbg)}
+.fav-btn{background:transparent;border:none;font-size:22px;cursor:pointer;padding:2px 6px;line-height:1;color:var(--tmut);-webkit-appearance:none;flex-shrink:0}
+.fav-btn:hover{color:var(--gold)}.fav-btn.active{color:var(--gold)}
+.fav-remove{background:transparent;border:1px solid var(--bad);color:var(--bad);font-size:11px;font-family:sans-serif;font-weight:600;text-transform:uppercase;padding:4px 8px;cursor:pointer;-webkit-appearance:none;border-radius:0}
+.fav-remove:hover{background:var(--badbg)}
 </style>
 
 </head>
@@ -153,7 +153,7 @@ footer a{color:#000}
   <div class="site-header-inner">
     <div class="crest">ODFW</div>
     <div>
-      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v2.2</span></h1>
+      <h1 class="site-title">Oregon Controlled Hunt Planner <span class="ver">v2.3</span></h1>
       <div class="site-subtitle">Deer &amp; Elk &mdash; Draw Odds &amp; Harvest Statistics</div>
     </div>
   </div>
@@ -175,7 +175,6 @@ footer a{color:#000}
     <h2 class="page-title">Hunt Database</h2>
     <p class="page-lede">Data Loaded by Jaren &mdash; Subscription Fees Apply</p>
 
-```
 <div id="dbBanner" class="banner"><span class="spin"></span><span id="dbMsg">Loading data from cloud…</span></div>
 
 <div id="yctrl" class="yctrl" style="display:none">
@@ -231,7 +230,6 @@ footer a{color:#000}
     <tbody id="huntsBody"><tr><td colspan="9" class="empty"><span class="spin"></span> Loading…</td></tr></tbody>
   </table>
 </div>
-```
 
   </div>
 
@@ -267,7 +265,6 @@ footer a{color:#000}
     <h2 class="page-title">Data Manager</h2>
     <p class="page-lede">Upload ODFW reports. Files are parsed in your browser and automatically saved to the cloud — everyone sees the data instantly.</p>
 
-```
 <div id="dmBanner" class="banner"><span class="spin"></span><span id="dmMsg">Connecting to cloud…</span></div>
 
 <section class="panel">
@@ -278,7 +275,7 @@ footer a{color:#000}
         <span id="sdot" class="sdot"></span><strong id="stxt">No data</strong>
         <div id="sdet" style="font-size:12px;color:var(--tmut);margin-top:4px;font-family:sans-serif"></div>
       </div>
-      <div style="font-size:12px;color:var(--tmut);font-family:sans-serif">Last loaded: <span id="slast">—</span></div>
+      <div style="font-size:12px;color:var(--tmut);font-family:sans-serif;text-align:right">Last loaded: <span id="slast">—</span><div id="autoStatus" style="margin-top:4px"></div></div>
     </div>
   </div>
 </section>
@@ -308,9 +305,12 @@ footer a{color:#000}
   <div class="panel-head">Step 2 — Download from ODFW</div>
   <div class="panel-body">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <a class="src-btn" href="https://odfw.huntfishoregon.com/reportdownloads" target="_blank" rel="noopener">Point Summary</a>
-      <a class="src-btn" href="https://myodfw.com/articles/big-game-hunting-harvest-statistics" target="_blank" rel="noopener">Harvest Summary</a>
+      <a class="src-btn" href="https://myodfw.com/articles/point-summary-reports" target="_blank" rel="noopener">Point Summary Reports</a>
+      <a class="src-btn" href="https://myodfw.com/articles/big-game-hunting-harvest-statistics" target="_blank" rel="noopener">Harvest Statistics</a>
+      <a class="src-btn" href="https://odfw.huntfishoregon.com/reportdownloads" target="_blank" rel="noopener">ODFW Report Downloads (login)</a>
+      <a class="src-btn" href="https://myodfw.com/articles/eastern-oregon-deer-hunts" target="_blank" rel="noopener">2026 Deer Hunt Area Guide</a>
     </div>
+    <p class="htext">Grab the <strong>Preference Point Draw Report</strong> XLSX for each species (posted each fall after the June draw), and the harvest PDFs when seasons wrap up. The auto-updater also checks the Point Summary page monthly and loads new draw reports for you.</p>
   </div>
 </section>
 
@@ -332,7 +332,6 @@ footer a{color:#000}
     <p class="htext">Files parse in your browser, then auto-save to cloud. Everyone sees the data on their next page load — no manual sync needed.</p>
   </div>
 </section>
-```
 
   </div>
 
@@ -439,6 +438,12 @@ async function fbLoadPdfMeta(year) {
   } catch(e) { return {}; }
 }
 
+async function fbLoadAutoMeta() {
+  if (!db) return null;
+  try { const d = await db.collection('meta').doc('autoUpdate').get(); return d.exists ? d.data() : null; }
+  catch(e) { return null; }
+}
+
 async function fbLoad() {
   if (!db) return null;
   try {
@@ -509,15 +514,14 @@ function weapon(num, name) {
   if (na.includes('youth')) return 'youth';
   if (na.includes('muzzleload')) return 'muzz';
   if (na.includes('archery')||na.includes('bow')||na.includes('trad')) return 'archery';
-  if (/T\d*$/.test(n)) return 'youth';
-  if (/M$/.test(n)) return 'muzz';
-  if (/R\d*$/.test(n)) return 'archery';
+  // Suffix letter must follow a digit: catches 130R, NE101R1, 123M2, DG102T
+  // without misfiring on herd prefixes like CR101, JT101, ST101, MC102 (rifle)
+  if (/\dT\d*$/.test(n)) return 'youth';
+  if (/\dM\d*$/.test(n)) return 'muzz';
+  if (/\dR\d*$/.test(n)) return 'archery';
   return 'rifle';
 }
-function species(num) {
-  const n=parseInt(String(num).match(/^\d+/)?.[0]||'0',10);
-  return n>=100&&n<200?'deer':n>=200&&n<300?'elk':'other';
-}
+// species() removed in v2.3 — species comes from the upload zone, not the hunt ID
 const wLabel = w => ({rifle:'Rifle',archery:'Archery',muzz:'Muzz.',youth:'Youth'}[w]||w);
 
 // ─── DERIVE pts100 ────────────────────────────────────────────────────────────
@@ -550,31 +554,61 @@ function myOdds(h, myPts) {
 }
 
 // ─── XLSX ────────────────────────────────────────────────────────────────────
+// Universal parser: handles BOTH the pre-2026 grouped layout (hunt header row +
+// blank continuation rows carrying only point tiers) AND the 2026+ denormalized
+// layout (every row repeats full hunt info + one point tier). Hunt numbers may
+// be numeric (112), classic strings (119A), or 2026 herd-range IDs (NE101,
+// DG103M, MC101-2). Species always comes from the upload zone, never the ID.
 function parseXlsx(buf, sp) {
   const wb = XLSX.read(buf, {type:'array'});
   let ws = null;
   for (const n of wb.SheetNames) { if (/draw|point/i.test(n)){ws=wb.Sheets[n];break;} }
   if (!ws) ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, {header:1,raw:true,defval:null});
-  const hunts = []; let cur = null;
+
+  // Detect wrong report type (e.g. "Applicants by Hunt Choice") before parsing
+  for (let i = 0; i < Math.min(rows.length, 8); i++) {
+    const joined = (rows[i]||[]).map(c=>String(c??'')).join(' ');
+    if (/hunt choice/i.test(joined) || /1st Choice/i.test(joined))
+      throw new Error('This is the "Applicants by Hunt Choice" report. Upload the "Preference Point Draw Report" XLSX instead.');
+  }
+
+  const byNum = new Map(); let last = null;
+  const isNum = v => typeof v === 'number' && isFinite(v);
   for (const r of rows) {
-    if (!r) continue;
-    const isH = r[0]&&typeof r[0]==='string'&&r[0].trim()&&r[1]&&typeof r[1]==='string'&&r[1].trim()&&typeof r[2]==='number';
-    if (isH) {
-      if (cur) { derive(cur); hunts.push(cur); }
-      cur = {
-        huntNum:String(r[0]).trim(), huntName:String(r[1]).trim(), tags:Number(r[2])||0,
-        residentApps:Number(r[3])||0, residentDrawn:Number(r[4])||0,
-        nonResidentApps:Number(r[5])||0, nonResidentDrawn:Number(r[6])||0,
-        totalApps:Number(r[7])||0, totalDrawn:Number(r[8])||0,
-        species:sp, weapon:weapon(r[0],r[1]), pointBreakdown:[], harvest:null
-      };
-      if (typeof r[12]==='number') cur.pointBreakdown.push({points:Number(r[12]),apps:Number(r[13])||0,resApps:Number(r[14])||0,resDrawn:Number(r[15])||0,nrApps:Number(r[16])||0,nrDrawn:Number(r[17])||0});
-    } else if (cur && typeof r[12]==='number') {
-      cur.pointBreakdown.push({points:Number(r[12]),apps:Number(r[13])||0,resApps:Number(r[14])||0,resDrawn:Number(r[15])||0,nrApps:Number(r[16])||0,nrDrawn:Number(r[17])||0});
+    if (!r || !r.length) continue;
+    const rawNum = r[0], rawName = r[1];
+    const hasId = rawNum !== null && rawNum !== undefined && String(rawNum).trim() !== '';
+    const hasName = typeof rawName === 'string' && rawName.trim() !== '';
+    // A row carries hunt info if it has an ID, a text name, and numeric tags.
+    // Header rows fail this (r[2] is the text "Tags Authorized").
+    if (hasId && hasName && isNum(r[2])) {
+      const key = String(rawNum).trim();
+      let h = byNum.get(key);
+      if (!h) {
+        h = {
+          huntNum:key, huntName:String(rawName).trim(), tags:Number(r[2])||0,
+          residentApps:Number(r[3])||0, residentDrawn:Number(r[4])||0,
+          nonResidentApps:Number(r[5])||0, nonResidentDrawn:Number(r[6])||0,
+          totalApps:Number(r[7])||0, totalDrawn:Number(r[8])||0,
+          species:sp, weapon:weapon(key,rawName), pointBreakdown:[], harvest:null
+        };
+        byNum.set(key, h);
+      }
+      last = h;
+      if (isNum(r[12]) && !h.pointBreakdown.some(p=>p.points===Number(r[12])))
+        h.pointBreakdown.push({points:Number(r[12]),apps:Number(r[13])||0,resApps:Number(r[14])||0,resDrawn:Number(r[15])||0,nrApps:Number(r[16])||0,nrDrawn:Number(r[17])||0});
+    } else if (last && isNum(r[12])) {
+      // Old-format continuation row: point tier only, belongs to previous hunt
+      if (!last.pointBreakdown.some(p=>p.points===Number(r[12])))
+        last.pointBreakdown.push({points:Number(r[12]),apps:Number(r[13])||0,resApps:Number(r[14])||0,resDrawn:Number(r[15])||0,nrApps:Number(r[16])||0,nrDrawn:Number(r[17])||0});
     }
   }
-  if (cur) { derive(cur); hunts.push(cur); }
+  const hunts = [...byNum.values()];
+  hunts.forEach(derive);
+  if (!hunts.length) throw new Error('No hunts found — is this a Preference Point Draw Report XLSX?');
+  const noTiers = hunts.filter(h=>!h.pointBreakdown.length).length;
+  if (noTiers > 0) console.warn(`[parse] ${noTiers} hunts have no point-tier rows`);
   return hunts;
 }
 
@@ -585,7 +619,8 @@ async function parsePdf(buf) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   const pdf = await pdfjsLib.getDocument({data:buf}).promise;
   const out = {};
-  const huntRe = /\b(\d{3}[A-Z]\d{0,2})\b/g;
+  // Matches classic IDs (139R2, 216) and 2026+ herd-range IDs (NE101, DG103M, MC101-2)
+  const huntRe = /\b([A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?|\d{3}[A-Z]\d{0,2})\b/g;
   window._pdfDebug = {};
 
   for (let p=1; p<=pdf.numPages; p++) {
@@ -640,11 +675,12 @@ async function parsePdf(buf) {
 
 function parseHarvestXlsx(buf) {
   const wb=XLSX.read(buf,{type:'array'}), ws=wb.Sheets[wb.SheetNames[0]];
-  const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null}), out={}, re=/^\d{3}[A-Z]?\d*$/;
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null}), out={}, re=/^(\d{3}[A-Z]?\d*|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/;
   rows.forEach(r=>{
     if(!r) return;
     for(let i=0;i<r.length;i++){
-      const v=r[i];
+      let v=r[i];
+      if(typeof v==='number'&&Number.isInteger(v)&&v>=100&&v<1000) v=String(v);
       if(typeof v==='string'&&re.test(v.trim())){
         const num=v.trim(); let pct=null;
         for(let j=r.length-1;j>i;j--){const c=r[j];if(typeof c==='number'&&c<=1){pct=c*100;break}if(typeof c==='string'){const m=c.match(/^(\d+(?:\.\d+)?)%?$/);if(m){pct=Number(m[1]);break}}}
@@ -1102,7 +1138,9 @@ async function init() {
       if(!S.pendingYear)  S.pendingYear=S.selectedYear;
       saveLocal(); render();
       const total=Object.values(data).reduce((s,y)=>s+(y.hunts?.length||0),0);
-      banner('#dbBanner','ok',`${total} hunts loaded from cloud ✓`,false);
+      const newest=yList()[0], curYr=new Date().getFullYear();
+      const fresh=newest&&Number(newest)<curYr-1?` · Newest data: ${newest} — check ODFW for newer reports`:` · Newest data: ${newest}`;
+      banner('#dbBanner','ok',`${total} hunts loaded from cloud ✓${fresh}`,false);
       banner('#dmBanner','ok','Cloud connected ✓ — uploads auto-save for everyone',false);
       // Load PDF metadata for display in Data Manager
       if(S.selectedYear) renderCloudFiles(S.selectedYear);
@@ -1117,6 +1155,15 @@ async function init() {
     banner('#dbBanner','err','Firebase unavailable. Upload files locally.',false);
     banner('#dmBanner','err','Firebase unavailable.',false);
   }
+
+  // Auto-updater status (GitHub Actions writes meta/autoUpdate)
+  fbLoadAutoMeta().then(m=>{
+    const el=$('#autoStatus'); if(!el) return;
+    if(!m){ el.innerHTML='<span style="color:var(--tmut)">Auto-update: not run yet</span>'; return; }
+    const when=m.lastRun?.toDate ? m.lastRun.toDate().toLocaleDateString() : (m.lastRunStr||'—');
+    const what=m.summary||'checked ODFW';
+    el.innerHTML=`<span style="color:var(--gl)">Auto-update:</span> ${esc(when)} — ${esc(what)}`;
+  });
 
   // Year picker
   $('#btnSetYear')?.addEventListener('click',()=>{
