@@ -16,10 +16,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install dependencies
         run: npm install xlsx@0.18.5 --no-save
 
       - name: Fetch ODFW draw reports and sync to Firebase
-        run: node ODFW/scripts/fetch-odfw.mjs
+        run: node scripts/fetch-odfw.mjs
