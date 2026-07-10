@@ -179,8 +179,9 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div><h1 class="serif">Oregon Hunt Planner <span class="ver">v3.3</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v3.4</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
+  <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
 
 <div class="syncnote" id="syncNote">Loading hunt data…</div>
@@ -252,6 +253,21 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 <!-- ═══ ADMIN (hidden) ═══ -->
 <div class="page" data-page="admin">
   <button class="btn" id="adminBack" style="margin-bottom:14px">‹ Back to the app</button>
+
+  <div class="panel"><div class="pbody">
+    <p class="ptitle">Special requirement tags</p>
+    <p class="help" style="margin-bottom:12px">Tags mark hunts as youth-only, spike-only, and so on. You can create your own labels and manually add or remove any tag on any hunt — handy when ODFW's hunt name doesn't spell it out.</p>
+    <div class="steph" style="font-size:.95rem"><span class="stepnum" style="width:26px;height:26px;font-size:.8rem">A</span> Your custom labels</div>
+    <div id="customList"></div>
+    <div style="display:flex;gap:8px;margin:8px 0 4px">
+      <input type="text" id="newLabel" placeholder="New label (e.g. Rifle only)" style="flex:1">
+      <button class="btn" id="btnAddLabel" style="min-height:54px;flex:0 0 auto">Add</button>
+    </div>
+    <div class="steph" style="font-size:.95rem;margin-top:16px"><span class="stepnum" style="width:26px;height:26px;font-size:.8rem">B</span> Tag a specific hunt</div>
+    <p class="help" style="margin-bottom:8px">Find a hunt, then tap tags to turn them on or off for it.</p>
+    <input type="search" id="tagHuntSearch" placeholder="Search hunt name or number" style="margin-bottom:8px">
+    <div id="tagHuntResults"></div>
+  </div></div>
 
   <div class="banner" id="dmBanner"><span class="spin"></span><span>Connecting to cloud…</span></div>
 
@@ -475,6 +491,18 @@ function banner(type, msg, spin) {
   el.className = 'banner' + (type ? ' '+type : '');
   el.innerHTML = (spin ? '<span class="spin"></span>' : '') + '<span>' + esc(msg) + '</span>';
 }
+function pinPrompt(cb){
+  const box=$('#confirmBox');
+  $('#confirmMsg').innerHTML='Enter Settings PIN<br><input type="tel" inputmode="numeric" id="pinField" maxlength="8" style="margin-top:12px;width:100%;text-align:center;font-size:1.6rem;letter-spacing:.4em" autocomplete="off">';
+  box.classList.add('open');
+  const yes=$('#confirmYes'), no=$('#confirmNo');
+  yes.textContent='Unlock'; no.textContent='Cancel';
+  const field=$('#pinField'); setTimeout(()=>field.focus(),50);
+  const close=()=>{ box.classList.remove('open'); yes.onclick=no.onclick=null; yes.textContent='Yes, do it'; };
+  field.onkeydown=e=>{ if(e.key==='Enter'){ const v=field.value; close(); cb(v); } };
+  yes.onclick=()=>{ const v=field.value; close(); cb(v); };
+  no.onclick=close;
+}
 function confirm2(msg, cb){
   $('#confirmMsg').textContent = msg;
   const box = $('#confirmBox'); box.classList.add('open');
@@ -560,17 +588,39 @@ function grade(h) {
   }
   return 100 * quality * (0.35 + 0.65 * d);
 }
-// Special hunt requirements — keyed so each can be shown/hidden in the filter
-const SPECIAL_DEFS = [
-  {k:'youth',     label:'Youth only',        test:h=>h.weapon==='youth'},
-  {k:'spike',     label:'Spike bulls only',  test:h=>/spike/i.test(h.huntName||'')},
-  {k:'trad',      label:'Traditional bow',   test:h=>/trad/i.test(h.huntName||'')},
-  {k:'whitetail', label:'Whitetail',         test:h=>/whitetail/i.test(h.huntName||'')},
-  {k:'late',      label:'Late season',       test:h=>/\blate\b/i.test(h.huntName||'')},
-  {k:'damage',    label:'Damage hunt',       test:h=>/emergency|damage/i.test(h.huntName||'')}
+// Special hunt requirements. Built-in rules auto-detect from the hunt name;
+// users can add custom labels and manually tag/untag individual hunts (stored
+// in localStorage, keyed by huntNum_species).
+const BUILTIN_SPECIALS = [
+  {k:'youth',     label:'Youth only',        rx:null, auto:h=>h.weapon==='youth'},
+  {k:'spike',     label:'Spike bulls only',  rx:'spike'},
+  {k:'trad',      label:'Traditional bow',   rx:'trad'},
+  {k:'whitetail', label:'Whitetail',         rx:'whitetail'},
+  {k:'late',      label:'Late season',       rx:'\\blate\\b'},
+  {k:'damage',    label:'Damage hunt',       rx:'emergency|damage'}
 ];
-function specialKeys(h){ return SPECIAL_DEFS.filter(d=>d.test(h)).map(d=>d.k); }
-function specialTags(h){ return SPECIAL_DEFS.filter(d=>d.test(h)).map(d=>d.label); }
+const CUSTOM_K='odfw_special_custom_v1';   // [{k,label,rx}]
+const OVERRIDE_K='odfw_special_over_v1';   // {huntKey:{add:[k],remove:[k]}}
+const loadJSON=(k,d)=>{ try{ return JSON.parse(localStorage.getItem(k))??d; }catch(e){ return d; } };
+const saveJSON=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
+const hkey=h=>h.huntNum+'_'+h.species;
+function allSpecialDefs(){ return BUILTIN_SPECIALS.concat(loadJSON(CUSTOM_K,[])); }
+function specialKeys(h){
+  const defs=allSpecialDefs(), ov=loadJSON(OVERRIDE_K,{})[hkey(h)]||{};
+  const name=(h.huntName||'');
+  const set=new Set();
+  defs.forEach(d=>{
+    let hit=false;
+    if(d.auto) hit=d.auto(h);
+    else if(d.rx){ try{ hit=new RegExp(d.rx,'i').test(name); }catch(e){} }
+    if(hit) set.add(d.k);
+  });
+  (ov.remove||[]).forEach(k=>set.delete(k));
+  (ov.add||[]).forEach(k=>set.add(k));
+  return [...set];
+}
+const labelFor=k=>{ const d=allSpecialDefs().find(x=>x.k===k); return d?d.label:k; };
+function specialTags(h){ return specialKeys(h).map(labelFor); }
 
 // All years (newest first) where this hunt has harvest results
 function harvestYears(h){
@@ -1090,7 +1140,68 @@ function renderMyList(){
 }
 
 // ─── RENDER: admin ────────────────────────────────────────────────────────────
+function renderSpecialMgr(){
+  const custom=loadJSON(CUSTOM_K,[]);
+  const cl=$('#customList');
+  if(cl){
+    cl.innerHTML = custom.length
+      ? custom.map(d=>`<div class="yrow" style="padding:8px 0"><span style="font-weight:600">${esc(d.label)}</span>
+          <button class="bmini dan" data-delk="${esc(d.k)}">Remove</button></div>`).join('')
+      : '<p class="help" style="margin:0">No custom labels yet.</p>';
+    cl.querySelectorAll('[data-delk]').forEach(b=>b.onclick=()=>{
+      confirm2('Remove the "'+labelFor(b.dataset.delk)+'" label? It will be cleared from any hunts using it.',()=>{
+        saveJSON(CUSTOM_K, loadJSON(CUSTOM_K,[]).filter(d=>d.k!==b.dataset.delk));
+        const ov=loadJSON(OVERRIDE_K,{});
+        Object.keys(ov).forEach(hk=>{ ['add','remove'].forEach(t=>{ if(ov[hk][t]) ov[hk][t]=ov[hk][t].filter(k=>k!==b.dataset.delk); }); });
+        saveJSON(OVERRIDE_K,ov);
+        delete P.specialShow[b.dataset.delk]; savePrefs();
+        renderSpecialMgr(); if(window._renderSpChecks)window._renderSpChecks(); renderCards();
+        toast('Label removed');
+      });
+    });
+  }
+  renderTagHuntResults();
+}
+function renderTagHuntResults(){
+  const box=$('#tagHuntResults'); if(!box) return;
+  const q=($('#tagHuntSearch')?.value||'').trim().toLowerCase();
+  if(!q){ box.innerHTML='<p class="help" style="margin:0">Type above to find a hunt.</p>'; return; }
+  const hits=getH().filter(h=>(h.huntNum+' '+h.huntName).toLowerCase().includes(q)).slice(0,12);
+  if(!hits.length){ box.innerHTML='<p class="help" style="margin:0">No hunts match.</p>'; return; }
+  const defs=allSpecialDefs();
+  box.innerHTML=hits.map(h=>{
+    const active=new Set(specialKeys(h));
+    const chips=defs.map(d=>`<button class="hsel ${active.has(d.k)?'on':''}" data-tag="${esc(hkey(h))}" data-tk="${esc(d.k)}" style="min-height:40px;font-size:.82rem">${esc(d.label)}</button>`).join('');
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--card2)">
+      <div style="font-weight:700;margin-bottom:6px"><span style="color:var(--gold)">${esc(h.huntNum)}</span> ${esc(h.huntName)} <span class="help" style="margin:0">· ${wLabel(h.weapon)} ${h.species}</span></div>
+      <div class="hselrow" style="margin:0">${chips}</div></div>`;
+  }).join('');
+  box.querySelectorAll('[data-tag]').forEach(b=>b.onclick=()=>{
+    toggleHuntTag(b.dataset.tag, b.dataset.tk);
+    renderTagHuntResults(); renderCards();
+  });
+}
+function toggleHuntTag(huntKey, k){
+  const [num,sp]=huntKey.split('_');
+  const h=getH().find(x=>x.huntNum===num&&x.species===sp); if(!h) return;
+  const defs=allSpecialDefs(), d=defs.find(x=>x.k===k);
+  let auto=false; const name=h.huntName||'';
+  if(d){ if(d.auto)auto=d.auto(h); else if(d.rx){ try{auto=new RegExp(d.rx,'i').test(name);}catch(e){} } }
+  const ov=loadJSON(OVERRIDE_K,{}); const cur=ov[huntKey]||{add:[],remove:[]};
+  cur.add=cur.add||[]; cur.remove=cur.remove||[];
+  const isOn=specialKeys(h).includes(k);
+  if(isOn){
+    cur.add=cur.add.filter(x=>x!==k);
+    if(auto && !cur.remove.includes(k)) cur.remove.push(k);
+  } else {
+    cur.remove=cur.remove.filter(x=>x!==k);
+    if(!auto && !cur.add.includes(k)) cur.add.push(k);
+  }
+  if(!cur.add.length && !cur.remove.length) delete ov[huntKey]; else ov[huntKey]=cur;
+  saveJSON(OVERRIDE_K,ov);
+}
 async function renderAdmin(){
+  renderSpecialMgr();
   $('#pyDisp').textContent=S.pendingYear||'none';
   if($('#pyInput')&&!$('#pyInput').value&&S.pendingYear) $('#pyInput').value=S.pendingYear;
   // years list
@@ -1162,8 +1273,19 @@ function renderAll(){ renderPts(); renderYearSelect(); renderCards(); renderMyLi
 // ─── WIRING ───────────────────────────────────────────────────────────────────
 function wire(){
   $$('.tab').forEach(t=>t.onclick=()=>showPage(t.dataset.tab));
-  $('#adminLink').onclick=()=>showPage('admin');
-  $('#adminLink2').onclick=()=>showPage('admin');
+  const ADMIN_PIN='2325';
+  let pinOk=false;
+  function openAdmin(){ showPage('admin'); }
+  function gate(){
+    if(pinOk){ openAdmin(); return; }
+    pinPrompt(pin=>{
+      if(pin===ADMIN_PIN){ pinOk=true; openAdmin(); }
+      else toast('Wrong PIN',true);
+    });
+  }
+  $('#gearBtn').onclick=gate;
+  $('#adminLink').onclick=gate;
+  $('#adminLink2').onclick=gate;
   $('#adminBack').onclick=()=>showPage('hunts');
   $('#shClose').onclick=closeDetail;
   $('#shStar').onclick=()=>{ if(!sheetId)return; const [n,s]=sheetId.split('_'); toggleFav(n,s);
@@ -1177,11 +1299,15 @@ function wire(){
   $('#fSort').value=P.sort;  $('#fSort').onchange=e=>{P.sort=e.target.value;savePrefs();renderCards();};
   $('#fCanDraw').checked=P.canDraw; $('#fCanDraw').onchange=e=>{P.canDraw=e.target.checked;savePrefs();renderCards();};
   $('#spBtn').onclick=()=>{const p=$('#spPanel');p.style.display=p.style.display==='none'?'block':'none';};
-  $('#spChecks').innerHTML=SPECIAL_DEFS.map(d=>`<label class="chkrow" style="margin-bottom:8px"><input type="checkbox" data-spk="${d.k}" ${P.specialShow[d.k]!==false?'checked':''}><span>${d.label}</span></label>`).join('');
-  const spSum=()=>{const off=SPECIAL_DEFS.filter(d=>P.specialShow[d.k]===false).map(d=>d.label);
+  const renderSpChecks=()=>{
+    $('#spChecks').innerHTML=allSpecialDefs().map(d=>`<label class="chkrow" style="margin-bottom:8px"><input type="checkbox" data-spk="${d.k}" ${P.specialShow[d.k]!==false?'checked':''}><span>${esc(d.label)}</span></label>`).join('');
+    $$('#spChecks input').forEach(i=>i.onchange=e=>{P.specialShow[i.dataset.spk]=e.target.checked;savePrefs();spSum();renderCards();});
+  };
+  const spSum=()=>{const off=allSpecialDefs().filter(d=>P.specialShow[d.k]===false).map(d=>d.label);
     $('#spSum').textContent=off.length?off.join(', ')+' hidden':'All shown';};
+  window._renderSpChecks=renderSpChecks;
+  renderSpChecks();
   spSum();
-  $$('#spChecks input').forEach(i=>i.onchange=e=>{P.specialShow[i.dataset.spk]=e.target.checked;savePrefs();spSum();renderCards();});
   $('#fSearch').oninput=()=>renderCards();
   $('#fYear').onchange=e=>{S.selectedYear=e.target.value;saveLocal();renderCards();renderMyList();};
   // admin
@@ -1190,6 +1316,20 @@ function wire(){
     if(!/^\d{4}$/.test(v)){toast('Type a 4-digit year like 2026',true);return;}
     S.pendingYear=v; saveLocal(); renderAdmin(); toast('Now editing '+v);
   };
+  // special-requirement manager
+  $('#btnAddLabel').onclick=()=>{
+    const inp=$('#newLabel'), label=inp.value.trim();
+    if(!label){ toast('Type a label first',true); return; }
+    const custom=loadJSON(CUSTOM_K,[]);
+    if(allSpecialDefs().some(d=>d.label.toLowerCase()===label.toLowerCase())){ toast('That label already exists',true); return; }
+    const k='c_'+Date.now().toString(36);
+    custom.push({k,label}); saveJSON(CUSTOM_K,custom);
+    P.specialShow[k]=true; savePrefs();
+    inp.value='';
+    renderSpecialMgr(); if(window._renderSpChecks)window._renderSpChecks(); renderCards();
+    toast('Label added — now tag hunts with it below');
+  };
+  $('#tagHuntSearch').oninput=()=>renderTagHuntResults();
   $$('.upzone input[type=file]').forEach(inp=>inp.addEventListener('change',e=>{
     handleFile(inp.dataset.target, e.target.files[0]); e.target.value='';
   }));
