@@ -1,26 +1,22 @@
-// ODFW Auto-Updater — fetches Preference Point Draw Reports from myodfw.com,
-// parses them with the same logic as the app, and syncs to Firestore.
-// Runs via GitHub Actions (see .github/workflows/odfw-fetch.yml).
+// ODFW Auto-Updater v2 — draw reports (XLSX) + harvest statistics (PDF).
+// Runs monthly via GitHub Actions. Fails safe: bad parses are never written.
 //
-// Usage:
-//   node scripts/fetch-odfw.mjs              live run
-//   node scripts/fetch-odfw.mjs --dry        fetch + parse, print plan, write nothing
-//   node scripts/fetch-odfw.mjs --local f.xlsx --species deer --year 2026 --dry
-//                                            parse a local file (testing)
+//   node scripts/fetch-odfw.mjs          live run
+//   node scripts/fetch-odfw.mjs --dry    fetch + parse, write nothing
 import * as XLSX from 'xlsx';
-import { readFileSync } from 'fs';
+import pdfjs from 'pdfjs-dist/legacy/build/pdf.js';
+const { getDocument } = pdfjs;
 
 const PROJECT = 'oregon-hunting';
 const API_KEY = 'AIzaSyCqbU875vWyWS0dQWr0hoqVRscH2AtU_v4';
 const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
-const SOURCE_PAGE = 'https://myodfw.com/articles/point-summary-reports';
+const DRAW_PAGE = 'https://myodfw.com/articles/point-summary-reports';
+const HARVEST_PAGE = 'https://myodfw.com/articles/big-game-hunting-harvest-statistics';
 const CHUNK = 150;
+const UA = { 'User-Agent': 'Mozilla/5.0 (ODFW-planner-bot; personal use)' };
+const DRY = process.argv.includes('--dry');
 
-const args = process.argv.slice(2);
-const DRY = args.includes('--dry');
-const arg = k => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : null; };
-
-// ── Parsing (mirrors index.html v2.3 exactly) ────────────────────────────────
+// ═══ Shared classification (mirrors index.html) ═══════════════════════════════
 function weapon(num, name) {
   const n = String(num || '').toUpperCase(), na = String(name || '').toLowerCase();
   if (na.includes('youth')) return 'youth';
@@ -38,10 +34,11 @@ function derive(h) {
     if (p.resDrawn > 0) minPts = p.points;
     if (p.resApps > 0 && p.resDrawn >= p.resApps) pts100 = p.points;
   }
-  h.pts100 = pts100;
-  h.minPointsToDraw = minPts;
+  h.pts100 = pts100; h.minPointsToDraw = minPts;
   h.resOdds = h.residentApps > 0 ? (h.residentDrawn / h.residentApps) * 100 : null;
 }
+
+// ═══ Draw report XLSX parser (handles pre-2026 and 2026+ layouts) ═════════════
 function parseHunts(buf, sp) {
   const wb = XLSX.read(buf, { type: 'buffer' });
   let ws = null;
@@ -84,168 +81,279 @@ function parseHunts(buf, sp) {
   return hunts;
 }
 
-// ── Firestore REST helpers (open rules — API key only) ───────────────────────
+// ═══ Harvest PDF parser (line-based, aggregating, validated) ══════════════════
+const ID_RE = /^(\d{3}(?:[A-Z]\d{0,2})?|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/;
+const NUM_RE = /^\d{1,6}$/;
+
+async function pdfToLines(buf) {
+  const doc = await getDocument({ data: new Uint8Array(buf), useSystemFonts: true }).promise;
+  const lines = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    const page = await doc.getPage(p);
+    const tc = await page.getTextContent();
+    const rows = new Map();
+    for (const it of tc.items) {
+      if (!it.str || !it.str.trim()) continue;
+      const y = Math.round(it.transform[5] / 3) * 3;
+      if (!rows.has(y)) rows.set(y, []);
+      rows.get(y).push({ x: it.transform[4], str: it.str.trim() });
+    }
+    for (const y of [...rows.keys()].sort((a, b) => b - a)) {
+      const items = rows.get(y).sort((a, b) => a.x - b.x);
+      lines.push(items.map(i => i.str).join(' ').replace(/\s+/g, ' ').trim());
+    }
+  }
+  return lines;
+}
+
+function parseHarvestLines(lines, defaultK) {
+  const all = lines.join('\n');
+  let k = defaultK;
+  if (/6\s*pt\s*\+/i.test(all)) k = 11;
+  else if (/4\s*\+\s*pt/i.test(all)) k = 9;
+  const agg = new Map();
+  for (const raw of lines) {
+    const line = raw.trim();
+    const pm = line.match(/(\d+)\s*%$/);
+    if (!pm) continue;
+    const toks = line.replace(/\s*\d+\s*%$/, '').trim().split(/\s+/);
+    let id = null, idIdx = -1;
+    for (let i = 0; i < toks.length; i++) {
+      const t = toks[i];
+      if (ID_RE.test(t)) { id = t; idIdx = i; break; }
+      if (NUM_RE.test(t)) break;
+      if (/^general$/i.test(t) || t === 'w/') break;
+    }
+    if (!id) continue;
+    const nums = [];
+    for (let i = idIdx + 1; i < toks.length; i++)
+      if (NUM_RE.test(toks[i])) nums.push(Number(toks[i]));
+    if (nums.length < k) continue;
+    const n = nums.slice(-k);
+    let hu, da, al, tb, th, sp, t2, t3, t4, t5, t6;
+    if (k === 11) [hu, da, al, tb, th, sp, t2, t3, t4, t5, t6] = n;
+    else { [hu, da, al, tb, th, sp, t2, t3, t4] = n.slice(0, 9); t5 = 0; t6 = 0; }
+    const cur = agg.get(id) || { huntNum: id, hunters: 0, days: 0, antlerless: 0,
+      totalBull: 0, totalHarvest: 0, spike: 0, twoPt: 0, threePt: 0, fourPt: 0, fivePt: 0, sixPlusPt: 0 };
+    cur.hunters += hu; cur.days += da; cur.antlerless += al; cur.totalBull += tb;
+    cur.totalHarvest += th; cur.spike += sp; cur.twoPt += t2; cur.threePt += t3;
+    cur.fourPt += t4; cur.fivePt += t5; cur.sixPlusPt += t6;
+    agg.set(id, cur);
+  }
+  const out = {};
+  for (const [id, h] of agg) {
+    h.successPct = h.hunters > 0 ? Math.round((h.totalHarvest / h.hunters) * 100) : 0;
+    h.antlerValid = (h.spike + h.twoPt + h.threePt + h.fourPt + h.fivePt + h.sixPlusPt) > 0;
+    out[id] = h;
+  }
+  return out;
+}
+
+function validateHarvest(out, knownIds) {
+  const ids = Object.keys(out);
+  if (ids.length < 25) return { ok: false, reason: `only ${ids.length} hunts parsed` };
+  const sane = ids.filter(id => out[id].successPct >= 0 && out[id].successPct <= 150).length;
+  if (sane / ids.length < 0.9) return { ok: false, reason: 'success rates out of range' };
+  if (knownIds && knownIds.size) {
+    const match = ids.filter(id => knownIds.has(id)).length;
+    if (match / ids.length < 0.4) return { ok: false, reason: `only ${match}/${ids.length} IDs match draw data` };
+  }
+  return { ok: true, count: ids.length };
+}
+
+// ═══ Firestore REST ═══════════════════════════════════════════════════════════
 async function fs_(method, path, body) {
   const url = `${BASE}/${path}${path.includes('?') ? '&' : '?'}key=${API_KEY}`;
-  const res = await fetch(url, {
-    method, headers: { 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined
-  });
+  const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Firestore ${method} ${path}: ${res.status} ${await res.text()}`);
   return res.json();
 }
-const V = {
-  s: v => ({ stringValue: String(v) }),
-  i: v => ({ integerValue: String(v) }),
-  t: d => ({ timestampValue: d.toISOString() })
-};
-const gv = f => f == null ? null
-  : 'stringValue' in f ? f.stringValue
-  : 'integerValue' in f ? Number(f.integerValue)
-  : 'timestampValue' in f ? f.timestampValue : null;
+const V = { s: v => ({ stringValue: String(v) }), i: v => ({ integerValue: String(v) }), t: d => ({ timestampValue: d.toISOString() }) };
+const gv = f => f == null ? null : 'stringValue' in f ? f.stringValue : 'integerValue' in f ? Number(f.integerValue) : 'timestampValue' in f ? f.timestampValue : null;
 
-async function loadExistingHunts(year) {
+async function loadYear(year) {
   const doc = await fs_('GET', `years/${year}`);
-  if (!doc) return { exists: false, hunts: [], chunkCount: 0 };
+  if (!doc) return null;
   const chunkCount = Number(gv(doc.fields?.chunkCount) || 0);
   let hunts = [];
   for (let ci = 0; ci < chunkCount; ci++) {
     const cd = await fs_('GET', `years/${year}/chunks/${ci}`);
     if (cd) hunts = hunts.concat(JSON.parse(gv(cd.fields?.hunts) || '[]'));
   }
-  return { exists: true, hunts, chunkCount };
+  return { hunts, chunkCount };
 }
-
-async function writeYear(year, hunts, oldChunkCount) {
+async function writeYearHunts(year, hunts, oldChunkCount) {
   const chunks = [];
   for (let i = 0; i < hunts.length; i += CHUNK) chunks.push(hunts.slice(i, i + CHUNK));
-  await fs_('PATCH', `years/${year}`, { fields: {
-    year: V.s(year), huntCount: V.i(hunts.length), chunkCount: V.i(chunks.length), updatedAt: V.t(new Date())
-  }});
+  await fs_('PATCH', `years/${year}`, { fields: { year: V.s(year), huntCount: V.i(hunts.length), chunkCount: V.i(chunks.length), updatedAt: V.t(new Date()) } });
   for (let ci = 0; ci < chunks.length; ci++)
     await fs_('PATCH', `years/${year}/chunks/${ci}`, { fields: { hunts: V.s(JSON.stringify(chunks[ci])) } });
   for (let ci = chunks.length; ci < oldChunkCount; ci++)
     await fs_('DELETE', `years/${year}/chunks/${ci}`).catch(() => {});
 }
-
+async function getHarvestDoc(year) {
+  const d = await fs_('GET', `years/${year}/harvest/all`);
+  return d ? JSON.parse(gv(d.fields?.data) || '{}') : {};
+}
+async function setHarvestDoc(year, data) {
+  await fs_('PATCH', `years/${year}/harvest/all`, { fields: { data: V.s(JSON.stringify(data)), updatedAt: V.t(new Date()) } });
+}
 async function getMeta(year, key) {
   const d = await fs_('GET', `years/${year}/pdfMeta/${key}`);
   return d ? { fileName: gv(d.fields?.fileName), source: gv(d.fields?.source) } : null;
 }
 async function setMeta(year, key, fileName, huntCount) {
-  await fs_('PATCH', `years/${year}/pdfMeta/${key}`, { fields: {
-    fileName: V.s(fileName), huntCount: V.i(huntCount), uploadedAt: V.t(new Date()), source: V.s('auto')
-  }});
+  await fs_('PATCH', `years/${year}/pdfMeta/${key}`, { fields: { fileName: V.s(fileName), huntCount: V.i(huntCount), uploadedAt: V.t(new Date()), source: V.s('auto') } });
 }
 async function setStatus(summary, details) {
   await fs_('PATCH', `meta/autoUpdate`, { fields: {
     lastRun: V.t(new Date()), lastRunStr: V.s(new Date().toLocaleDateString('en-US')),
     summary: V.s(summary), details: V.s(details.join(' | ') || '—')
-  }});
+  } });
 }
 
-// ── Link discovery on the ODFW point summary page ────────────────────────────
-function findReports(html, pageUrl) {
-  const found = [];
-  const re = /href\s*=\s*["']([^"']*\.xlsx[^"']*)["']/gi;
+// ═══ Link discovery ═══════════════════════════════════════════════════════════
+function anchors(html, pageUrl) {
+  const out = [];
+  const re = /<a[^>]+href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let m;
   while ((m = re.exec(html))) {
     let url = m[1];
-    try { url = new URL(url, pageUrl).href; } catch { continue; }
-    const fname = decodeURIComponent(url.split('/').pop() || '');
+    try { url = new URL(url.replace(/ /g, '%20'), pageUrl).href; } catch { continue; }
+    out.push({ url, text: m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() });
+  }
+  return out;
+}
+
+function findDrawReports(html, pageUrl) {
+  const found = [];
+  for (const a of anchors(html, pageUrl)) {
+    if (!/\.xlsx/i.test(a.url)) continue;
+    const fname = decodeURIComponent(a.url.split('/').pop() || '');
     if (!/preference[\s_-]*point[\s_-]*draw[\s_-]*report/i.test(fname)) continue;
-    const ym = fname.match(/(20\d{2})/);
-    if (!ym) continue;
-    const year = ym[1];
+    const ym = fname.match(/(20\d{2})/); if (!ym) continue;
     let species = null;
     if (/elk/i.test(fname)) species = 'elk';
     else if (/deer/i.test(fname) && !/antlerless/i.test(fname)) species = 'deer';
-    if (!species) continue; // skip antelope, sheep, goat, bear, antlerless deer
-    found.push({ url, fname, year, species });
+    if (!species) continue;
+    found.push({ url: a.url, fname, year: ym[1], species });
   }
-  // Newest year wins per species
   const best = {};
-  for (const f of found) {
-    const k = f.species + f.year;
-    if (!best[k]) best[k] = f;
-  }
+  for (const f of found) if (!best[f.species + f.year]) best[f.species + f.year] = f;
   return Object.values(best);
 }
 
-// ── Main ─────────────────────────────────────────────────────────────────────
+function findHarvestReports(html, pageUrl) {
+  const found = [];
+  for (const a of anchors(html, pageUrl)) {
+    if (!/\.pdf/i.test(a.url)) continue;
+    const t = a.text.toLowerCase();
+    if (/public vs private|antlerless|damage|bear|cougar|sheep|goat|pronghorn/.test(t)) continue;
+    const ym = a.text.match(/(20\d{2})/); if (!ym) continue;
+    const year = ym[1];
+    if (Number(year) < 2022) continue;
+    let species = null;
+    if (/elk/.test(t)) species = 'elk';
+    else if (/deer/.test(t)) species = 'deer';
+    if (!species) continue;
+    let wep = null;
+    if (/archery/.test(t)) wep = 'Archery';
+    else if (/muzzleloader|\bml\b/.test(t)) wep = 'Muzz';
+    else if (/any legal weapon|rifle|\balw\b|100 series/.test(t)) wep = 'Rifle';
+    if (!wep) continue;
+    const key = species + wep + 'Harvest'; // elkRifleHarvest, deerMuzzHarvest, ...
+    const fname = decodeURIComponent(a.url.split('/').pop() || '');
+    found.push({ url: a.url, fname, year, species, key: key.charAt(0).toLowerCase() + key.slice(1), label: a.text });
+  }
+  const best = {};
+  for (const f of found) if (!best[f.key + f.year]) best[f.key + f.year] = f;
+  return Object.values(best);
+}
+
+// ═══ Main ═════════════════════════════════════════════════════════════════════
 async function main() {
   const details = [];
-  let updated = 0;
+  let updated = 0, failed = 0;
+  const yearCache = new Map();
+  const getYear = async y => { if (!yearCache.has(y)) yearCache.set(y, await loadYear(y)); return yearCache.get(y); };
 
-  // Local test mode
-  if (arg('--local')) {
-    const hunts = parseHunts(readFileSync(arg('--local')), arg('--species') || 'deer');
-    console.log(`[local] parsed ${hunts.length} ${arg('--species')} hunts for ${arg('--year')}`);
-    console.log('[local] sample:', JSON.stringify(hunts[0]).slice(0, 220));
-    if (DRY) return;
-    const year = arg('--year');
-    const { hunts: existing, chunkCount } = await loadExistingHunts(year);
-    const merged = existing.filter(h => h.species !== (arg('--species') || 'deer')).concat(hunts);
-    await writeYear(year, merged, chunkCount);
-    await setMeta(year, (arg('--species') === 'elk' ? 'elkPoints' : 'deerPoints'), arg('--local').split('/').pop(), hunts.length);
-    console.log(`[local] wrote ${merged.length} hunts to Firestore year ${year}`);
-    return;
-  }
-
-  console.log('[fetch]', SOURCE_PAGE);
-  const res = await fetch(SOURCE_PAGE, { headers: { 'User-Agent': 'Mozilla/5.0 (ODFW-planner-bot; personal use)' } });
-  if (!res.ok) throw new Error(`page fetch failed: ${res.status}`);
-  const reports = findReports(await res.text(), SOURCE_PAGE);
-  console.log(`[fetch] found ${reports.length} draw report link(s)`);
-  reports.forEach(r => console.log(`  ${r.year} ${r.species}: ${r.fname}`));
-
-  if (!reports.length) {
-    details.push('no draw report links found on page — layout may have changed');
-    if (!DRY) await setStatus('checked ODFW — no reports found', details);
-    return;
-  }
-
-  for (const r of reports) {
-    const key = r.species === 'elk' ? 'elkPoints' : 'deerPoints';
-    try {
-      const meta = await getMeta(r.year, key);
-      if (meta && meta.fileName === r.fname) {
-        console.log(`[skip] ${r.year} ${key}: already loaded (${r.fname})`);
-        details.push(`${r.year} ${r.species}: up to date`);
-        continue;
-      }
-      if (meta && meta.source !== 'auto') {
-        // A manual upload exists with a different filename — don't clobber it
-        // unless the ODFW file is clearly the same year's official report.
-        console.log(`[note] ${r.year} ${key}: manual upload present (${meta.fileName}); replacing with official ${r.fname}`);
-      }
-      console.log(`[dl] ${r.url}`);
-      const fres = await fetch(r.url, { headers: { 'User-Agent': 'Mozilla/5.0 (ODFW-planner-bot; personal use)' } });
-      if (!fres.ok) throw new Error(`download failed: ${fres.status}`);
-      const buf = Buffer.from(await fres.arrayBuffer());
-      const hunts = parseHunts(buf, r.species);
-      console.log(`[parse] ${r.year} ${r.species}: ${hunts.length} hunts`);
-      if (DRY) { details.push(`${r.year} ${r.species}: would load ${hunts.length} hunts`); continue; }
-      const { hunts: existing, chunkCount } = await loadExistingHunts(r.year);
-      const merged = existing.filter(h => h.species !== r.species).concat(hunts);
-      await writeYear(r.year, merged, chunkCount);
-      await setMeta(r.year, key, r.fname, hunts.length);
-      details.push(`${r.year} ${r.species}: loaded ${hunts.length} hunts`);
-      updated++;
-    } catch (e) {
-      console.error(`[err] ${r.year} ${r.species}:`, e.message);
-      details.push(`${r.year} ${r.species}: ERROR ${e.message}`);
+  // ── Draw reports ──
+  try {
+    console.log('[draw] fetching', DRAW_PAGE);
+    const res = await fetch(DRAW_PAGE, { headers: UA });
+    if (!res.ok) throw new Error(`page ${res.status}`);
+    const reports = findDrawReports(await res.text(), DRAW_PAGE);
+    console.log(`[draw] found ${reports.length} report link(s)`);
+    for (const r of reports) {
+      const key = r.species === 'elk' ? 'elkPoints' : 'deerPoints';
+      try {
+        const meta = await getMeta(r.year, key);
+        if (meta && meta.fileName === r.fname) { console.log(`[skip] ${r.year} ${key} current`); continue; }
+        console.log(`[dl] ${r.fname}`);
+        const fres = await fetch(r.url, { headers: UA });
+        if (!fres.ok) throw new Error(`download ${fres.status}`);
+        const hunts = parseHunts(Buffer.from(await fres.arrayBuffer()), r.species);
+        console.log(`[parse] ${r.year} ${r.species}: ${hunts.length} hunts`);
+        if (DRY) { details.push(`${r.year} ${r.species} draw: would load ${hunts.length}`); continue; }
+        const existing = (await getYear(r.year)) || { hunts: [], chunkCount: 0 };
+        const merged = existing.hunts.filter(h => h.species !== r.species).concat(hunts);
+        await writeYearHunts(r.year, merged, existing.chunkCount);
+        yearCache.set(r.year, { hunts: merged, chunkCount: Math.ceil(merged.length / CHUNK) });
+        await setMeta(r.year, key, r.fname, hunts.length);
+        details.push(`${r.year} ${r.species} draw: ${hunts.length} hunts`);
+        updated++;
+      } catch (e) { console.error(`[err] draw ${r.year} ${r.species}:`, e.message); details.push(`${r.year} ${r.species} draw FAILED: ${e.message}`); failed++; }
     }
-  }
+  } catch (e) { console.error('[err] draw page:', e.message); details.push('draw page unreachable: ' + e.message); failed++; }
 
-  const summary = updated ? `loaded ${updated} new report(s)` : 'checked ODFW — data already current';
+  // ── Harvest PDFs ──
+  try {
+    console.log('[harvest] fetching', HARVEST_PAGE);
+    const res = await fetch(HARVEST_PAGE, { headers: UA });
+    if (!res.ok) throw new Error(`page ${res.status}`);
+    const reports = findHarvestReports(await res.text(), HARVEST_PAGE);
+    // only the two most recent years listed — older data rarely changes
+    const years = [...new Set(reports.map(r => r.year))].sort().reverse().slice(0, 2);
+    const wanted = reports.filter(r => years.includes(r.year));
+    console.log(`[harvest] found ${reports.length} link(s); processing years ${years.join(', ')}`);
+    for (const r of wanted) {
+      try {
+        const yd = await getYear(r.year);
+        if (!yd) { console.log(`[skip] ${r.year} ${r.key}: no draw data for that year yet`); continue; }
+        const meta = await getMeta(r.year, r.key);
+        if (meta && meta.source !== 'auto') { console.log(`[skip] ${r.year} ${r.key}: manual upload present — leaving it alone`); continue; }
+        if (meta && meta.fileName === r.fname) { console.log(`[skip] ${r.year} ${r.key} current`); continue; }
+        console.log(`[dl] ${r.fname || r.url}`);
+        const fres = await fetch(r.url, { headers: UA });
+        if (!fres.ok) throw new Error(`download ${fres.status}`);
+        const lines = await pdfToLines(await fres.arrayBuffer());
+        const parsed = parseHarvestLines(lines, r.species === 'elk' ? 11 : 9);
+        const knownIds = new Set(yd.hunts.filter(h => h.species === r.species).map(h => h.huntNum));
+        const v = validateHarvest(parsed, knownIds);
+        if (!v.ok) { console.error(`[reject] ${r.year} ${r.key}: ${v.reason}`); details.push(`${r.year} ${r.label}: NEEDS MANUAL UPLOAD (${v.reason})`); failed++; continue; }
+        console.log(`[parse] ${r.year} ${r.key}: ${v.count} hunts, validated`);
+        if (DRY) { details.push(`${r.year} ${r.key}: would load ${v.count}`); continue; }
+        const harvestAll = await getHarvestDoc(r.year);
+        harvestAll[r.key] = parsed;
+        await setHarvestDoc(r.year, harvestAll);
+        await setMeta(r.year, r.key, r.fname || r.url.split('/').pop(), v.count);
+        details.push(`${r.year} ${r.key}: ${v.count} hunts`);
+        updated++;
+      } catch (e) { console.error(`[err] harvest ${r.year} ${r.key}:`, e.message); details.push(`${r.year} ${r.label || r.key} FAILED: ${e.message}`); failed++; }
+    }
+  } catch (e) { console.error('[err] harvest page:', e.message); details.push('harvest page unreachable: ' + e.message); failed++; }
+
+  let summary;
+  if (updated) summary = `loaded ${updated} new report(s)` + (failed ? `, ${failed} need attention` : '');
+  else if (failed) summary = `no new data loaded — ${failed} item(s) need attention`;
+  else summary = 'no new data — everything is current';
   console.log('[done]', summary);
   if (!DRY) await setStatus(summary, details);
 }
 
 main().catch(async e => {
   console.error('[fatal]', e);
-  try { if (!DRY) await setStatus('run failed: ' + e.message, []); } catch {}
+  try { if (!DRY) await setStatus('update run failed: ' + e.message, []); } catch {}
   process.exit(1);
 });
