@@ -79,7 +79,9 @@ select,input[type=search],input[type=number]{width:100%;min-height:54px;font-siz
 .cstar{font-size:1.5rem;background:none;border:none;color:var(--dim);padding:2px 8px;line-height:1;flex-shrink:0}
 .cstar.on{color:var(--gold)}
 .chips{margin:4px 0 8px}
-.chip{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:6px;background:var(--card2);border:1px solid var(--line);color:var(--dim);margin-right:6px}
+.chip{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:6px;background:var(--card2);border:1px solid var(--line);color:var(--dim);margin-right:6px;margin-bottom:4px}
+.chip.sp{background:var(--warnbg);border-color:var(--gold);color:var(--gold)}
+.detailbtn{display:flex;align-items:center;justify-content:center;width:100%;min-height:50px;margin-top:11px;font-size:.95rem;font-weight:700;background:var(--card2);border:1.5px solid var(--gold);border-radius:10px;color:var(--gold)}
 .verdict{font-size:1rem;font-weight:700;margin:2px 0 10px}
 .v-yes .verdict{color:var(--good)} .v-soon .verdict{color:var(--warn)}
 .v-luck .verdict{color:var(--luck)} .v-no .verdict{color:var(--bad)}
@@ -87,6 +89,8 @@ select,input[type=search],input[type=number]{width:100%;min-height:54px;font-siz
 .stat{background:var(--card2);border-radius:10px;padding:8px 6px;text-align:center}
 .stat .n{font-size:1.25rem;font-weight:800;font-variant-numeric:tabular-nums}
 .stat .l{font-size:.68rem;color:var(--dim);margin-top:1px;line-height:1.25}
+.cseason{font-size:.88rem;color:var(--text);margin-top:10px;padding:7px 10px;background:var(--card2);border-radius:8px}
+.cseason strong{color:var(--gold)}
 .ctrend{font-size:.83rem;color:var(--dim);margin-top:9px}
 .ctrend.harder{color:var(--warn)} .ctrend.easier{color:var(--good)}
 .empty{padding:36px 16px;text-align:center;color:var(--dim);font-size:1rem;line-height:1.6}
@@ -116,7 +120,7 @@ table.simple td{padding:9px 8px;border-bottom:1px solid var(--card2);font-varian
 table.simple tr.hl td{background:var(--goodbg);color:var(--good);font-weight:700}
 .bar{height:9px;background:var(--card2);border-radius:5px;overflow:hidden;margin-top:4px}
 .barf{height:100%;background:var(--good)}
-.trendline{display:flex;align-items:flex-end;gap:5px;height:64px;margin:8px 0 4px}
+.trendline{display:flex;align-items:flex-end;gap:5px;height:88px;margin:18px 0 6px}
 .tcol{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px}
 .tbar{width:100%;max-width:44px;background:var(--gold);border-radius:4px 4px 0 0;min-height:3px}
 .tyr{font-size:.68rem;color:var(--dim)}
@@ -170,7 +174,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div><h1 class="serif">Oregon Hunt Planner <span class="ver">v3.0</span></h1>
+  <div><h1 class="serif">Oregon Hunt Planner <span class="ver">v3.2</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
 </div></div></header>
 
@@ -191,13 +195,14 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
       <div class="field"><label>Weapon</label>
         <select id="fWeapon"><option value="all">All weapons</option><option value="rifle">Rifle</option><option value="archery">Bow</option><option value="muzz">Muzzleloader</option><option value="youth">Youth</option></select></div>
       <div class="field"><label>Sort by</label>
-        <select id="fSort"><option value="best">Best for my points</option><option value="success">Highest success rate</option><option value="easy">Easiest to draw</option><option value="hard">Hardest to draw</option><option value="num">Hunt number</option></select></div>
+        <select id="fSort"><option value="best">Suggested for me</option><option value="success">Highest success rate</option><option value="easy">Easiest to draw</option><option value="hard">Hardest to draw</option><option value="num">Hunt number</option></select></div>
     </div>
     <div class="fgrid">
       <div class="field"><label>Search</label><input type="search" id="fSearch" placeholder="Hunt name or number"></div>
       <div class="field"><label>Data year</label><select id="fYear"></select></div>
     </div>
     <label class="chkrow"><input type="checkbox" id="fCanDraw"><span>Only show hunts I can draw for sure this year</span></label>
+    <label class="chkrow"><input type="checkbox" id="fYouth"><span>Show youth-only hunts</span></label>
   </div></div>
 
   <div class="count" id="rcount"></div>
@@ -402,7 +407,9 @@ async function fbLoad() {
         if (cd.exists) hunts = hunts.concat(JSON.parse(cd.data().hunts || '[]'));
       }
       const hd = await db.collection('years').doc(year).collection('harvest').doc('all').get();
-      out[year] = { hunts, harvestData: hd.exists ? JSON.parse(hd.data().data || '{}') : {}, files: {} };
+      const sd = await db.collection('years').doc(year).collection('seasons').doc('all').get();
+      out[year] = { hunts, harvestData: hd.exists ? JSON.parse(hd.data().data || '{}') : {},
+        seasons: sd.exists ? JSON.parse(sd.data().data || '{}') : {}, files: {} };
     }
     return out;
   } catch(e) { console.warn('[FB] Load error:', e); return null; }
@@ -413,7 +420,7 @@ const SK = 'odfw_v4';
 const PK = 'odfw_prefs_v3';
 const SEEN_K = 'odfw_lastseen_v1';
 const S = { years:{}, selectedYear:null, pendingYear:null };
-const P = Object.assign({ deerPts:null, elkPts:null, sp:'all', wep:'all', sort:'best', canDraw:false, ptsSet:false },
+const P = Object.assign({ deerPts:null, elkPts:null, sp:'all', wep:'all', sort:'best', canDraw:false, ptsSet:false, showYouth:false },
   JSON.parse(localStorage.getItem(PK)||'{}'));
 const savePrefs = () => { try{ localStorage.setItem(PK, JSON.stringify(P)); }catch(e){} };
 
@@ -500,6 +507,57 @@ function myOdds(h, myPts) {
   return null;
 }
 const ptsFor = h => h.species==='elk' ? P.elkPts : P.deerPts;
+// Season dates + bag limit for a hunt in the selected year (from the regs tables)
+const seasonOf = h => (curYD()?.seasons||{})[h.huntNum] || null;
+
+// Most recent harvest results for this hunt: this year's if published,
+// otherwise walk back through prior years.
+function effHarvest(h) {
+  if (h.harvest) return { hv: h.harvest, year: S.selectedYear, current: true };
+  for (const y of yList()) {
+    if (y === S.selectedYear) continue;
+    const hh = findH(y, h.huntNum, h.species);
+    if (hh && hh.harvest) return { hv: hh.harvest, year: y, current: false };
+  }
+  return { hv: null, year: null, current: false };
+}
+// Share of the harvest that was a mature animal (elk: 5pt+, deer: 4pt+)
+function trophyIndex(h, hv) {
+  if (!hv || !hv.antlerValid || !hv.totalBull) return null;
+  const mature = h.species === 'elk' ? (hv.fivePt + hv.sixPlusPt) : hv.fourPt;
+  return mature / hv.totalBull;
+}
+// Silent grade (0–100): harvest success + antler size do the talking,
+// scaled by how realistic the draw is for the user's points.
+function grade(h) {
+  const my = ptsFor(h);
+  const { hv } = effHarvest(h);
+  const s = hv ? Math.min((hv.successPct || 0) / 60, 1) : 0.3;
+  const ti = hv ? trophyIndex(h, hv) : null;
+  const t = ti === null ? 0.2 : Math.min(ti / 0.7, 1);
+  const quality = 0.6 * s + 0.4 * t;
+  let d;
+  if (my === null) d = 0.5;
+  else if (h.pts100 !== null && my >= h.pts100) d = 1;
+  else {
+    const mo = myOdds(h, my);
+    const gap = h.pts100 !== null ? h.pts100 - my : 99;
+    d = Math.max((mo || 0) / 100, gap <= 3 ? 0.45 - gap * 0.1 : 0.04);
+  }
+  return 100 * quality * (0.35 + 0.65 * d);
+}
+// Special hunt details worth flagging on the card
+function specialTags(h) {
+  const n = (h.huntName || '').toLowerCase(), out = [];
+  if (h.weapon === 'youth') out.push('Youth only');
+  if (/spike/.test(n)) out.push('Spike bulls only');
+  if (h.weapon === 'muzz') out.push('Muzzleloader');
+  if (/trad/.test(n)) out.push('Traditional bow');
+  if (/whitetail/.test(n)) out.push('Whitetail');
+  if (/\blate\b/.test(n)) out.push('Late season');
+  if (/emergency|damage/.test(n)) out.push('Damage hunt');
+  return out;
+}
 
 // The verdict: one plain-English answer per hunt
 function verdict(h) {
@@ -739,6 +797,8 @@ function applyFilters(hunts) {
   return hunts.filter(h=>{
     if(P.sp!=='all' && h.species!==P.sp) return false;
     if(P.wep!=='all' && h.weapon!==P.wep) return false;
+    // Youth hunts stay hidden unless the toggle is on or Youth is picked as the weapon
+    if(h.weapon==='youth' && !P.showYouth && P.wep!=='youth') return false;
     if(q && !(h.huntNum+' '+h.huntName).toLowerCase().includes(q)) return false;
     if(P.canDraw){
       const my=ptsFor(h);
@@ -752,7 +812,7 @@ function sortHunts(hunts) {
   const arr=[...hunts];
   if(P.sort==='num') return arr.sort(cmpNum);
   if(P.sort==='success') return arr.sort((a,b)=>{
-    const sa=a.harvest?.successPct??-1, sb=b.harvest?.successPct??-1;
+    const sa=effHarvest(a).hv?.successPct??-1, sb=effHarvest(b).hv?.successPct??-1;
     return sb-sa || cmpNum(a,b);
   });
   if(P.sort==='easy') return arr.sort((a,b)=>{
@@ -763,16 +823,8 @@ function sortHunts(hunts) {
     const pa=a.pts100===null?-1:a.pts100, pb=b.pts100===null?-1:b.pts100;
     return pb-pa || cmpNum(a,b);
   });
-  // 'best' — sure tags first, then by your odds, then success
-  return arr.sort((a,b)=>{
-    const ma=ptsFor(a), mb=ptsFor(b);
-    const da=(a.pts100!==null&&ma!==null&&ma>=a.pts100)?1:0;
-    const db=(b.pts100!==null&&mb!==null&&mb>=b.pts100)?1:0;
-    if(db!==da) return db-da;
-    const oa=myOdds(a,ma)??-1, ob=myOdds(b,mb)??-1;
-    if(Math.round(ob)!==Math.round(oa)) return ob-oa;
-    return (b.harvest?.successPct??-1)-(a.harvest?.successPct??-1) || cmpNum(a,b);
-  });
+  // 'best' — the silent grade: harvest success + antler size, scaled by drawability
+  return arr.sort((a,b)=> grade(b)-grade(a) || cmpNum(a,b));
 }
 
 // ─── RENDER: points panel ─────────────────────────────────────────────────────
@@ -809,21 +861,26 @@ function renderPts() {
 // ─── RENDER: hunt cards ───────────────────────────────────────────────────────
 function cardHTML(h){
   const v=verdict(h), my=ptsFor(h), mo=myOdds(h,my);
-  const succ=h.harvest?.successPct;
+  const eh=effHarvest(h);
+  const succ=eh.hv?.successPct;
+  const succLbl=eh.hv ? (eh.current ? 'Hunters who got one' : `Got one (${eh.year} results)`) : 'Hunters who got one';
   const t=trendData(h);
   const moTxt = my===null?'—':(mo===null?'<1%':fmtP(mo));
-  return `<button class="card ${v.cls}" data-id="${esc(h.huntNum)}_${h.species}">
+  const specials=specialTags(h).map(s=>`<span class="chip sp">${esc(s)}</span>`).join('');
+  return `<div class="card ${v.cls}" data-id="${esc(h.huntNum)}_${h.species}">
     <div class="crow1"><span class="cid">${esc(h.huntNum)}</span><span class="cname">${esc(h.huntName)}</span>
-      <span class="cstar ${isFav(h.huntNum,h.species)?'on':''}" data-fav="${esc(h.huntNum)}_${h.species}">${isFav(h.huntNum,h.species)?'★':'☆'}</span></div>
-    <div class="chips"><span class="chip">${wLabel(h.weapon)}</span><span class="chip">${h.species==='elk'?'Elk':'Deer'}</span></div>
+      <span class="cstar ${isFav(h.huntNum,h.species)?'on':''}" data-fav="${esc(h.huntNum)}_${h.species}" role="button" aria-label="save to my list">${isFav(h.huntNum,h.species)?'★':'☆'}</span></div>
+    <div class="chips"><span class="chip">${wLabel(h.weapon)}</span><span class="chip">${h.species==='elk'?'Elk':'Deer'}</span>${specials}</div>
     <div class="verdict">${v.text}</div>
     <div class="stats">
       <div class="stat"><div class="n">${moTxt}</div><div class="l">Your chance this year</div></div>
-      <div class="stat"><div class="n">${succ==null?'—':fmtP(succ)}</div><div class="l">Hunters who got one</div></div>
+      <div class="stat"><div class="n">${succ==null?'—':fmtP(succ)}</div><div class="l">${succLbl}</div></div>
       <div class="stat"><div class="n">${h.pts100===null?'Luck':h.pts100}</div><div class="l">Points for a sure tag</div></div>
     </div>
+    ${(()=>{const se=seasonOf(h);return se?`<div class="cseason">Season: <strong>${esc(se.s)}</strong></div>`:'';})()}
     ${t.sentence?`<div class="ctrend ${t.dir}">${esc(t.sentence)}</div>`:''}
-  </button>`;
+    <button class="detailbtn" data-open="${esc(h.huntNum)}_${h.species}">See full details ›</button>
+  </div>`;
 }
 function renderCards(){
   const all=getH();
@@ -844,7 +901,8 @@ function wireCards(box){
     const fav=e.target.closest('[data-fav]');
     if(fav){ e.stopPropagation(); const [n,s]=fav.dataset.fav.split('_'); toggleFav(n,s);
       fav.textContent=isFav(n,s)?'★':'☆'; fav.classList.toggle('on',isFav(n,s)); renderMyList(); return; }
-    openDetail(c.dataset.id);
+    const opener=e.target.closest('[data-open]');
+    openDetail(opener?opener.dataset.open:c.dataset.id);
   }));
 }
 
@@ -862,9 +920,16 @@ function openDetail(id){
   const v=verdict(h), my=ptsFor(h), mo=myOdds(h,my);
   const t=trendData(h);
   let html=`<div class="callout ${v.cls}">${v.text}</div>`;
+  const sps=specialTags(h);
+  if(sps.length) html+=`<div class="chips" style="margin:-6px 0 14px">${sps.map(s=>`<span class="chip sp">${esc(s)}</span>`).join('')}</div>`;
 
+  const se=seasonOf(h);
   html+=`<div class="sec"><h3>The basics</h3>
     <p class="plain">A ${wLabel(h.weapon).toLowerCase()} ${h.species} hunt. In ${S.selectedYear}, ODFW gave out <strong>${fmt(h.tags)} tags</strong> and <strong>${fmt(h.residentApps)} Oregon residents</strong> put it as a choice. ${h.resOdds!=null?`Overall, about ${fmtP(h.resOdds)} of resident applicants drew it.`:''}</p>
+    ${se?`<div class="kvg">
+      <div class="kv" style="grid-column:1/-1"><div class="k">Season dates (${S.selectedYear})</div><div class="v" style="font-size:1.05rem">${esc(se.s)}</div></div>
+      ${se.b?`<div class="kv" style="grid-column:1/-1"><div class="k">Bag limit</div><div class="v" style="font-size:.95rem;font-weight:600">${esc(se.b)}</div></div>`:''}
+    </div>`:`<p class="help">Season dates for ${S.selectedYear} aren't loaded yet — they come from the regulations tables each spring.</p>`}
   </div>`;
 
   if(my!==null){
@@ -877,10 +942,12 @@ function openDetail(id){
       </div></div>`;
   }
 
-  if(h.harvest){
-    const hv=h.harvest;
-    html+=`<div class="sec"><h3>How hunters did</h3>
-      <p class="plain"><strong>${fmtP(hv.successPct)}</strong> of the ${fmt(hv.hunters)} hunters who held this tag brought a ${h.species==='elk'?'bull or cow':'buck'} home.</p>
+  const eh=effHarvest(h);
+  if(eh.hv){
+    const hv=eh.hv;
+    html+=`<div class="sec"><h3>How hunters did</h3>`;
+    if(!eh.current) html+=`<p class="plain" style="color:var(--warn);font-size:.88rem">Results for ${S.selectedYear} aren't out yet — these are the most recent, from the ${eh.year} season.</p>`;
+    html+=`<p class="plain"><strong>${fmtP(hv.successPct)}</strong> of the ${fmt(hv.hunters)} hunters who held this tag brought a ${h.species==='elk'?'bull or cow':'buck'} home.</p>
       <div class="kvg">
         <div class="kv"><div class="k">Animals taken</div><div class="v">${fmt(hv.totalHarvest)}</div></div>
         <div class="kv"><div class="k">Days per hunter (avg)</div><div class="v">${hv.hunters>0?Math.round(hv.days/hv.hunters):'—'}</div></div>
@@ -900,7 +967,7 @@ function openDetail(id){
     }
     html+=`</div>`;
   } else {
-    html+=`<div class="sec"><h3>How hunters did</h3><p class="plain" style="color:var(--dim)">Harvest results for ${S.selectedYear} aren't out yet — ODFW publishes them the following spring.</p></div>`;
+    html+=`<div class="sec"><h3>How hunters did</h3><p class="plain" style="color:var(--dim)">No harvest results loaded for this hunt in any year yet.</p></div>`;
   }
 
   if(t.rows.length>=2){
@@ -999,7 +1066,7 @@ async function renderAdmin(){
 
 // ─── SYNC NOTE ────────────────────────────────────────────────────────────────
 function setSyncNote(cls,msg){ const el=$('#syncNote'); el.className='syncnote '+(cls||''); el.textContent=msg; }
-function snapshot(){ const o={}; yList().forEach(y=>{ const yd=S.years[y]; o[y]=yd.hunts.length+':'+Object.values(yd.harvestData||{}).reduce((s,h)=>s+Object.keys(h||{}).length,0); }); return o; }
+function snapshot(){ const o={}; yList().forEach(y=>{ const yd=S.years[y]; o[y]=yd.hunts.length+':'+Object.values(yd.harvestData||{}).reduce((s,h)=>s+Object.keys(h||{}).length,0)+':'+Object.keys(yd.seasons||{}).length; }); return o; }
 function diffSnapshot(prev){
   const now=snapshot(); const changed=[];
   for(const y of Object.keys(now)) if(prev[y]!==now[y]) changed.push(y);
@@ -1039,6 +1106,7 @@ function wire(){
   $('#fWeapon').value=P.wep; $('#fWeapon').onchange=e=>{P.wep=e.target.value;savePrefs();renderCards();};
   $('#fSort').value=P.sort;  $('#fSort').onchange=e=>{P.sort=e.target.value;savePrefs();renderCards();};
   $('#fCanDraw').checked=P.canDraw; $('#fCanDraw').onchange=e=>{P.canDraw=e.target.checked;savePrefs();renderCards();};
+  $('#fYouth').checked=P.showYouth; $('#fYouth').onchange=e=>{P.showYouth=e.target.checked;savePrefs();renderCards();};
   $('#fSearch').oninput=()=>renderCards();
   $('#fYear').onchange=e=>{S.selectedYear=e.target.value;saveLocal();renderCards();renderMyList();};
   // admin
@@ -1066,7 +1134,7 @@ async function init(firstRun){
   if(data && Object.keys(data).length){
     for(const y of Object.keys(data)){
       const localFiles=S.years[y]?.files||{};
-      S.years[y]={hunts:data[y].hunts,harvestData:data[y].harvestData,files:localFiles};
+      S.years[y]={hunts:data[y].hunts,harvestData:data[y].harvestData,seasons:data[y].seasons||{},files:localFiles};
       applyHarvest(y);
     }
     if(!S.selectedYear||!S.years[S.selectedYear]) S.selectedYear=yList()[0];
