@@ -180,7 +180,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v4.4</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v4.5</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -594,13 +594,23 @@ const choicesOf = h => (curYD()?.choices||{})[h.huntNum] || null;
 // 2nd/3rd-choice odds: leftovers after 1st choice go randomly to 2nd-choice
 // applicants (no points used or burned), then 3rd. Demand is the whole story.
 function choiceOdds(h){
-  const ch=choicesOf(h); if(!ch) return null;
-  const tags=h.tags||0;
+  let ch=choicesOf(h), year=S.selectedYear, tags=h.tags||0;
+  if(!ch){
+    for(const y of yList()){
+      const c=(S.years[y].choices||{})[h.huntNum];
+      if(c){ ch=c; year=y; const hh=findH(y,h.huntNum,h.species); if(hh) tags=hh.tags||tags; break; }
+    }
+  }
+  if(!ch) return null;
   const left1=Math.max(0,tags-ch.c1);
   const o2=left1<=0?0:(ch.c2<=0?100:Math.min(100,left1/ch.c2*100));
-  const left2=Math.max(0,left1-ch.c2);
-  const o3=left2<=0?0:(ch.c3<=0?100:Math.min(100,left2/ch.c3*100));
-  return {ch,tags,left1,o2,left2,o3};
+  return {ch,tags,left1,o2,year,current:year===S.selectedYear};
+}
+// Empirical odds for a 0-point 1st-choice applicant: the points=0 tier of the draw
+function zeroPointOdds(h){
+  const t=(h.pointBreakdown||[]).find(p=>p.points===0);
+  if(t&&t.resApps>0) return (t.resDrawn/t.resApps)*100;
+  return null;
 }
 function publicLandOf(h){
   if(!PL) return null;
@@ -677,8 +687,14 @@ const hkey=h=>h.huntNum+'_'+h.species;
 function allSpecialDefs(){ return BUILTIN_SPECIALS.concat(loadJSON(CUSTOM_K,[])); }
 // What we scan for tag words: the hunt name PLUS the bag limit and fine print
 // from the regs — spike-only hunts say "spike" in the bag limit, not the name.
+function seasonAnyYear(huntNum){
+  const cur=(curYD()?.seasons||{})[huntNum];
+  if(cur) return cur;
+  for(const y of yList()){ const s=(S.years[y].seasons||{})[huntNum]; if(s) return s; }
+  return null;
+}
 function specialHaystack(h){
-  const se=(curYD()?.seasons||{})[h.huntNum]||{};
+  const se=seasonAnyYear(h.huntNum)||{};
   return [(h.huntName||''),(se.b||''),(se.n||'')].join(' ');
 }
 function specialKeys(h){
@@ -1127,7 +1143,7 @@ function cardHTML(h){
     ${(()=>{const co=choiceOdds(h);
       if(!co||co.left1<=0) return '';
       const lbl=co.o2>=99?'near-sure':'~'+Math.round(co.o2)+'%';
-      return `<div class="cseason" style="border-left:3px solid var(--good)">Backup pick: <strong>${lbl}</strong> as a 2nd choice — ${fmt(co.left1)} tags left over, ${fmt(co.ch.c2)} competing</div>`;})()}
+      return `<div class="cseason" style="border-left:3px solid var(--good)">Backup pick: <strong>${lbl}</strong> as a 2nd choice — ${fmt(co.left1)} tags left over, ${fmt(co.ch.c2)} competing${co.current?'':' ('+co.year+')'}</div>`;})()}
     ${(()=>{const se=seasonOf(h);return se?`<div class="cseason">Season: <strong>${esc(se.s)}</strong></div>`:'';})()}
     ${t.sentence?`<div class="ctrend ${t.dir}">${esc(t.sentence)}</div>`:''}
     <button class="detailbtn" data-open="${esc(h.huntNum)}_${h.species}">See full details ›</button>
@@ -1158,7 +1174,9 @@ function wireCards(box){
 }
 
 // ─── RENDER: detail sheet ─────────────────────────────────────────────────────
-// ─── UNIT MAP — simple: ODFW's official statewide unit map + official map pages
+// ─── UNIT MAP — self-hosted: draws ODFW boundaries from units.geojson /
+// deer_areas.geojson committed to this repo by the auto-updater. No external
+// services; if the files aren't there yet, falls back to official map links.
 function unitNameFor(h){
   let n=(h.huntName||'').trim();
   n=n.replace(/^(N|S|E|W|NE|NW|SE|SW)\s+/i,'');
@@ -1167,28 +1185,117 @@ function unitNameFor(h){
   return n.replace(/\s+/g,' ').trim();
 }
 const isHerdArea=h=>/^[A-Z]{2}\d{3}/.test(String(h.huntNum));
+const herdCode=h=>{ const m=String(h.huntNum).match(/^([A-Z]{2})1(\d\d)/); return m?m[1]+m[2]:null; };
 
-function showUnitMap(h){
+const GEO={units:undefined, areas:undefined}; // undefined=not tried, null=missing
+async function loadGeo(which){
+  if(GEO[which]!==undefined) return GEO[which];
+  try{
+    const r=await fetch(which==='units'?'units.geojson':'deer_areas.geojson',{cache:'force-cache'});
+    GEO[which]=r.ok?await r.json():null;
+  }catch(e){ GEO[which]=null; }
+  return GEO[which];
+}
+const featBBox=f=>{
+  let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
+  const polys=f.geometry.type==='Polygon'?[f.geometry.coordinates]:f.geometry.coordinates;
+  polys.forEach(p=>p[0].forEach(([x,y])=>{ if(x<x1)x1=x; if(x>x2)x2=x; if(y<y1)y1=y; if(y>y2)y2=y; }));
+  return [x1,y1,x2,y2];
+};
+const featCentroid=f=>{
+  const ring=(f.geometry.type==='Polygon'?f.geometry.coordinates:f.geometry.coordinates[0])[0];
+  let sx=0,sy=0; ring.forEach(([x,y])=>{sx+=x;sy+=y;});
+  return [sx/ring.length, sy/ring.length];
+};
+// Expand ODFW's abbreviations so "Saddle Mtn" matches the GIS "Saddle Mountain"
+function normUnit(s){
+  const AB={MTN:'MOUNTAIN',MT:'MOUNT',CR:'CREEK',RVR:'RIVER',FK:'FORK',PT:'POINT'};
+  return String(s||'').toUpperCase().replace(/[^A-Z0-9 ]/g,' ')
+    .split(/\s+/).filter(Boolean).map(t=>AB[t]||t).join(' ');
+}
+function matchFeatures(gj,h){
+  const feats=gj.features||[];
+  const norm=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(isHerdArea(h)){
+    const code=norm(herdCode(h)||'');
+    let hit=feats.filter(f=>norm(f.properties.name).includes(code));
+    if(hit.length) return hit;
+    const nm=norm(unitNameFor(h));
+    return nm?feats.filter(f=>{const fn=norm(f.properties.name);return fn.includes(nm)||nm.includes(fn);}):[];
+  }
+  const nm=normUnit(unitNameFor(h));
+  if(!nm) return [];
+  let hit=feats.filter(f=>normUnit(f.properties.name)===nm);
+  if(!hit.length) hit=feats.filter(f=>{const fn=normUnit(f.properties.name);return fn.includes(nm)||nm.includes(fn);});
+  return hit;
+}
+function renderUnitSVG(gj, targets, wholeState){
+  const midLat=44.1, kx=Math.cos(midLat*Math.PI/180);
+  const px=([x,y])=>[(x*kx).toFixed(4), (-y).toFixed(4)];
+  let bb;
+  if(wholeState||!targets.length){
+    bb=[1e9,1e9,-1e9,-1e9];
+    gj.features.forEach(f=>{const b=featBBox(f); bb=[Math.min(bb[0],b[0]),Math.min(bb[1],b[1]),Math.max(bb[2],b[2]),Math.max(bb[3],b[3])];});
+  } else {
+    bb=[1e9,1e9,-1e9,-1e9];
+    targets.forEach(f=>{const b=featBBox(f); bb=[Math.min(bb[0],b[0]),Math.min(bb[1],b[1]),Math.max(bb[2],b[2]),Math.max(bb[3],b[3])];});
+    const padx=(bb[2]-bb[0])*0.5+0.02, pady=(bb[3]-bb[1])*0.5+0.02;
+    bb=[bb[0]-padx, bb[1]-pady, bb[2]+padx, bb[3]+pady];
+  }
+  const vx=bb[0]*kx, vy=-bb[3], vw=(bb[2]-bb[0])*kx, vh=bb[3]-bb[1];
+  const tset=new Set(targets);
+  const paths=gj.features.map(f=>{
+    const polys=f.geometry.type==='Polygon'?[f.geometry.coordinates]:f.geometry.coordinates;
+    const d=polys.map(p=>p.map(ring=>'M'+ring.map(pt=>px(pt).join(',')).join('L')+'Z').join('')).join('');
+    const on=tset.has(f);
+    return `<path d="${d}" fill="${on?'rgba(217,165,78,.28)':'none'}" stroke="${on?'#d9a54e':'#5b6f60'}" stroke-width="${on?3:1.2}" vector-effect="non-scaling-stroke"/>`;
+  }).join('');
+  const fs=vh*0.032;
+  const labels=gj.features.map(f=>{
+    const b=featBBox(f);
+    if(b[2]<bb[0]||b[0]>bb[2]||b[3]<bb[1]||b[1]>bb[3]) return '';
+    const frac=((b[2]-b[0])*(b[3]-b[1]))/((bb[2]-bb[0])*(bb[3]-bb[1]));
+    const on=tset.has(f);
+    if(!on&&frac<0.02) return '';
+    const [cx,cy]=px(featCentroid(f));
+    return `<text x="${cx}" y="${cy}" text-anchor="middle" font-size="${on?fs*1.25:fs}" font-weight="${on?800:500}" fill="${on?'#f0c778':'#b9c4b0'}" font-family="-apple-system,sans-serif">${esc(String(f.properties.name))}</text>`;
+  }).join('');
+  return `<svg viewBox="${vx} ${vy} ${vw} ${vh}" style="width:100%;height:auto;display:block;background:#18231c" xmlns="http://www.w3.org/2000/svg">${paths}${labels}</svg>`;
+}
+let mapWhole=false, mapHunt=null;
+async function showUnitMap(h){
+  mapHunt=h;
   const name=unitNameFor(h);
-  $('#mapTitle').textContent=name?name+' — unit map':'Unit map';
-  $('#mapSub').textContent=`Hunt ${h.huntNum} · ${esc(h.huntName)}`;
-  const herd=isHerdArea(h);
-  $('#mapBody').innerHTML=`
-    ${herd?`<p class="plain">This is one of the new 2026 Deer Hunt Areas. ODFW has a map and boundary description for each one:</p>
-      <a class="srcbtn" style="margin-bottom:10px" href="https://myodfw.com/articles/eastern-oregon-deer-hunt-areas-2026" target="_blank" rel="noopener">Open the Deer Hunt Area maps ↗</a>`:''}
-    <p class="plain">Statewide unit map (pinch to zoom):</p>
-    <div style="overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff;margin-bottom:14px">
-      <img src="https://www.dfw.state.or.us/resources/hunting/big_game/units/images/bigmapa2.gif" alt="ODFW statewide wildlife management unit map" style="width:100%;display:block" loading="lazy"
-        onerror="this.parentNode.innerHTML='<p style=&quot;padding:16px;color:#333&quot;>Map image unavailable — use the links below.</p>'">
-    </div>
-    <p class="plain">Official maps with full boundary descriptions${name?` for the <strong>${esc(name)}</strong> unit`:''}:</p>
-    <a class="srcbtn" style="margin-bottom:10px" href="https://www.eregulations.com/oregon/hunting/western-oregon-unit-map" target="_blank" rel="noopener">Western Oregon unit map &amp; boundaries ↗</a>
-    <a class="srcbtn" style="margin-bottom:10px" href="https://www.eregulations.com/oregon/hunting/eastern-oregon-unit-map" target="_blank" rel="noopener">Eastern Oregon unit map &amp; boundaries ↗</a>
-    <a class="srcbtn" href="https://www.oregonhuntingmap.com" target="_blank" rel="noopener">ODFW interactive hunting map ↗</a>
-    <p class="help" style="margin-top:12px">The regulation map pages include the written boundary description for every unit — the legal definition of where you can hunt.</p>`;
+  $('#mapTitle').textContent=name?name:'Unit map';
+  $('#mapSub').textContent=`Hunt ${h.huntNum} · ${h.huntName}`;
   $('#mapSheet').classList.add('open');
   $('#mapSheet').scrollTop=0;
   document.body.style.overflow='hidden';
+  $('#mapBody').innerHTML='<div style="display:flex;justify-content:center;padding:40px"><div class="spin" style="width:28px;height:28px"></div></div>';
+  const herd=isHerdArea(h);
+  const gj=await loadGeo(herd?'areas':'units');
+  const links=`<a class="srcbtn" style="margin-bottom:10px" href="${herd?'https://myodfw.com/articles/eastern-oregon-deer-hunt-areas-2026':'https://www.eregulations.com/oregon/hunting/western-oregon-unit-map'}" target="_blank" rel="noopener">${herd?'ODFW Deer Hunt Area maps ↗':'Official unit maps &amp; boundary descriptions ↗'}</a>
+    <a class="srcbtn" href="https://www.oregonhuntingmap.com" target="_blank" rel="noopener">ODFW interactive hunting map ↗</a>`;
+  if(!gj){
+    $('#mapBody').innerHTML=`<p class="plain">The boundary file for ${herd?'the new Deer Hunt Areas':'units'} isn't loaded on the site yet — it appears after the next automatic update. Official maps:</p>${links}`;
+    return;
+  }
+  const targets=matchFeatures(gj,h);
+  const draw=()=>{
+    $('#mapBody').innerHTML=`
+      <div class="hselrow" style="margin-bottom:10px">
+        <button class="hsel ${!mapWhole?'on':''}" id="mzUnit">Zoomed to unit</button>
+        <button class="hsel ${mapWhole?'on':''}" id="mzState">Whole Oregon</button>
+      </div>
+      ${targets.length?'':'<p class="plain" style="color:var(--warn)">Couldn’t match this hunt to a boundary by name — showing the whole map.</p>'}
+      <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:12px">${renderUnitSVG(gj,targets,mapWhole||!targets.length)}</div>
+      <p class="help">Gold = this hunt's ${herd?'hunt area':'unit'}. Boundaries from ODFW's public GIS data — for planning; the regs' written descriptions are the legal boundary.</p>
+      ${links}`;
+    $('#mzUnit').onclick=()=>{mapWhole=false;draw();};
+    $('#mzState').onclick=()=>{mapWhole=true;draw();};
+  };
+  mapWhole=!targets.length;
+  draw();
 }
 
 // Requirements & special rules — ODFW's fine print from the regs tables,
@@ -1276,21 +1383,28 @@ function openDetail(id, keepSel){
   const hyrs=harvestYears(h);
   {
     const co=choiceOdds(h);
-    html+=`<div class="sec"><h3>Drawing it as a 2nd or 3rd choice</h3>`;
-    if(!co){
-      html+=`<p class="plain" style="color:var(--dim)">Choice data isn't loaded for ${S.selectedYear} yet.</p>`;
-    } else if(co.left1<=0){
-      html+=`<p class="plain" style="background:var(--badbg);color:var(--bad);padding:11px 13px;border-radius:10px;font-size:.92rem">This hunt fills up on 1st choice — ${fmt(co.ch.c1)} people put it first for ${fmt(co.tags)} tags. The ${fmt(co.ch.c2)} who listed it 2nd choice had no shot. To draw it, it has to be your 1st choice.</p>`;
-    } else {
-      html+=`<div class="kvg" style="margin-bottom:10px">
-        <div class="kv"><div class="k">Tags left after 1st choice</div><div class="v" style="color:var(--good)">${fmt(co.left1)}</div></div>
-        <div class="kv"><div class="k">People who listed it 2nd</div><div class="v">${fmt(co.ch.c2)}</div></div>
-      </div>
-      <p class="plain"><strong>${co.o2>=99?'Near-sure':'About '+Math.round(co.o2)+'%'}</strong> as a 2nd choice — and you keep your points either way.</p>`;
-      if(co.left2>0) html+=`<p class="plain" style="font-size:.92rem">3rd choice: about ${Math.round(co.o3)}% — ${fmt(co.left2)} tags reach the 3rd round, ${fmt(co.ch.c3)} people listed it.</p>`;
-      else html+=`<p class="plain" style="font-size:.92rem;color:var(--dim)">Nothing is left by the 3rd choice round (${fmt(co.ch.c3)} people listed it 3rd anyway).</p>`;
+    const z=zeroPointOdds(h);
+    html+=`<div class="sec"><h3>Drawing it with 0 points</h3>`;
+    if(z!==null){
+      html+=`<p class="plain">As a <strong>1st choice</strong> with 0 points: <strong>${z<1&&z>0?'under 1%':fmtP(z)}</strong> — that's how the zero-point applicants actually did in the ${S.selectedYear} drawing${z>0?'':' (none drew)'}.</p>`;
     }
-    html+=`<p class="help">Based on the ${S.selectedYear} drawing's applicant counts. Resident/nonresident tag splits can shift these estimates a little.</p></div>`;
+    if(co){
+      if(co.left1<=0){
+        html+=`<p class="plain" style="background:var(--badbg);color:var(--bad);padding:11px 13px;border-radius:10px;font-size:.92rem">As a <strong>2nd choice</strong>: no shot — ${fmt(co.ch.c1)} people put it first for ${fmt(co.tags)} tags, so nothing was left over. ${fmt(co.ch.c2)} people listed it 2nd anyway.</p>`;
+      } else {
+        html+=`<div class="kvg" style="margin-bottom:10px">
+          <div class="kv"><div class="k">Tags left after 1st choice</div><div class="v" style="color:var(--good)">${fmt(co.left1)}</div></div>
+          <div class="kv"><div class="k">People who listed it 2nd</div><div class="v">${fmt(co.ch.c2)}</div></div>
+        </div>
+        <p class="plain">As a <strong>2nd choice</strong>: ${co.o2>=99?'<strong>near-sure</strong>':'about <strong>'+Math.round(co.o2)+'%</strong>'} — no points needed, and you keep yours either way.</p>`;
+      }
+      html+=`<p class="help">${co.current?`From the ${co.year} drawing's applicant counts.`:`Choice counts are from the ${co.year} drawing (the most recent available).`} Resident/nonresident splits can shift these estimates a little.</p>`;
+    } else if(z===null){
+      html+=`<p class="plain" style="color:var(--dim)">No zero-point draw data for this hunt.</p>`;
+    } else {
+      html+=`<p class="help">2nd-choice numbers aren't loaded for any year yet — they'll appear after the next data update.</p>`;
+    }
+    html+=`</div>`;
   }
   if(hyrs.length){
     const selYr = sheetHSel && hyrs.some(r=>r.year===sheetHSel) ? sheetHSel : 'avg';
