@@ -185,27 +185,38 @@ function parseSeasonTables(html, forcedYear) {
   // eRegulations serves HTML <table>s where each cell wraps content in <p> tags:
   //   <td><p>210</p></td> <td><p>Saddle Mtn Unit</p></td> <td><p>One antlerless elk</p></td>
   //   <td><p>Dec. 1 - Mar. 31, 2027</p></td> <td><p>11</p></td> <td><p>707</p></td>
-  // We strip the inner tags, then read cells positionally per the header row.
+  // Fine print (weapon restrictions, "See NWR pg. 90", subunit notes) rides
+  // inside the Hunt Name and Bag Limit cells, split off by <br> or </p><p>.
   const out = {};
   let year = forcedYear || null;
 
   const idRe = /^(\d{3}(?:[A-Z]\d{0,2})?|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/;
+  // full text of a cell, tags gone
   const cellText = td => td
-    .replace(/<[^>]+>/g, ' ')          // drop <p>, <a>, <br>, etc.
+    .replace(/<[^>]+>/g, ' ')
     .replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
     .replace(/[*\u2020\u2021]/g, '')
     .replace(/\s+/g, ' ').trim();
+  // cell split into segments at <br> and paragraph boundaries — first segment is
+  // the main value (name / bag limit), later segments are notes
+  const cellSegs = td => td
+    .replace(/<\/p>\s*<p[^>]*>/gi, '\u0001').replace(/<br\s*\/?>/gi, '\u0001')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/[*\u2020\u2021]/g, '')
+    .split('\u0001').map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
 
   const tables = html.match(/<table[\s\S]*?<\/table>/gi) || [];
   for (const tbl of tables) {
     const rows = tbl.match(/<tr[\s\S]*?<\/tr>/gi) || [];
     let cols = null;
     for (const row of rows) {
-      const cells = (row.match(/<t[hd][\s\S]*?<\/t[hd]>/gi) || []).map(cellText);
+      const rawCells = row.match(/<t[hd][\s\S]*?<\/t[hd]>/gi) || [];
+      const cells = rawCells.map(cellText);
       if (!cells.length) continue;
       const hi = cells.findIndex(c => /^hunt\s*#/i.test(c));
       if (hi >= 0) {
         cols = { id: hi,
+          name: cells.findIndex(c => /hunt\s*name/i.test(c)),
           bag: cells.findIndex(c => /bag\s*limit/i.test(c)),
           season: cells.findIndex(c => /open\s*season/i.test(c)) };
         if (!year) { const yc = cells.find(c => /20\d{2}\s*tags/i.test(c)); if (yc) year = yc.match(/(20\d{2})/)[1]; }
@@ -216,8 +227,19 @@ function parseSeasonTables(html, forcedYear) {
       if (!idRe.test(id)) continue;
       const season = (cells[cols.season] || '').trim();
       if (!season || !/[A-Za-z]{3}/.test(season)) continue;
-      const bag = cols.bag >= 0 ? (cells[cols.bag] || '').trim() : '';
-      if (!out[id]) out[id] = { s: season, b: bag, n: '' };
+      // bag limit = first segment of the bag cell; the rest are notes
+      const bagSegs = cols.bag >= 0 ? cellSegs(rawCells[cols.bag] || '') : [];
+      const bag = bagSegs[0] || '';
+      const nameSegs = cols.name >= 0 ? cellSegs(rawCells[cols.name] || '') : [];
+      // Collect notes: parenthetical/See/weapon-restriction text from name & bag
+      // cells (skip the plain unit name itself and the bag limit itself).
+      const notes = [...nameSegs.slice(1), ...bagSegs.slice(1)]
+        .map(s => s.trim())
+        .filter(s => s.length > 3 && /[a-z]/i.test(s));
+      // also catch inline parentheticals like "(Shotgun/Muzzleloader Only)" left in the name
+      const nameInline = (cells[cols.name] || '').match(/\(([^)]+)\)/g);
+      if (nameInline) nameInline.forEach(p => { const t = p.replace(/[()]/g, '').trim(); if (t.length > 3) notes.push(t); });
+      if (!out[id]) out[id] = { s: season, b: bag, n: [...new Set(notes)].join(' • ') };
     }
   }
   return { year: year || null, map: out };
@@ -346,18 +368,31 @@ async function updatePublicLand(details) {
   for (const url of LAND_PAGES) {
     try {
       const res = await fetchRetry(url, { headers: UA });
+      console.log(`[land] ${url.split('/').pop()} HTTP ${res.status}`);
       if (!res.ok) throw new Error(`page ${res.status} (site may be blocking robots)`);
-      const p = parsePublicLand(await res.text());
+      const rawHtml = await res.text();
+      // DIAGNOSTICS: does "public land" even appear, and in what shape?
+      const hits = (rawHtml.match(/public\s*land/gi) || []).length;
+      const pctHits = (rawHtml.match(/\d{1,3}\s*%\s*public\s*land/gi) || []).length;
+      const tables = (rawHtml.match(/<table/gi) || []).length;
+      console.log(`[land:diag] ${url.split('/').pop()}: ${rawHtml.length} chars | "public land":${hits} | "N% public land":${pctHits} | <table>:${tables}`);
+      const pi = rawHtml.search(/\d{1,3}\s*%\s*public\s*land/i);
+      if (pi >= 0) console.log(`[land:sample] ...${rawHtml.slice(Math.max(0, pi - 180), pi + 60).replace(/\s+/g, ' ')}...`);
+      else if (hits > 0) { const wi = rawHtml.search(/public\s*land/i); console.log(`[land:sample] (no % pattern) ...${rawHtml.slice(Math.max(0, wi - 120), wi + 80).replace(/\s+/g, ' ')}...`); }
+      else console.log(`[land:sample] "public land" not present on this page at all`);
+      const p = parsePublicLand(rawHtml);
+      console.log(`[land] parsed byArea:${Object.keys(p.byArea).length} byName:${Object.keys(p.byName).length}`);
       Object.assign(merged.byArea, p.byArea); Object.assign(merged.byName, p.byName);
       got += Object.keys(p.byArea).length + Object.keys(p.byName).length;
-    } catch (e) { details.push('public land page failed: ' + e.message); }
+    } catch (e) { console.error('[land] err', e.message); details.push('public land page failed: ' + e.message); }
   }
-  if (got < 20) { details.push(`public land %: SKIPPED (only ${got} entries found)`); return 0; }
+  if (got < 20) { console.log(`[land] SKIPPED — only ${got} entries`); details.push(`public land %: SKIPPED (only ${got} entries found)`); return 0; }
   const json = JSON.stringify(merged);
   const cur = await fs_('GET', `meta/publicLand`);
   if (cur && gv(cur.fields?.data) === json) return 0;
   if (DRY) { details.push(`public land %: would load ${got} entries`); return 0; }
   await fs_('PATCH', `meta/publicLand`, { fields: { data: V.s(json), updatedAt: V.t(new Date()) } });
+  console.log(`[land] loaded ${got} entries ✓`);
   details.push(`public land %: ${got} units/areas`);
   return 1;
 }
