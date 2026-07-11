@@ -179,7 +179,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v3.5</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v3.7</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -651,7 +651,11 @@ function blendHarvest(h, maxN){
     const keys=h.species==='elk'?CLASS_KEYS:CLASS_KEYS.slice(0,4);
     const pcts=Object.fromEntries(keys.map(k=>[k,Math.round(shares[k]*100)]));
     const tk=keys.reduce((b,k)=>pcts[k]>=pcts[b]?k:b,keys[0]); // ties go to the larger class
-    if(pcts[tk]>0) top={key:tk,label:classLabel(tk,h.species),pct:pcts[tk]};
+    if(pcts[tk]>0){
+      const cnt=antlerYrs.reduce((s,r)=>s+(r.hv[tk]||0),0);
+      const den=antlerYrs.reduce((s,r)=>s+r.hv.totalBull,0);
+      top={key:tk,label:classLabel(tk,h.species),pct:pcts[tk],cnt,den};
+    }
   }
   return {years:yrs.map(r=>r.year), n:yrs.length, succ, hunters, taken, days, shares, top};
 }
@@ -982,7 +986,7 @@ function cardHTML(h){
       if(!b) return `<div class="csize dim">No harvest data yet for this hunt.</div>`;
       const span=b.n>1?`${b.n}-yr avg`:`${b.years[0]} results`;
       return b.top
-        ? `<div class="csize">Typical size: <strong>${esc(b.top.label)}</strong> — ${b.top.pct}% of ${h.species==='elk'?'bulls':'bucks'} taken (${span})</div>`
+        ? `<div class="csize">Typical size: <strong>${esc(b.top.label)}</strong> — ${fmt(b.top.cnt)} of ${fmt(b.top.den)} ${h.species==='elk'?'bulls':'bucks'} (${span})</div>`
         : `<div class="csize dim">Antler sizes not reported for this hunt.</div>`;})()}
     ${(()=>{const se=seasonOf(h);return se?`<div class="cseason">Season: <strong>${esc(se.s)}</strong></div>`:'';})()}
     ${t.sentence?`<div class="ctrend ${t.dir}">${esc(t.sentence)}</div>`:''}
@@ -1062,31 +1066,46 @@ function openDetail(id, keepSel){
     }
     const succ = b?b.succ:one.successPct, hunters=b?b.hunters:one.hunters,
           taken=b?b.taken:one.totalHarvest, days=b?b.days:(one.hunters>0?Math.round(one.days/one.hunters):null);
+    // Tags issued come from the draw data. Blend view averages tags over the same seasons.
+    let tagsIssued;
+    if(b){
+      const tv=b.years.map(y=>findH(y,h.huntNum,h.species)?.tags).filter(x=>x!=null);
+      tagsIssued = tv.length ? Math.round(tv.reduce((s,x)=>s+x,0)/tv.length) : null;
+    } else {
+      tagsIssued = findH(selYr,h.huntNum,h.species)?.tags ?? null;
+    }
     const per=b?' per year':'', avgTag=b?' (avg/yr)':'';
     html+=`<p class="plain">${b?`Over the ${b.n} most recent seasons with results (${b.years[b.years.length-1]}–${b.years[0]}), on average${per}:`:`In the ${selYr} season:`}</p>
       <div class="kvg" style="margin-bottom:10px">
+        <div class="kv"><div class="k">Tags given out${avgTag}</div><div class="v">${tagsIssued==null?'—':fmt(tagsIssued)}</div></div>
         <div class="kv"><div class="k">Hunters who reported${avgTag}</div><div class="v">${fmt(hunters)}</div></div>
         <div class="kv"><div class="k">Filled their tag${avgTag}</div><div class="v" style="color:var(--good)">${fmt(taken)}</div></div>
-      </div>
-      <p class="plain" style="margin-bottom:12px"><strong>${fmtP(succ)} success</strong> — about ${succ>=100?'every':Math.round(succ/10)+' in 10'} hunter${succ>=100?'':'s'} who held this ${h.species} tag ${succ>=100?'filled it':'brought a '+(h.species==='elk'?'bull or cow':'buck')+' home'}.</p>
-      <div class="kvg">
         <div class="kv"><div class="k">Days hunted per hunter (avg)</div><div class="v">${days??'—'}</div></div>
-        <div class="kv"><div class="k">${b?'Seasons averaged':'Season'}</div><div class="v">${b?b.n:selYr}</div></div>
-      </div>`;
-    // antler bars: blended shares or exact year
-    let shares=null, denomLbl='';
-    if(b&&b.shares){ shares=b.shares; denomLbl=b.n>1?` (${b.n}-year average)`:''; }
-    else if(one&&one.antlerValid&&one.totalBull>0){ shares={}; CLASS_KEYS.forEach(k=>shares[k]=one[k]/one.totalBull); }
-    if(shares){
+      </div>
+      <p class="plain" style="margin-bottom:14px"><strong>${fmtP(succ)} success</strong> — about ${succ>=100?'every':Math.round(succ/10)+' in 10'} hunter${succ>=100?'':'s'} who held this ${h.species} tag ${succ>=100?'filled it':'brought a '+(h.species==='elk'?'bull or cow':'buck')+' home'}.</p>`;
+    // antler sizes as fractions (animals of that class ÷ total antlered animals)
+    let counts=null, denom=0, denomLbl='';
+    if(b){
+      // sum real animal counts across the same blended years
+      const ay=b.years.map(y=>findH(y,h.huntNum,h.species)?.harvest).filter(hv=>hv&&hv.antlerValid&&hv.totalBull>0);
+      if(ay.length){
+        counts={}; CLASS_KEYS.forEach(k=>counts[k]=ay.reduce((s,hv)=>s+(hv[k]||0),0));
+        denom=ay.reduce((s,hv)=>s+hv.totalBull,0);
+        denomLbl=ay.length>1?` (${ay.length} seasons combined)`:'';
+      }
+    } else if(one&&one.antlerValid&&one.totalBull>0){
+      counts={}; CLASS_KEYS.forEach(k=>counts[k]=one[k]||0); denom=one.totalBull;
+    }
+    if(counts&&denom>0){
       const keys=h.species==='elk'?CLASS_KEYS:CLASS_KEYS.slice(0,4);
-      const mx=Math.max(...keys.map(k=>shares[k]));
-      html+=`<p class="plain" style="margin-top:12px">Antler sizes of the ${h.species==='elk'?'bulls':'bucks'} taken${denomLbl}:</p>`;
+      const mx=Math.max(...keys.map(k=>counts[k]));
+      html+=`<p class="plain" style="margin-top:12px">Antler sizes of the ${fmt(denom)} ${h.species==='elk'?'bulls':'bucks'} taken${denomLbl}:</p>`;
       keys.forEach(k=>{
-        const pct=Math.round(shares[k]*100);
+        const c=counts[k], pct=denom>0?(c/denom*100):0;
         html+=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
           <span style="flex:0 0 84px;font-size:.85rem">${classLabel(k,h.species)}</span>
-          <div class="bar" style="flex:1"><div class="barf" style="width:${pct}%;${shares[k]===mx&&mx>0?'background:var(--gold)':''}"></div></div>
-          <span style="flex:0 0 44px;text-align:right;font-size:.85rem;font-weight:700">${pct}%</span></div>`;
+          <div class="bar" style="flex:1"><div class="barf" style="width:${pct}%;${c===mx&&mx>0?'background:var(--gold)':''}"></div></div>
+          <span style="flex:0 0 52px;text-align:right;font-size:.85rem;font-weight:700">${fmt(c)}/${fmt(denom)}</span></div>`;
       });
     }
     html+=`</div>`;
