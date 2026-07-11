@@ -1,590 +1,44 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Oregon Hunt Planner</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<style>
-:root{
-  --bg:#141d17; --card:#1d2a21; --card2:#243428; --line:#3a4c3e;
-  --text:#f3ecdc; --dim:#b9c4b0; --gold:#d9a54e;
-  --good:#93cba3; --goodbg:#1f3627; --warn:#e2b45f; --warnbg:#37301c;
-  --luck:#c9b8a0; --luckbg:#2b2a22; --bad:#dd8f75; --badbg:#3a251e;
-}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html{font-size:19px}
-body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.5;padding-bottom:calc(84px + env(safe-area-inset-bottom))}
-.serif{font-family:'Iowan Old Style','Palatino Linotype',Georgia,serif}
-.wrap{max-width:620px;margin:0 auto;padding:0 14px}
-button{font-family:inherit;color:inherit;cursor:pointer}
-a{color:var(--gold)}
+// ODFW Auto-Updater v2 — draw reports (XLSX) + harvest statistics (PDF).
+// Runs monthly via GitHub Actions. Fails safe: bad parses are never written.
+//
+//   node scripts/fetch-odfw.mjs          live run
+//   node scripts/fetch-odfw.mjs --dry    fetch + parse, write nothing
+import * as XLSX from 'xlsx';
+import pdfjs from 'pdfjs-dist/legacy/build/pdf.js';
+const { getDocument } = pdfjs;
 
-/* header */
-header{background:linear-gradient(180deg,#20362a,#182720);border-bottom:2px solid var(--gold);padding:14px 0 12px}
-.hrow{display:flex;align-items:center;gap:12px}
-.roundel{width:46px;height:46px;border:2px solid var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-size:13px;color:var(--gold);letter-spacing:.5px;flex-shrink:0}
-h1{font-size:1.35rem;margin:0;font-weight:700}
-.hsub{font-size:.72rem;color:var(--dim);letter-spacing:.14em;text-transform:uppercase;margin-top:2px}
-.ver{font-size:.65rem;color:var(--dim);border:1px solid var(--line);padding:1px 6px;border-radius:4px;vertical-align:middle;margin-left:6px}
-
-/* sync note */
-.syncnote{font-size:.85rem;padding:10px 14px;background:var(--card);border-bottom:1px solid var(--line);color:var(--dim)}
-.syncnote.ok{color:var(--good)} .syncnote.new{color:var(--gold)} .syncnote.err{color:var(--bad)}
-
-/* generic */
-.page{display:none;padding-top:16px}
-.page.active{display:block}
-.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:16px;overflow:hidden}
-.pbody{padding:16px}
-.ptitle{font-size:1.05rem;font-weight:700;margin:0 0 6px}
-.help{font-size:.85rem;color:var(--dim);margin:4px 0 0}
-.btn{display:inline-flex;align-items:center;justify-content:center;min-height:56px;padding:10px 20px;font-size:1rem;font-weight:600;background:var(--card2);border:1.5px solid var(--line);border-radius:12px}
-.btn.primary{background:var(--gold);border-color:var(--gold);color:#1c2418}
-.btn.danger{background:transparent;border-color:var(--bad);color:var(--bad);min-height:44px;font-size:.85rem}
-.btn:active{opacity:.75}
-
-/* points steppers */
-.pts-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.stepper{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
-.stepper .lbl{font-size:.85rem;color:var(--dim);margin-bottom:6px}
-.step-row{display:flex;align-items:center;justify-content:center;gap:6px}
-.step-btn{width:56px;height:56px;font-size:1.7rem;font-weight:700;background:var(--card);border:1.5px solid var(--line);border-radius:12px;line-height:1}
-.step-val{min-width:58px;font-size:1.9rem;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums}
-.pts-summary{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.pts-summary .txt{font-size:1rem}
-.pts-summary strong{color:var(--gold)}
-.linkbtn{background:none;border:none;color:var(--gold);font-size:.95rem;text-decoration:underline;padding:10px 4px}
-
-/* filters */
-.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
-.seg button{min-height:56px;font-size:1.05rem;font-weight:700;background:var(--card2);border:1.5px solid var(--line);border-radius:12px}
-.seg button.on{background:var(--gold);border-color:var(--gold);color:#1c2418}
-.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
-select,input[type=search],input[type=number]{width:100%;min-height:54px;font-size:1rem;background:var(--card2);color:var(--text);border:1.5px solid var(--line);border-radius:12px;padding:8px 12px;font-family:inherit}
-.field label{display:block;font-size:.8rem;color:var(--dim);margin-bottom:4px}
-.chkrow{display:flex;align-items:center;gap:12px;background:var(--card2);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:6px}
-.chkrow input{width:26px;height:26px;accent-color:var(--gold);flex-shrink:0}
-.chkrow span{font-size:.95rem}
-.count{font-size:.85rem;color:var(--dim);margin:12px 2px}
-
-/* hunt cards */
-.card{width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-left:7px solid var(--line);border-radius:12px;padding:15px 15px 13px;margin-bottom:12px;display:block}
-.card.v-yes{border-left-color:var(--good)} .card.v-soon{border-left-color:var(--warn)}
-.card.v-luck{border-left-color:var(--luck)} .card.v-no{border-left-color:var(--bad)}
-.crow1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
-.cid{font-size:1.3rem;font-weight:800;color:var(--gold);font-family:Georgia,serif}
-.cname{font-size:1.02rem;font-weight:600;flex:1;min-width:0}
-.cstar{font-size:1.5rem;background:none;border:none;color:var(--dim);padding:2px 8px;line-height:1;flex-shrink:0}
-.cstar.on{color:var(--gold)}
-.chips{margin:4px 0 8px}
-.chip{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:6px;background:var(--card2);border:1px solid var(--line);color:var(--dim);margin-right:6px;margin-bottom:4px}
-.chip.sp{background:var(--warnbg);border-color:var(--gold);color:var(--gold)}
-.detailbtn{display:flex;align-items:center;justify-content:center;width:100%;min-height:50px;margin-top:11px;font-size:.95rem;font-weight:700;background:var(--card2);border:1.5px solid var(--gold);border-radius:10px;color:var(--gold)}
-.verdict{font-size:1rem;font-weight:700;margin:2px 0 10px}
-.v-yes .verdict{color:var(--good)} .v-soon .verdict{color:var(--warn)}
-.v-luck .verdict{color:var(--luck)} .v-no .verdict{color:var(--bad)}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.stat{background:var(--card2);border-radius:10px;padding:8px 6px;text-align:center}
-.stat .n{font-size:1.25rem;font-weight:800;font-variant-numeric:tabular-nums}
-.stat .l{font-size:.68rem;color:var(--dim);margin-top:1px;line-height:1.25}
-.csize{font-size:.88rem;color:var(--text);margin-top:11px;padding:7px 10px;background:var(--card2);border-radius:8px;border-left:3px solid var(--gold)}
-.csize strong{color:var(--gold)} .csize.dim{color:var(--dim);border-left-color:var(--line)}
-.hselrow{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
-.hsel{min-height:46px;padding:6px 14px;font-size:.9rem;font-weight:700;background:var(--card2);border:1.5px solid var(--line);border-radius:10px;color:var(--dim)}
-.hsel.on{background:var(--gold);border-color:var(--gold);color:#1c2418}
-.cseason{font-size:.88rem;color:var(--text);margin-top:10px;padding:7px 10px;background:var(--card2);border-radius:8px}
-.cseason strong{color:var(--gold)}
-.ctrend{font-size:.83rem;color:var(--dim);margin-top:9px}
-.ctrend.harder{color:var(--warn)} .ctrend.easier{color:var(--good)}
-.empty{padding:36px 16px;text-align:center;color:var(--dim);font-size:1rem;line-height:1.6}
-
-/* detail sheet */
-.sheet{display:none;position:fixed;inset:0;background:var(--bg);z-index:60;overflow-y:auto;-webkit-overflow-scrolling:touch}
-.sheet.open{display:block}
-.shead{position:sticky;top:0;background:#20362a;border-bottom:2px solid var(--gold);padding:12px 14px;display:flex;align-items:center;gap:10px;z-index:2}
-.shead .t{flex:1;min-width:0}
-.shead h2{font-size:1.15rem;margin:0;font-family:Georgia,serif}
-.shead .sub{font-size:.8rem;color:var(--dim)}
-.closebtn{min-height:52px;min-width:92px;font-size:1rem;font-weight:700;background:var(--card2);border:1.5px solid var(--line);border-radius:12px}
-.sbody{padding:16px 14px calc(40px + env(safe-area-inset-bottom));max-width:620px;margin:0 auto}
-.callout{border-radius:12px;padding:14px 16px;font-size:1.02rem;font-weight:600;margin-bottom:16px;border:1px solid var(--line)}
-.callout.v-yes{background:var(--goodbg);color:var(--good)} .callout.v-soon{background:var(--warnbg);color:var(--warn)}
-.callout.v-luck{background:var(--luckbg);color:var(--luck)} .callout.v-no{background:var(--badbg);color:var(--bad)}
-.sec{margin-bottom:20px}
-.sec h3{font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);border-bottom:1px solid var(--line);padding-bottom:6px;margin:0 0 10px}
-.plain{font-size:.97rem;margin:0 0 10px}
-.kvg{display:grid;grid-template-columns:1fr 1fr;gap:9px}
-.kv{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
-.kv .k{font-size:.75rem;color:var(--dim)}
-.kv .v{font-size:1.2rem;font-weight:800;font-variant-numeric:tabular-nums}
-table.simple{width:100%;border-collapse:collapse;font-size:.92rem}
-table.simple th{text-align:left;font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);padding:7px 8px;border-bottom:1px solid var(--line)}
-table.simple td{padding:9px 8px;border-bottom:1px solid var(--card2);font-variant-numeric:tabular-nums}
-table.simple tr.hl td{background:var(--goodbg);color:var(--good);font-weight:700}
-.bar{height:9px;background:var(--card2);border-radius:5px;overflow:hidden;margin-top:4px}
-.barf{height:100%;background:var(--good)}
-.trendline{display:flex;align-items:flex-end;gap:5px;height:88px;margin:18px 0 6px}
-.tcol{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px}
-.tbar{width:100%;max-width:44px;background:var(--gold);border-radius:4px 4px 0 0;min-height:3px}
-.tbar.pred{background:transparent;border:2px dashed var(--gold);border-bottom:none}
-.tyr{font-size:.68rem;color:var(--dim)}
-.tval{font-size:.75rem;font-weight:700}
-
-/* tabs */
-.tabbar{position:fixed;left:0;right:0;bottom:0;background:#1a2820;border-top:2px solid var(--gold);display:grid;grid-template-columns:repeat(3,1fr);z-index:50;padding-bottom:env(safe-area-inset-bottom)}
-.tab{min-height:64px;background:none;border:none;font-size:1rem;font-weight:700;color:var(--dim);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
-.tab .ic{font-size:1.25rem;line-height:1}
-.tab.on{color:var(--gold)}
-
-/* admin */
-.stepnum{display:inline-flex;width:34px;height:34px;border-radius:50%;background:var(--gold);color:#1c2418;font-weight:800;align-items:center;justify-content:center;margin-right:10px;flex-shrink:0}
-.steph{display:flex;align-items:center;font-size:1.05rem;font-weight:700;margin-bottom:8px}
-.srcbtn{display:flex;align-items:center;justify-content:center;min-height:58px;font-size:.95rem;font-weight:700;background:var(--card2);border:1.5px solid var(--gold);border-radius:12px;color:var(--gold);text-decoration:none;text-align:center;padding:8px}
-.srcgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.upzone{display:block;background:var(--card2);border:2px dashed var(--line);border-radius:12px;padding:16px 12px;text-align:center;margin-bottom:10px}
-.upzone input{display:none}
-.upzone .uzl{font-size:.98rem;font-weight:700}
-.upzone .uzh{font-size:.78rem;color:var(--dim);margin-top:2px}
-.upzone .uzf{font-size:.8rem;color:var(--good);margin-top:5px;word-break:break-all}
-.upzone.hf{border-style:solid;border-color:var(--good)}
-.yrow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 0;border-bottom:1px solid var(--card2);flex-wrap:wrap}
-.yrl{font-size:1.15rem;font-weight:800;font-family:Georgia,serif}
-.yrm{font-size:.8rem;color:var(--dim)}
-.bmini{min-height:44px;padding:6px 12px;font-size:.82rem;font-weight:600;background:var(--card2);border:1px solid var(--line);border-radius:10px}
-.bmini.dan{border-color:var(--bad);color:var(--bad)}
-.statusline{font-size:.9rem;padding:8px 0;border-bottom:1px solid var(--card2)}
-.statusline:last-child{border-bottom:none}
-.banner{display:flex;gap:10px;align-items:center;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:.9rem;margin-bottom:14px}
-.banner.ok{border-color:var(--good);color:var(--good)}
-.banner.err{border-color:var(--bad);color:var(--bad)}
-.spin{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--gold);border-radius:50%;animation:sp 1s linear infinite;flex-shrink:0}
-@keyframes sp{to{transform:rotate(360deg)}}
-
-/* footer, toast, confirm */
-footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim)}
-.toast{position:fixed;left:50%;transform:translateX(-50%) translateY(20px);bottom:calc(96px + env(safe-area-inset-bottom));background:#0e150f;border:1px solid var(--gold);color:var(--text);border-radius:12px;padding:12px 20px;font-size:.95rem;opacity:0;pointer-events:none;transition:.25s;z-index:99;max-width:88vw}
-.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.toast.err{border-color:var(--bad)}
-.cbackdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:80;align-items:center;justify-content:center;padding:20px}
-.cbackdrop.open{display:flex}
-.cbox{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;max-width:380px;width:100%}
-.cbox p{font-size:1rem;margin:0 0 16px}
-.cbtns{display:flex;gap:10px;justify-content:flex-end}
-@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-@media (max-width:380px){.stats{grid-template-columns:1fr 1fr}.fgrid{grid-template-columns:1fr}.srcgrid{grid-template-columns:1fr}}
-</style>
-</head>
-<body>
-
-<header><div class="wrap"><div class="hrow">
-  <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v4.7</span></h1>
-  <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
-  <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
-</div></div></header>
-
-<div class="syncnote" id="syncNote">Loading hunt data…</div>
-<div id="deadline" style="display:none;padding:11px 14px;font-size:.92rem;font-weight:700;background:var(--warnbg);color:var(--warn);border-bottom:1px solid var(--line)"></div>
-
-<main class="wrap">
-
-<!-- ═══ HUNTS PAGE ═══ -->
-<div class="page active" data-page="hunts">
-
-  <div class="panel" id="ptsPanel"><div class="pbody" id="ptsBody"></div></div>
-
-  <div class="panel"><div class="pbody">
-    <div class="seg" id="spSeg">
-      <button data-sp="all">All</button><button data-sp="deer">Deer</button><button data-sp="elk">Elk</button>
-    </div>
-    <div class="fgrid">
-      <div class="field"><label>Weapon</label>
-        <select id="fWeapon"><option value="all">All weapons</option><option value="rifle">Rifle</option><option value="archery">Bow</option><option value="muzz">Muzzleloader</option><option value="youth">Youth</option></select></div>
-      <div class="field"><label>Sort by</label>
-        <select id="fSort"><option value="best">Suggested for me</option><option value="success">Highest success rate</option><option value="easy">Easiest to draw</option><option value="hard">Hardest to draw</option><option value="backup">Best backup (2nd choice)</option><option value="num">Hunt number</option></select></div>
-    </div>
-    <div class="fgrid">
-      <div class="field"><label>Search</label><input type="search" id="fSearch" placeholder="Hunt name or number"></div>
-      <div class="field"><label>Data year</label><select id="fYear"></select></div>
-    </div>
-    <label class="chkrow"><input type="checkbox" id="fCanDraw"><span>Only show hunts I can draw for sure this year</span></label>
-    <button class="chkrow" id="spBtn" style="width:100%;border-style:solid;background:var(--card2)">
-      <span style="font-weight:700">Hunt types shown ▾</span><span class="help" id="spSum" style="margin:0;text-align:right;flex:1"></span></button>
-    <div id="spPanel" style="display:none;padding:4px 2px 2px">
-      <label class="chkrow" style="margin-bottom:10px;border-color:var(--gold)"><input type="checkbox" id="spOnly"><span><strong>Only show these hunt types</strong> — hide all standard hunts</span></label>
-      <p class="help" style="margin:0 0 8px">Checked = shown in the list. Uncheck a type to hide those hunts:</p>
-      <div id="spChecks"></div>
-    </div>
-  </div></div>
-
-  <div class="count" id="rcount"></div>
-  <div id="cards"></div>
-</div>
-
-<!-- ═══ MY LIST ═══ -->
-<div class="page" data-page="mylist">
-  <div id="mylistCards"></div>
-</div>
-
-<!-- ═══ ABOUT ═══ -->
-<div class="page" data-page="about">
-  <div class="panel"><div class="pbody">
-    <p class="ptitle">What this app does</p>
-    <p class="plain">It takes Oregon's official controlled-hunt numbers and answers one question in plain English: <strong>which deer or elk hunts can you realistically draw, and are they worth your points?</strong></p>
-    <p class="plain">Enter your preference points on the Hunts page, and every hunt gets a color-coded answer. Tap any hunt to see the full story — your odds, hunter success rates, antler sizes, and how the hunt has changed over the years.</p>
-  </div></div>
-  <div class="panel"><div class="pbody">
-    <p class="ptitle">Where the numbers come from</p>
-    <p class="plain">Everything comes from the Oregon Department of Fish &amp; Wildlife's public reports. A helper program checks ODFW's website on the 1st of every month and loads any new reports automatically — nobody has to do anything.</p>
-    <p class="plain">Draw reports for a season are published in the fall, after the June drawing. Harvest results are published the following spring.</p>
-  </div></div>
-  <div class="panel"><div class="pbody">
-    <p class="ptitle">Words you'll see</p>
-    <p class="plain"><strong>Preference points</strong> — Every year you apply and don't draw, ODFW gives you a point. More points = better odds next year. Your points are on your ODFW account.</p>
-    <p class="plain"><strong>Points for a sure tag</strong> — Hunters who had this many points all drew a tag. If you have this many or more, the tag is yours if you apply.</p>
-    <p class="plain"><strong>Success rate</strong> — Of the hunters who held this tag, the share who brought an animal home.</p>
-    <p class="plain"><strong>Luck-of-the-draw</strong> — Some hunts never fill up with point-holders, so 25% of tags go out by pure random luck. Anyone can win one.</p>
-    <p class="plain"><strong>⚠ next to a success rate</strong> — Fewer than 6 in 10 tag holders reported their hunt, so the rate is based on a small slice of hunters and probably reads higher than reality.</p>
-  </div></div>
-  <div class="panel"><div class="pbody">
-    <p class="plain" style="font-size:.85rem;color:var(--dim)">Personal reference tool. Not affiliated with ODFW. Always verify hunt numbers, dates, and boundaries in the current Oregon Big Game Regulations before applying. Application deadline is May 15 each year.</p>
-    <button class="linkbtn" id="adminLink" style="font-size:.85rem">Admin tools</button>
-  </div></div>
-</div>
-
-<!-- ═══ ADMIN (hidden) ═══ -->
-<div class="page" data-page="admin">
-  <button class="btn" id="adminBack" style="margin-bottom:14px">‹ Back to the app</button>
-
-  <div class="panel"><div class="pbody">
-    <p class="ptitle">Special requirement tags</p>
-    <p class="help" style="margin-bottom:12px">Tags mark hunts as youth-only, spike-only, and so on. You can create your own labels and manually add or remove any tag on any hunt — handy when ODFW's hunt name doesn't spell it out.</p>
-    <div class="steph" style="font-size:.95rem"><span class="stepnum" style="width:26px;height:26px;font-size:.8rem">A</span> Your custom labels</div>
-    <div id="customList"></div>
-    <div style="display:flex;gap:8px;margin:8px 0 4px">
-      <input type="text" id="newLabel" placeholder="New label (e.g. Rifle only)" style="flex:1">
-      <button class="btn" id="btnAddLabel" style="min-height:54px;flex:0 0 auto">Add</button>
-    </div>
-    <div class="steph" style="font-size:.95rem;margin-top:16px"><span class="stepnum" style="width:26px;height:26px;font-size:.8rem">B</span> Tag a specific hunt</div>
-    <p class="help" style="margin-bottom:8px">Find a hunt, then tap tags to turn them on or off for it.</p>
-    <input type="search" id="tagHuntSearch" placeholder="Search hunt name or number" style="margin-bottom:8px">
-    <div id="tagHuntResults"></div>
-  </div></div>
-
-  <div class="banner" id="dmBanner"><span class="spin"></span><span>Connecting to cloud…</span></div>
-
-  <div class="panel"><div class="pbody">
-    <p class="ptitle">Automatic updates</p>
-    <div id="autoCard" class="help">Checking…</div>
-    <p class="help" style="margin-top:10px">A helper program checks ODFW on the 1st of each month and loads new draw reports and harvest results by itself. If a line above says <strong>NEEDS MANUAL UPLOAD</strong>, follow the steps below for that file.</p>
-  </div></div>
-
-  <div class="panel"><div class="pbody">
-    <p class="ptitle">Data on file</p>
-    <div id="ylist"></div>
-  </div></div>
-
-  <div class="panel"><div class="pbody">
-    <div class="steph"><span class="stepnum">1</span> Pick the season year</div>
-    <p class="help" style="margin-bottom:10px">This is the year printed on the ODFW file name — for example, the "2026 Buck Deer Preference Point Draw Report" is year 2026.</p>
-    <div style="display:flex;gap:10px;align-items:center">
-      <input type="number" id="pyInput" min="2000" max="2100" placeholder="2026" inputmode="numeric" style="flex:0 0 130px">
-      <button class="btn" id="btnSetYear">Use this year</button>
-    </div>
-    <p class="help" style="margin-top:8px">Now editing: <strong id="pyDisp" style="color:var(--gold)">none</strong></p>
-  </div></div>
-
-  <div class="panel"><div class="pbody">
-    <div class="steph"><span class="stepnum">2</span> Download the file from ODFW</div>
-    <p class="help" style="margin-bottom:12px">Tap a button, find the file for your year, and download it to this phone or computer.</p>
-    <div class="srcgrid">
-      <a class="srcbtn" href="https://myodfw.com/articles/point-summary-reports" target="_blank" rel="noopener">Draw reports<br>(Point Summary page)</a>
-      <a class="srcbtn" href="https://myodfw.com/articles/big-game-hunting-harvest-statistics" target="_blank" rel="noopener">Harvest results<br>(Harvest Statistics page)</a>
-    </div>
-    <p class="help" style="margin-top:12px">Draw reports: get the <strong>Preference Point Draw Report</strong> for Buck Deer and for Elk. Harvest: get the <strong>Any Legal Weapon</strong>, <strong>Archery</strong>, and <strong>Muzzleloader</strong> files for Buck Deer and Elk.</p>
-  </div></div>
-
-  <div class="panel"><div class="pbody">
-    <div class="steph"><span class="stepnum">3</span> Put the file in the matching box</div>
-    <p class="help" style="margin-bottom:12px">Tap the box that matches your file, choose the file, and wait for the green check. It saves to the cloud by itself — everyone in the family gets it.</p>
-    <label class="upzone" data-key="deerPoints"><input type="file" accept=".xlsx,.xls" data-target="deerPoints"><div class="uzl">Deer — Draw Report</div><div class="uzh">Preference Point Draw Report (XLSX)</div><div class="uzf" data-file="deerPoints"></div></label>
-    <label class="upzone" data-key="elkPoints"><input type="file" accept=".xlsx,.xls" data-target="elkPoints"><div class="uzl">Elk — Draw Report</div><div class="uzh">Preference Point Draw Report (XLSX)</div><div class="uzf" data-file="elkPoints"></div></label>
-    <label class="upzone" data-key="deerChoices"><input type="file" accept=".xlsx,.xls" data-target="deerChoices"><div class="uzl">Deer — Hunt Choice Report</div><div class="uzh">"Applicants by Hunt Choice" (XLSX)</div><div class="uzf" data-file="deerChoices"></div></label>
-    <label class="upzone" data-key="elkChoices"><input type="file" accept=".xlsx,.xls" data-target="elkChoices"><div class="uzl">Elk — Hunt Choice Report</div><div class="uzh">"Applicants by Hunt Choice" (XLSX)</div><div class="uzf" data-file="elkChoices"></div></label>
-    <label class="upzone" data-key="deerRifleHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="deerRifleHarvest"><div class="uzl">Deer — Rifle Harvest</div><div class="uzh">"Any Legal Weapon Buck Deer" (PDF)</div><div class="uzf" data-file="deerRifleHarvest"></div></label>
-    <label class="upzone" data-key="elkRifleHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="elkRifleHarvest"><div class="uzl">Elk — Rifle Harvest</div><div class="uzh">"Any Legal Weapon Elk" (PDF)</div><div class="uzf" data-file="elkRifleHarvest"></div></label>
-    <label class="upzone" data-key="deerArcheryHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="deerArcheryHarvest"><div class="uzl">Deer — Bow Harvest</div><div class="uzh">"Archery Buck Deer" (PDF)</div><div class="uzf" data-file="deerArcheryHarvest"></div></label>
-    <label class="upzone" data-key="elkArcheryHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="elkArcheryHarvest"><div class="uzl">Elk — Bow Harvest</div><div class="uzh">"Archery Elk" (PDF)</div><div class="uzf" data-file="elkArcheryHarvest"></div></label>
-    <label class="upzone" data-key="deerMuzzHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="deerMuzzHarvest"><div class="uzl">Deer — Muzzleloader Harvest</div><div class="uzh">"Muzzleloader Buck Deer" (PDF)</div><div class="uzf" data-file="deerMuzzHarvest"></div></label>
-    <label class="upzone" data-key="elkMuzzHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="elkMuzzHarvest"><div class="uzl">Elk — Muzzleloader Harvest</div><div class="uzh">"Muzzleloader Elk" (PDF)</div><div class="uzf" data-file="elkMuzzHarvest"></div></label>
-  </div></div>
-
-  <div class="panel"><div class="pbody">
-    <p class="ptitle">Season dates &amp; bag limits — paste-in</p>
-    <p class="help" style="margin-bottom:10px">If the automatic updater can't reach the regulations site, do it by hand: open the <a href="https://www.eregulations.com/oregon/hunting/buck-deer-seasons" target="_blank" rel="noopener">Buck Deer Seasons</a> or <a href="https://www.eregulations.com/oregon/hunting/elk-seasons" target="_blank" rel="noopener">Elk Seasons</a> page, select the whole hunt table with your finger, copy it, and paste it below. This is what powers season dates on cards and the Spike-only / Whitetail tags.</p>
-    <textarea id="regsPaste" placeholder="Paste the hunt table here…" style="width:100%;min-height:110px;font-size:.95rem;font-family:inherit;background:var(--card2);color:var(--text);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px"></textarea>
-    <button class="btn" id="regsParse" style="width:100%;margin-top:8px">Check what I pasted</button>
-    <div id="regsPreview" style="margin-top:10px"></div>
-  </div></div>
-
-  <div class="panel"><div class="pbody">
-    <p class="ptitle">If something looks wrong</p>
-    <p class="plain" style="font-size:.9rem">Uploading a file again always replaces what's there — that's the fix for almost everything. If a whole year is bad, delete it from the cloud below and re-upload its files. Manual uploads are never overwritten by the automatic updater.</p>
-    <button class="btn danger" id="btnClear" style="margin-top:6px">Clear this device's local copy</button>
-  </div></div>
-</div>
-
-</main>
-
-<footer>
-  <div>Oregon Hunt Planner — data from public ODFW reports · <a href="https://myodfw.com" target="_blank" rel="noopener">myodfw.com</a></div>
-  <button class="linkbtn" id="adminLink2" style="font-size:.72rem;color:var(--dim)">Admin</button>
-</footer>
-
-<!-- tab bar -->
-<nav class="tabbar">
-  <button class="tab on" data-tab="hunts"><span class="ic">◎</span>Hunts</button>
-  <button class="tab" data-tab="mylist"><span class="ic">★</span>My List</button>
-  <button class="tab" data-tab="about"><span class="ic">?</span>About</button>
-</nav>
-
-<!-- detail sheet -->
-<div class="sheet" id="sheet">
-  <div class="shead">
-    <div class="t"><h2 id="shTitle">—</h2><div class="sub" id="shSub">—</div></div>
-    <button class="cstar" id="shStar" style="font-size:1.8rem">☆</button>
-    <button class="closebtn" id="shClose">Close</button>
-  </div>
-  <div class="sbody" id="shBody"></div>
-</div>
-
-<div class="sheet" id="mapSheet">
-  <div class="shead">
-    <div class="t"><h2 id="mapTitle">Unit map</h2><div class="sub" id="mapSub"></div></div>
-    <button class="closebtn" id="mapClose">Close</button>
-  </div>
-  <div class="sbody" id="mapBody"></div>
-</div>
-
-<div class="cbackdrop" id="confirmBox"><div class="cbox">
-  <p id="confirmMsg"></p>
-  <div class="cbtns"><button class="btn" id="confirmNo">Cancel</button><button class="btn danger" id="confirmYes" style="min-height:56px">Yes, do it</button></div>
-</div></div>
-
-<div class="toast" id="toast"></div>
-
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script>
-'use strict';
-if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-// ─── FIREBASE ─────────────────────────────────────────────────────────────────
-let db = null;
-try {
-  firebase.initializeApp({
-    apiKey:            'AIzaSyCqbU875vWyWS0dQWr0hoqVRscH2AtU_v4',
-    authDomain:        'oregon-hunting.firebaseapp.com',
-    projectId:         'oregon-hunting',
-    storageBucket:     'oregon-hunting.firebasestorage.app',
-    messagingSenderId: '84034970737',
-    appId:             '1:84034970737:web:d470b1daca7b56ce6227d0'
-  });
-  db = firebase.firestore();
-} catch(e) { console.warn('[FB] Init failed:', e); }
-
+const PROJECT = 'oregon-hunting';
+const API_KEY = 'AIzaSyCqbU875vWyWS0dQWr0hoqVRscH2AtU_v4';
+const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
+const DRAW_PAGE = 'https://myodfw.com/articles/point-summary-reports';
+const HARVEST_PAGE = 'https://myodfw.com/articles/big-game-hunting-harvest-statistics';
 const CHUNK = 150;
+const UA = { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9' };
+async function fetchRetry(url, opts) {
+  let res = await fetch(url, opts);
+  if (!res.ok && res.status !== 404) {
+    await new Promise(r => setTimeout(r, 4000));
+    res = await fetch(url, opts);
+  }
+  return res;
+}
+const DRY = process.argv.includes('--dry');
 
-async function fbSave(year, hunts, harvestData) {
-  if (!db) return false;
-  try {
-    const chunks = [];
-    for (let i = 0; i < hunts.length; i += CHUNK) chunks.push(hunts.slice(i, i + CHUNK));
-    await db.collection('years').doc(String(year)).set({
-      year: String(year), huntCount: hunts.length, chunkCount: chunks.length,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    for (let ci = 0; ci < chunks.length; ci++) {
-      await db.collection('years').doc(String(year)).collection('chunks').doc(String(ci))
-        .set({ hunts: JSON.stringify(chunks[ci]) });
-    }
-    await db.collection('years').doc(String(year)).collection('harvest').doc('all')
-      .set({ data: JSON.stringify(harvestData), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-    return true;
-  } catch(e) { console.warn('[FB] Save error:', e); return false; }
-}
-async function fbDeleteYear(year) {
-  if (!db) return false;
-  try {
-    const cs = await db.collection('years').doc(String(year)).collection('chunks').get();
-    for (const d of cs.docs) await d.ref.delete();
-    const hs = await db.collection('years').doc(String(year)).collection('harvest').get();
-    for (const d of hs.docs) await d.ref.delete();
-    const ps = await db.collection('years').doc(String(year)).collection('pdfMeta').get();
-    for (const d of ps.docs) await d.ref.delete();
-    await db.collection('years').doc(String(year)).delete();
-    return true;
-  } catch(e) { return false; }
-}
-async function fbSavePdfMeta(year, fileKey, fileName, huntCount) {
-  if (!db) return false;
-  try {
-    await db.collection('years').doc(String(year)).collection('pdfMeta').doc(fileKey).set({
-      fileName, huntCount, uploadedAt: firebase.firestore.FieldValue.serverTimestamp(), source: 'manual'
-    });
-    return true;
-  } catch(e) { return false; }
-}
-async function fbSaveSeasons(year, seasons) {
-  if (!db) return false;
-  try { await db.collection('years').doc(String(year)).collection('seasons').doc('all').set({
-      data: JSON.stringify(seasons), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-    return true; }
-  catch(e) { return false; }
-}
-async function fbSaveChoices(year, choices) {
-  if (!db) return false;
-  try { await db.collection('years').doc(String(year)).collection('choices').doc('all').set({
-      data: JSON.stringify(choices), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-    return true; }
-  catch(e) { return false; }
-}
-let PL = null; // public land % lookup (meta/publicLand)
-async function fbLoadPublicLand() {
-  if (!db) return;
-  try { const d = await db.collection('meta').doc('publicLand').get();
-    if (d.exists) PL = JSON.parse(d.data().data || 'null'); }
-  catch(e) {}
-}
-async function fbLoadReqs(key) {
-  if (!db) return null;
-  try { const d = await db.collection('reqs').doc(key).get();
-    return d.exists ? JSON.parse(d.data().items || '[]') : []; }
-  catch(e) { return null; }
-}
-async function fbSaveReqs(key, items) {
-  if (!db) return false;
-  try { await db.collection('reqs').doc(key).set({
-      items: JSON.stringify(items), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-    return true; }
-  catch(e) { return false; }
-}
-async function fbLoadAutoMeta() {
-  if (!db) return null;
-  try { const d = await db.collection('meta').doc('autoUpdate').get(); return d.exists ? d.data() : null; }
-  catch(e) { return null; }
-}
-async function fbLoad() {
-  if (!db) return null;
-  try {
-    const snap = await db.collection('years').get();
-    const out = {};
-    for (const yd of snap.docs) {
-      const meta = yd.data(), year = meta.year;
-      let hunts = [];
-      for (let ci = 0; ci < (meta.chunkCount || 1); ci++) {
-        const cd = await db.collection('years').doc(year).collection('chunks').doc(String(ci)).get();
-        if (cd.exists) hunts = hunts.concat(JSON.parse(cd.data().hunts || '[]'));
-      }
-      const hd = await db.collection('years').doc(year).collection('harvest').doc('all').get();
-      const sd = await db.collection('years').doc(year).collection('seasons').doc('all').get();
-      const cd2 = await db.collection('years').doc(year).collection('choices').doc('all').get();
-      out[year] = { hunts, harvestData: hd.exists ? JSON.parse(hd.data().data || '{}') : {},
-        seasons: sd.exists ? JSON.parse(sd.data().data || '{}') : {},
-        choices: cd2.exists ? JSON.parse(cd2.data().data || '{}') : {}, files: {} };
-    }
-    return out;
-  } catch(e) { console.warn('[FB] Load error:', e); return null; }
-}
-
-// ─── STATE ────────────────────────────────────────────────────────────────────
-const SK = 'odfw_v4';
-const PK = 'odfw_prefs_v3';
-const SEEN_K = 'odfw_lastseen_v1';
-const S = { years:{}, selectedYear:null, pendingYear:null };
-const P = Object.assign({ deerPts:null, elkPts:null, sp:'all', wep:'all', sort:'best', canDraw:false, ptsSet:false, showYouth:false },
-  JSON.parse(localStorage.getItem(PK)||'{}'));
-P.specialShow = Object.assign({youth:P.showYouth===true, spike:true, trad:true, whitetail:true, late:true, damage:true}, P.specialShow||{});
-if(P.specialOnly===undefined) P.specialOnly=false;
-const savePrefs = () => { try{ localStorage.setItem(PK, JSON.stringify(P)); }catch(e){} };
-
-const curYD  = () => S.selectedYear ? S.years[S.selectedYear] : null;
-const getH   = () => { const y = curYD(); return y ? y.hunts : []; };
-const yList  = () => Object.keys(S.years).sort().reverse();
-const prevYr = yr  => { const a=yList(), i=a.indexOf(yr); return i>=0&&i<a.length-1?a[i+1]:null; };
-const findH  = (yr,num,sp) => { const y=S.years[yr]; return y?y.hunts.find(h=>h.huntNum===num&&h.species===sp):null; };
-
-// ─── HARVEST MATCHING (6 files; muzz/archery files override the rifle file) ──
-const HKEY_ORDER = ['deerRifleHarvest','elkRifleHarvest','deerMuzzHarvest','elkMuzzHarvest','deerArcheryHarvest','elkArcheryHarvest'];
-function applyHarvest(year) {
-  const y = S.years[year]; if (!y) return;
-  y.hunts.forEach(h => { h.harvest = null; });
-  HKEY_ORDER.forEach(key => {
-    const data = (y.harvestData||{})[key]; if (!data) return;
-    const sp = key.startsWith('elk') ? 'elk' : 'deer';
-    const weps = key.includes('Archery') ? ['archery'] : key.includes('Muzz') ? ['muzz'] : ['rifle','youth','muzz'];
-    let matched = 0;
-    y.hunts.forEach(h => {
-      if (h.species !== sp || !weps.includes(h.weapon)) return;
-      if (data[h.huntNum]) { h.harvest = data[h.huntNum]; matched++; }
-    });
-    if (y.files[key]) y.files[key].matched = matched;
-  });
-}
-
-// ─── UTILS ────────────────────────────────────────────────────────────────────
-const $  = s => document.querySelector(s);
-const $$ = s => [...document.querySelectorAll(s)];
-const fmt  = n => (n==null||isNaN(n)) ? '—' : Number(n).toLocaleString();
-const fmtP = n => (n==null||isNaN(n)) ? '—' : Math.round(n)+'%';
-const esc  = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function toast(msg, isErr) {
-  const t = $('#toast'); t.textContent = msg;
-  t.className = 'toast show' + (isErr ? ' err' : '');
-  setTimeout(() => { t.className = 'toast'; }, 3800);
-}
-function banner(type, msg, spin) {
-  const el = $('#dmBanner'); if (!el) return;
-  el.className = 'banner' + (type ? ' '+type : '');
-  el.innerHTML = (spin ? '<span class="spin"></span>' : '') + '<span>' + esc(msg) + '</span>';
-}
-function pinPrompt(cb){
-  const box=$('#confirmBox');
-  $('#confirmMsg').innerHTML='Enter Settings PIN<br><input type="tel" inputmode="numeric" id="pinField" maxlength="8" style="margin-top:12px;width:100%;text-align:center;font-size:1.6rem;letter-spacing:.4em" autocomplete="off">';
-  box.classList.add('open');
-  const yes=$('#confirmYes'), no=$('#confirmNo');
-  yes.textContent='Unlock'; no.textContent='Cancel';
-  const field=$('#pinField'); setTimeout(()=>field.focus(),50);
-  const close=()=>{ box.classList.remove('open'); yes.onclick=no.onclick=null; yes.textContent='Yes, do it'; };
-  field.onkeydown=e=>{ if(e.key==='Enter'){ const v=field.value; close(); cb(v); } };
-  yes.onclick=()=>{ const v=field.value; close(); cb(v); };
-  no.onclick=close;
-}
-function confirm2(msg, cb){
-  $('#confirmMsg').textContent = msg;
-  const box = $('#confirmBox'); box.classList.add('open');
-  const yes = $('#confirmYes'), no = $('#confirmNo');
-  const close = () => { box.classList.remove('open'); yes.onclick = no.onclick = null; };
-  yes.onclick = () => { close(); cb(); };
-  no.onclick = close;
-}
-
-// ─── CLASSIFICATION + DERIVATION ─────────────────────────────────────────────
+// ═══ Shared classification (mirrors index.html) ═══════════════════════════════
 function weapon(num, name) {
-  const n=String(num||'').toUpperCase(), na=String(name||'').toLowerCase();
+  const n = String(num || '').toUpperCase(), na = String(name || '').toLowerCase();
   if (na.includes('youth')) return 'youth';
   if (na.includes('muzzleload')) return 'muzz';
-  if (na.includes('archery')||na.includes('bow')||na.includes('trad')) return 'archery';
+  if (na.includes('archery') || na.includes('bow') || na.includes('trad')) return 'archery';
   if (/\dT\d*$/.test(n)) return 'youth';
   if (/\dM\d*$/.test(n)) return 'muzz';
   if (/\dR\d*$/.test(n)) return 'archery';
   return 'rifle';
 }
-const wLabel = w => ({rifle:'Rifle',archery:'Bow',muzz:'Muzzleloader',youth:'Youth'}[w]||w);
 function derive(h) {
-  h.pointBreakdown.sort((a,b) => b.points - a.points);
+  h.pointBreakdown.sort((a, b) => b.points - a.points);
   let pts100 = null, minPts = null;
   for (const p of h.pointBreakdown) {
     if (p.resDrawn > 0) minPts = p.points;
@@ -593,251 +47,18 @@ function derive(h) {
   h.pts100 = pts100; h.minPointsToDraw = minPts;
   h.resOdds = h.residentApps > 0 ? (h.residentDrawn / h.residentApps) * 100 : null;
 }
-function myOdds(h, myPts) {
-  if (myPts === null || myPts === undefined) return null;
-  if (h.pts100 !== null && myPts >= h.pts100) return 100;
-  if (!h.pointBreakdown?.length) return h.resOdds;
-  const exact = h.pointBreakdown.find(p => p.points === myPts);
-  if (exact && exact.resApps > 0) return (exact.resDrawn / exact.resApps) * 100;
-  const below = h.pointBreakdown.filter(p => p.points <= myPts).sort((a,b) => b.points - a.points);
-  if (below.length && below[0].resApps > 0) return (below[0].resDrawn / below[0].resApps) * 100;
-  if (h.residentApps > 0 && h.tags > 0) return Math.min(100, (h.tags * 0.25 / h.residentApps) * 100);
-  return null;
-}
-const ptsFor = h => h.species==='elk' ? P.elkPts : P.deerPts;
-// Season dates + bag limit for a hunt in the selected year (from the regs tables)
-const seasonOf = h => (curYD()?.seasons||{})[h.huntNum] || null;
-const choicesOf = h => (curYD()?.choices||{})[h.huntNum] || null;
-// 2nd/3rd-choice odds: leftovers after 1st choice go randomly to 2nd-choice
-// applicants (no points used or burned), then 3rd. Demand is the whole story.
-function choiceOdds(h){
-  let ch=choicesOf(h), year=S.selectedYear, tags=h.tags||0;
-  if(!ch){
-    for(const y of yList()){
-      const c=(S.years[y].choices||{})[h.huntNum];
-      if(c){ ch=c; year=y; const hh=findH(y,h.huntNum,h.species); if(hh) tags=hh.tags||tags; break; }
-    }
-  }
-  if(!ch) return null;
-  const left1=Math.max(0,tags-ch.c1);
-  const o2=left1<=0?0:(ch.c2<=0?100:Math.min(100,left1/ch.c2*100));
-  return {ch,tags,left1,o2,year,current:year===S.selectedYear};
-}
-// Empirical odds for a 0-point 1st-choice applicant: the points=0 tier of the draw
-function zeroPointOdds(h){
-  const t=(h.pointBreakdown||[]).find(p=>p.points===0);
-  if(t&&t.resApps>0) return (t.resDrawn/t.resApps)*100;
-  return null;
-}
-function publicLandOf(h){
-  if(!PL) return null;
-  const m=String(h.huntNum).match(/^([A-Z]{2})1(\d\d)/);
-  if(m&&PL.byArea&&PL.byArea[m[1]+m[2]]!=null) return PL.byArea[m[1]+m[2]];
-  const n=unitNameFor(h).toUpperCase();
-  if(n&&PL.byName){
-    if(PL.byName[n]!=null) return PL.byName[n];
-    const hit=Object.keys(PL.byName).find(k=>k.includes(n)||n.includes(k));
-    if(hit) return PL.byName[hit];
-  }
-  return null;
-}
 
-// Most recent harvest results for this hunt: this year's if published,
-// otherwise walk back through prior years.
-function effHarvest(h) {
-  if (h.harvest) return { hv: h.harvest, year: S.selectedYear, current: true };
-  for (const y of yList()) {
-    if (y === S.selectedYear) continue;
-    const hh = findH(y, h.huntNum, h.species);
-    if (hh && hh.harvest) return { hv: hh.harvest, year: y, current: false };
-  }
-  return { hv: null, year: null, current: false };
-}
-// Share of the harvest that was a mature animal (elk: 5pt+, deer: 4pt+)
-function trophyIndex(h, hv) {
-  if (!hv || !hv.antlerValid || !hv.totalBull) return null;
-  const mature = h.species === 'elk' ? (hv.fivePt + hv.sixPlusPt) : hv.fourPt;
-  return mature / hv.totalBull;
-}
-// Silent grade (0–100): harvest success + antler size do the talking,
-// scaled by how realistic the draw is for the user's points.
-function grade(h) {
-  const my = ptsFor(h);
-  const b = blendHarvest(h, 3);
-  let s = b ? Math.min((b.succ || 0) / 60, 1) : 0.3;
-  if (b && b.repRate !== null && b.repRate < LOW_REPORT) {
-    const w = Math.max(0.4, b.repRate / LOW_REPORT); // thin reporting → lean toward neutral
-    s = s * w + 0.3 * (1 - w);
-  }
-  let t = 0.2;
-  if (b && b.shares) {
-    const mature = h.species === 'elk' ? (b.shares.fivePt + b.shares.sixPlusPt) : b.shares.fourPt;
-    t = Math.min(mature / 0.7, 1);
-  }
-  const quality = 0.6 * s + 0.4 * t;
-  let d;
-  if (my === null) d = 0.5;
-  else if (h.pts100 !== null && my >= h.pts100) d = 1;
-  else {
-    const mo = myOdds(h, my);
-    const gap = h.pts100 !== null ? h.pts100 - my : 99;
-    d = Math.max((mo || 0) / 100, gap <= 3 ? 0.45 - gap * 0.1 : 0.04);
-  }
-  return 100 * quality * (0.35 + 0.65 * d);
-}
-// Special hunt requirements. Built-in rules auto-detect from the hunt name;
-// users can add custom labels and manually tag/untag individual hunts (stored
-// in localStorage, keyed by huntNum_species).
-const BUILTIN_SPECIALS = [
-  {k:'youth',     label:'Youth only',        rx:null, auto:h=>h.weapon==='youth'},
-  {k:'spike',     label:'Spike bulls only',  rx:'spike'},
-  {k:'trad',      label:'Traditional bow',   rx:'trad'},
-  {k:'whitetail', label:'Whitetail',         rx:'white.?tail'},
-  {k:'late',      label:'Late season',       rx:'\\blate\\b'},
-  {k:'damage',    label:'Damage hunt',       rx:'emergency|damage'}
-];
-const CUSTOM_K='odfw_special_custom_v1';   // [{k,label,rx}]
-const OVERRIDE_K='odfw_special_over_v1';   // {huntKey:{add:[k],remove:[k]}}
-const loadJSON=(k,d)=>{ try{ return JSON.parse(localStorage.getItem(k))??d; }catch(e){ return d; } };
-const saveJSON=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
-const hkey=h=>h.huntNum+'_'+h.species;
-function allSpecialDefs(){ return BUILTIN_SPECIALS.concat(loadJSON(CUSTOM_K,[])); }
-// What we scan for tag words: the hunt name PLUS the bag limit and fine print
-// from the regs — spike-only hunts say "spike" in the bag limit, not the name.
-function seasonAnyYear(huntNum){
-  const cur=(curYD()?.seasons||{})[huntNum];
-  if(cur) return cur;
-  for(const y of yList()){ const s=(S.years[y].seasons||{})[huntNum]; if(s) return s; }
-  return null;
-}
-function specialHaystack(h){
-  const se=seasonAnyYear(h.huntNum)||{};
-  return [(h.huntName||''),(se.b||''),(se.n||'')].join(' ');
-}
-function specialKeys(h){
-  const defs=allSpecialDefs(), ov=loadJSON(OVERRIDE_K,{})[hkey(h)]||{};
-  const hay=specialHaystack(h);
-  const set=new Set();
-  defs.forEach(d=>{
-    let hit=false;
-    if(d.auto) hit=d.auto(h);
-    else if(d.rx){ try{ hit=new RegExp(d.rx,'i').test(hay); }catch(e){} }
-    if(hit) set.add(d.k);
-  });
-  (ov.remove||[]).forEach(k=>set.delete(k));
-  (ov.add||[]).forEach(k=>set.add(k));
-  return [...set];
-}
-const labelFor=k=>{ const d=allSpecialDefs().find(x=>x.k===k); return d?d.label:k; };
-function specialTags(h){ return specialKeys(h).map(labelFor); }
-
-// All years (newest first) where this hunt has harvest results
-function harvestYears(h){
-  const out=[];
-  for(const y of yList()){
-    const hh=findH(y,h.huntNum,h.species);
-    if(hh&&hh.harvest) out.push({year:y,hv:hh.harvest});
-  }
-  return out;
-}
-const LOW_REPORT=0.6; // below this reported/tags ratio, success rates get flagged
-const CLASS_KEYS=['spike','twoPt','threePt','fourPt','fivePt','sixPlusPt'];
-const classLabel=(k,sp)=>({spike:'Spike',twoPt:'2-point',threePt:'3-point',
-  fourPt:'4-point'+(sp==='deer'?'+':''),fivePt:'5-point',sixPlusPt:'6-point+'}[k]);
-// Blend the most recent 3 years of harvest (2 if that's all, 1 if that's all)
-function blendHarvest(h, maxN){
-  const yrs=harvestYears(h).slice(0, maxN||3);
-  if(!yrs.length) return null;
-  const avg=a=>a.reduce((s,x)=>s+x,0)/a.length;
-  const succ=Math.round(avg(yrs.map(r=>r.hv.successPct||0)));
-  const hunters=Math.round(avg(yrs.map(r=>r.hv.hunters||0)));
-  const taken=Math.round(avg(yrs.map(r=>r.hv.totalHarvest||0)));
-  const days=Math.round(avg(yrs.map(r=>r.hv.hunters>0?r.hv.days/r.hv.hunters:0)));
-  let repN=0, tagN=0;
-  yrs.forEach(r=>{ const t=findH(r.year,h.huntNum,h.species)?.tags; if(t>0){ repN+=r.hv.hunters||0; tagN+=t; } });
-  const repRate = tagN>0 ? repN/tagN : null;
-  const antlerYrs=yrs.filter(r=>r.hv.antlerValid&&r.hv.totalBull>0);
-  let shares=null, top=null;
-  if(antlerYrs.length){
-    shares={};
-    CLASS_KEYS.forEach(k=>{ shares[k]=avg(antlerYrs.map(r=>r.hv[k]/r.hv.totalBull)); });
-    const keys=h.species==='elk'?CLASS_KEYS:CLASS_KEYS.slice(0,4);
-    const pcts=Object.fromEntries(keys.map(k=>[k,Math.round(shares[k]*100)]));
-    const tk=keys.reduce((b,k)=>pcts[k]>=pcts[b]?k:b,keys[0]); // ties go to the larger class
-    if(pcts[tk]>0){
-      const cnt=antlerYrs.reduce((s,r)=>s+(r.hv[tk]||0),0);
-      const den=antlerYrs.reduce((s,r)=>s+r.hv.totalBull,0);
-      top={key:tk,label:classLabel(tk,h.species),pct:pcts[tk],cnt,den};
-    }
-  }
-  return {years:yrs.map(r=>r.year), n:yrs.length, succ, hunters, taken, days, shares, top, repN, tagN, repRate};
-}
-
-// The verdict: one plain-English answer per hunt
-function verdict(h) {
-  const my = ptsFor(h), p = h.pts100, mo = myOdds(h, my);
-  if (my === null) {
-    if (p === null) return {cls:'v-luck', text:'Luck-of-the-draw hunt — anyone can win a tag.'};
-    return {cls:'v-luck', text:`Takes ${p} point${p===1?'':'s'} for a sure tag. Enter your points above to see where you stand.`};
-  }
-  if (p !== null && my >= p) return {cls:'v-yes', text:'You have enough points — apply and this tag is yours.'};
-  if (p === null) {
-    if (mo !== null && mo >= 20) return {cls:'v-luck', text:`Luck-of-the-draw — about a ${fmtP(mo)} chance for you.`};
-    return {cls:'v-luck', text:`Luck-of-the-draw — a long shot (${mo===null?'under 1%':'about '+fmtP(mo)}).`};
-  }
-  const gap = p - my;
-  if (mo !== null && mo >= 50) return {cls:'v-soon', text:`Good chance this year — about ${fmtP(mo)}. A sure tag takes ${gap} more point${gap===1?'':'s'}.`};
-  if (gap <= 2) return {cls:'v-soon', text:`Close — about ${gap} more year${gap===1?'':'s'} of waiting for a sure tag. Your odds now: ${mo===null?'under 1%':'about '+fmtP(mo)}.`};
-  return {cls:'v-no', text:`A long wait — about ${gap} more years of points for a sure tag. Your odds now: ${mo===null?'under 1%':'about '+fmtP(mo)}.`};
-}
-
-// Multi-year trend for a hunt
-function trendData(h) {
-  const yrs = yList().slice().reverse();
-  const rows = yrs.map(y => {
-    const hh = findH(y, h.huntNum, h.species);
-    return hh ? {year:y, pts100:hh.pts100, success:hh.harvest?.successPct ?? null,
-      hunters:hh.harvest?.hunters ?? null, harvested:hh.harvest?.totalHarvest ?? null,
-      tags:hh.tags, apps:hh.residentApps} : null;
-  }).filter(Boolean);
-  let sentence = '', dir = '';
-  const withPts = rows.filter(r => r.pts100 !== null);
-  if (withPts.length >= 2) {
-    const d = withPts[withPts.length-1].pts100 - withPts[0].pts100;
-    if (d >= 2)      { sentence = `Getting harder to draw — needed ${withPts[0].pts100} points in ${withPts[0].year}, now ${withPts[withPts.length-1].pts100}.`; dir='harder'; }
-    else if (d === 1){ sentence = `Slowly getting harder — up 1 point since ${withPts[0].year}.`; dir='harder'; }
-    else if (d <= -1){ sentence = `Getting easier — needed ${withPts[0].pts100} points in ${withPts[0].year}, now ${withPts[withPts.length-1].pts100}.`; dir='easier'; }
-    else             { sentence = `Steady — has taken about ${withPts[0].pts100} points since ${withPts[0].year}.`; }
-  }
-  return { rows, sentence, dir };
-}
-
-// Project next year's sure-tag points from the trend (needs 3+ years of data)
-function predictPts(h){
-  const pr=trendData(h).rows.filter(r=>r.pts100!==null);
-  if(pr.length<3) return null;
-  const pts=pr.slice(-4);
-  const xs=pts.map((_,i)=>i), ys=pts.map(r=>r.pts100);
-  const n=xs.length, sx=xs.reduce((a,b)=>a+b,0), sy=ys.reduce((a,b)=>a+b,0);
-  const sxy=xs.reduce((a,x,i)=>a+x*ys[i],0), sxx=xs.reduce((a,x)=>a+x*x,0);
-  const denom=n*sxx-sx*sx;
-  const slope=denom?(n*sxy-sx*sy)/denom:0;
-  const next=Math.max(0,Math.round(ys[ys.length-1]+slope));
-  return {year:String(Number(pr[pr.length-1].year)+1), pts:next};
-}
-
-// ─── PARSERS ──────────────────────────────────────────────────────────────────
-// Draw report XLSX: handles pre-2026 grouped layout AND 2026+ denormalized layout
-function parseXlsx(buf, sp) {
-  const wb = XLSX.read(buf, {type:'array'});
+// ═══ Draw report XLSX parser (handles pre-2026 and 2026+ layouts) ═════════════
+function parseHunts(buf, sp) {
+  const wb = XLSX.read(buf, { type: 'buffer' });
   let ws = null;
-  for (const n of wb.SheetNames) { if (/draw|point/i.test(n)){ws=wb.Sheets[n];break;} }
+  for (const n of wb.SheetNames) { if (/draw|point/i.test(n)) { ws = wb.Sheets[n]; break; } }
   if (!ws) ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(ws, {header:1,raw:true,defval:null});
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
   for (let i = 0; i < Math.min(rows.length, 8); i++) {
-    const joined = (rows[i]||[]).map(c=>String(c??'')).join(' ');
+    const joined = (rows[i] || []).map(c => String(c ?? '')).join(' ');
     if (/hunt choice/i.test(joined) || /1st Choice/i.test(joined))
-      throw new Error('This is the "Applicants by Hunt Choice" file. Upload the "Preference Point Draw Report" instead.');
+      throw new Error('wrong report type (Applicants by Hunt Choice)');
   }
   const byNum = new Map(); let last = null;
   const isNum = v => typeof v === 'number' && isFinite(v);
@@ -849,30 +70,52 @@ function parseXlsx(buf, sp) {
       const key = String(r[0]).trim();
       let h = byNum.get(key);
       if (!h) {
-        h = { huntNum:key, huntName:String(r[1]).trim(), tags:Number(r[2])||0,
-          residentApps:Number(r[3])||0, residentDrawn:Number(r[4])||0,
-          nonResidentApps:Number(r[5])||0, nonResidentDrawn:Number(r[6])||0,
-          totalApps:Number(r[7])||0, totalDrawn:Number(r[8])||0,
-          species:sp, weapon:weapon(key,r[1]), pointBreakdown:[], harvest:null };
+        h = { huntNum: key, huntName: String(r[1]).trim(), tags: Number(r[2]) || 0,
+          residentApps: Number(r[3]) || 0, residentDrawn: Number(r[4]) || 0,
+          nonResidentApps: Number(r[5]) || 0, nonResidentDrawn: Number(r[6]) || 0,
+          totalApps: Number(r[7]) || 0, totalDrawn: Number(r[8]) || 0,
+          species: sp, weapon: weapon(key, r[1]), pointBreakdown: [], harvest: null };
         byNum.set(key, h);
       }
       last = h;
-      if (isNum(r[12]) && !h.pointBreakdown.some(p=>p.points===Number(r[12])))
-        h.pointBreakdown.push({points:Number(r[12]),apps:Number(r[13])||0,resApps:Number(r[14])||0,resDrawn:Number(r[15])||0,nrApps:Number(r[16])||0,nrDrawn:Number(r[17])||0});
+      if (isNum(r[12]) && !h.pointBreakdown.some(p => p.points === Number(r[12])))
+        h.pointBreakdown.push({ points: Number(r[12]), apps: Number(r[13]) || 0, resApps: Number(r[14]) || 0, resDrawn: Number(r[15]) || 0, nrApps: Number(r[16]) || 0, nrDrawn: Number(r[17]) || 0 });
     } else if (last && isNum(r[12])) {
-      if (!last.pointBreakdown.some(p=>p.points===Number(r[12])))
-        last.pointBreakdown.push({points:Number(r[12]),apps:Number(r[13])||0,resApps:Number(r[14])||0,resDrawn:Number(r[15])||0,nrApps:Number(r[16])||0,nrDrawn:Number(r[17])||0});
+      if (!last.pointBreakdown.some(p => p.points === Number(r[12])))
+        last.pointBreakdown.push({ points: Number(r[12]), apps: Number(r[13]) || 0, resApps: Number(r[14]) || 0, resDrawn: Number(r[15]) || 0, nrApps: Number(r[16]) || 0, nrDrawn: Number(r[17]) || 0 });
     }
   }
   const hunts = [...byNum.values()];
   hunts.forEach(derive);
-  if (!hunts.length) throw new Error('No hunts found — is this a Preference Point Draw Report?');
+  if (!hunts.length) throw new Error('no hunts parsed');
   return hunts;
 }
 
-// Harvest PDF: line-based, layout-tolerant, aggregates hunts split across units
-const HARV_ID_RE = /^(\d{3}(?:[A-Z]\d{0,2})?|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/;
-const HARV_NUM_RE = /^\d{1,6}$/;
+// ═══ Harvest PDF parser (line-based, aggregating, validated) ══════════════════
+const ID_RE = /^(\d{3}(?:[A-Z]\d{0,2})?|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/;
+const NUM_RE = /^\d{1,6}$/;
+
+async function pdfToLines(buf) {
+  const doc = await getDocument({ data: new Uint8Array(buf), useSystemFonts: true }).promise;
+  const lines = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    const page = await doc.getPage(p);
+    const tc = await page.getTextContent();
+    const rows = new Map();
+    for (const it of tc.items) {
+      if (!it.str || !it.str.trim()) continue;
+      const y = Math.round(it.transform[5] / 3) * 3;
+      if (!rows.has(y)) rows.set(y, []);
+      rows.get(y).push({ x: it.transform[4], str: it.str.trim() });
+    }
+    for (const y of [...rows.keys()].sort((a, b) => b - a)) {
+      const items = rows.get(y).sort((a, b) => a.x - b.x);
+      lines.push(items.map(i => i.str).join(' ').replace(/\s+/g, ' ').trim());
+    }
+  }
+  return lines;
+}
+
 function parseHarvestLines(lines, defaultK) {
   const all = lines.join('\n');
   let k = defaultK;
@@ -887,1008 +130,534 @@ function parseHarvestLines(lines, defaultK) {
     let id = null, idIdx = -1;
     for (let i = 0; i < toks.length; i++) {
       const t = toks[i];
-      if (HARV_ID_RE.test(t)) { id = t; idIdx = i; break; }
-      if (HARV_NUM_RE.test(t)) break;
+      if (ID_RE.test(t)) { id = t; idIdx = i; break; }
+      if (NUM_RE.test(t)) break;
       if (/^general$/i.test(t) || t === 'w/') break;
     }
     if (!id) continue;
     const nums = [];
     for (let i = idIdx + 1; i < toks.length; i++)
-      if (HARV_NUM_RE.test(toks[i])) nums.push(Number(toks[i]));
+      if (NUM_RE.test(toks[i])) nums.push(Number(toks[i]));
     if (nums.length < k) continue;
     const n = nums.slice(-k);
-    let hu,da,al,tb,th,sp,t2,t3,t4,t5,t6;
-    if (k === 11) [hu,da,al,tb,th,sp,t2,t3,t4,t5,t6] = n;
-    else { [hu,da,al,tb,th,sp,t2,t3,t4] = n.slice(0,9); t5=0; t6=0; }
-    const cur = agg.get(id) || {huntNum:id,hunters:0,days:0,antlerless:0,totalBull:0,totalHarvest:0,spike:0,twoPt:0,threePt:0,fourPt:0,fivePt:0,sixPlusPt:0};
-    cur.hunters+=hu; cur.days+=da; cur.antlerless+=al; cur.totalBull+=tb; cur.totalHarvest+=th;
-    cur.spike+=sp; cur.twoPt+=t2; cur.threePt+=t3; cur.fourPt+=t4; cur.fivePt+=t5; cur.sixPlusPt+=t6;
+    let hu, da, al, tb, th, sp, t2, t3, t4, t5, t6;
+    if (k === 11) [hu, da, al, tb, th, sp, t2, t3, t4, t5, t6] = n;
+    else { [hu, da, al, tb, th, sp, t2, t3, t4] = n.slice(0, 9); t5 = 0; t6 = 0; }
+    const cur = agg.get(id) || { huntNum: id, hunters: 0, days: 0, antlerless: 0,
+      totalBull: 0, totalHarvest: 0, spike: 0, twoPt: 0, threePt: 0, fourPt: 0, fivePt: 0, sixPlusPt: 0 };
+    cur.hunters += hu; cur.days += da; cur.antlerless += al; cur.totalBull += tb;
+    cur.totalHarvest += th; cur.spike += sp; cur.twoPt += t2; cur.threePt += t3;
+    cur.fourPt += t4; cur.fivePt += t5; cur.sixPlusPt += t6;
     agg.set(id, cur);
   }
   const out = {};
   for (const [id, h] of agg) {
-    h.successPct = h.hunters>0 ? Math.round((h.totalHarvest/h.hunters)*100) : 0;
-    h.antlerValid = (h.spike+h.twoPt+h.threePt+h.fourPt+h.fivePt+h.sixPlusPt) > 0;
+    h.successPct = h.hunters > 0 ? Math.round((h.totalHarvest / h.hunters) * 100) : 0;
+    h.antlerValid = (h.spike + h.twoPt + h.threePt + h.fourPt + h.fivePt + h.sixPlusPt) > 0;
     out[id] = h;
   }
   return out;
 }
-async function parsePdf(buf, defaultK) {
-  const doc = await pdfjsLib.getDocument({data:buf}).promise;
-  const lines = [];
-  for (let p = 1; p <= doc.numPages; p++) {
-    const page = await doc.getPage(p);
-    const tc = await page.getTextContent();
-    const rows = new Map();
-    for (const it of tc.items) {
-      if (!it.str || !it.str.trim()) continue;
-      const y = Math.round(it.transform[5] / 3) * 3;
-      if (!rows.has(y)) rows.set(y, []);
-      rows.get(y).push({x: it.transform[4], str: it.str.trim()});
-    }
-    for (const y of [...rows.keys()].sort((a,b)=>b-a)) {
-      const items = rows.get(y).sort((a,b)=>a.x-b.x);
-      lines.push(items.map(i=>i.str).join(' ').replace(/\s+/g,' ').trim());
-    }
+
+function validateHarvest(out, knownIds) {
+  const ids = Object.keys(out);
+  if (ids.length < 25) return { ok: false, reason: `only ${ids.length} hunts parsed` };
+  const sane = ids.filter(id => out[id].successPct >= 0 && out[id].successPct <= 150).length;
+  if (sane / ids.length < 0.9) return { ok: false, reason: 'success rates out of range' };
+  if (knownIds && knownIds.size) {
+    const match = ids.filter(id => knownIds.has(id)).length;
+    if (match / ids.length < 0.4) return { ok: false, reason: `only ${match}/${ids.length} IDs match draw data` };
   }
-  return parseHarvestLines(lines, defaultK);
-}
-// Harvest XLSX (rare, kept as fallback)
-function parseHarvestXlsx(buf) {
-  const wb=XLSX.read(buf,{type:'array'}), ws=wb.Sheets[wb.SheetNames[0]];
-  const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null}), out={},
-    re=/^(\d{3}[A-Z]?\d*|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/;
-  rows.forEach(r=>{
-    if(!r) return;
-    for(let i=0;i<r.length;i++){
-      let v=r[i];
-      if(typeof v==='number'&&Number.isInteger(v)&&v>=100&&v<1000) v=String(v);
-      if(typeof v==='string'&&re.test(v.trim())){
-        const num=v.trim(); let pct=null;
-        for(let j=r.length-1;j>i;j--){const c=r[j];if(typeof c==='number'&&c<=1){pct=c*100;break}if(typeof c==='string'){const m=c.match(/^(\d+(?:\.\d+)?)%?$/);if(m){pct=Number(m[1]);break}}}
-        const ns=r.slice(i+1).filter(c=>typeof c==='number'||(typeof c==='string'&&/^\d+$/.test(c.trim()))).map(Number);
-        const av=ns.length>=6&&(ns[5]||ns[6]||ns[7]||ns[8]||ns[9]||ns[10]||0)>0;
-        if(pct!==null&&!out[num]) out[num]={huntNum:num,successPct:pct,hunters:ns[0]||0,days:ns[1]||0,antlerless:ns[2]||0,totalBull:ns[3]||0,totalHarvest:ns[4]||0,spike:av?ns[5]:0,twoPt:av?ns[6]:0,threePt:av?ns[7]:0,fourPt:av?ns[8]:0,fivePt:av?ns[9]:0,sixPlusPt:av?ns[10]:0,antlerValid:av};
-        break;
-      }
-    }
-  });
-  return out;
+  return { ok: true, count: ids.length };
 }
 
-// Applicants by Hunt Choice XLSX (2nd/3rd-choice demand)
-function parseChoicesXlsx(buf){
-  const wb=XLSX.read(buf,{type:'array'}), ws=wb.Sheets[wb.SheetNames[0]];
-  const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
-  let idx=null; const out={};
-  const idRe=/^(\d{3}[A-Z]?\d{0,2}|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/;
-  for(const r of rows){
-    if(!r) continue;
-    const cells=r.map(c=>String(c??'').trim());
-    if(idx===null){
-      const hi=cells.findIndex(c=>/hunt\s*number/i.test(c));
-      if(hi>=0) idx={id:hi,c1:cells.findIndex(c=>/1st/i.test(c)),c2:cells.findIndex(c=>/2nd/i.test(c)),c3:cells.findIndex(c=>/3rd/i.test(c)),c4:cells.findIndex(c=>/4th/i.test(c)),c5:cells.findIndex(c=>/5th/i.test(c)),lop:cells.findIndex(c=>/lop/i.test(c)),tot:cells.findIndex(c=>/total/i.test(c))};
+// ═══ Season dates + bag limits (eRegulations hunt tables) ═════════════════════
+const SEASON_PAGES = [
+  { url: 'https://www.eregulations.com/oregon/hunting/buck-deer-seasons', species: 'deer' },
+  { url: 'https://www.eregulations.com/oregon/hunting/elk-seasons', species: 'elk' }
+];
+const strip = s => s.replace(/<br\s*\/?>/gi, ' — ').replace(/<[^>]+>/g, ' ')
+  .replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+
+function parseSeasonTables(html, forcedYear) {
+  // eRegulations renders controlled-hunt tables as markdown pipe tables:
+  //   | Hunt # | Hunt Name | Bag Limit | Open Season | 2026 Tags | 2025 1st... |
+  // Table captions ("Youth Only Controlled 200 Series Hunts", "Muzzleloader
+  // Controlled...", "Archery Controlled...") tell us the weapon context.
+  const out = {};
+  let year = forcedYear || null;
+  if (!year) { const ym = html.match(/\b(20\d{2})\s+Tags\b/); if (ym) year = ym[1]; }
+
+  const idRe = /^(\d{3}[A-Z]?\d{0,2}|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)\*?$/;
+  const stripCell = s => s.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/[*†‡]/g, '').replace(/\s+/g, ' ').trim();
+
+  const lines = html.split('\n');
+  let cols = null; // {id,name,bag,season}
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line[0] !== '|') { cols = null; continue; } // table break resets header
+    const cells = line.split('|').slice(1, -1).map(stripCell);
+    if (!cells.length || cells.every(c => /^[-\s:]*$/.test(c))) continue; // separator row
+    // Header row?
+    const hi = cells.findIndex(c => /^hunt\s*#/i.test(c));
+    if (hi >= 0) {
+      cols = { id: hi,
+        name: cells.findIndex(c => /hunt\s*name/i.test(c)),
+        bag: cells.findIndex(c => /bag\s*limit/i.test(c)),
+        season: cells.findIndex(c => /open\s*season/i.test(c)) };
+      // year from a "2026 Tags" column if we still don't have it
+      if (!year) { const yc = cells.find(c => /20\d{2}\s*tags/i.test(c)); if (yc) year = yc.match(/(20\d{2})/)[1]; }
       continue;
     }
-    const id=cells[idx.id];
-    if(!id||!idRe.test(id)) continue;
-    const num=i=>i>=0?(Number(r[i])||0):0;
-    out[id]={c1:num(idx.c1),c2:num(idx.c2),c3:num(idx.c3),c4:num(idx.c4),c5:num(idx.c5),lop:num(idx.lop),tot:num(idx.tot)};
+    if (!cols || cols.season < 0) continue;
+    const id = (cells[cols.id] || '').split(' ')[0];
+    if (!idRe.test(id)) continue;
+    const key = id.replace(/\*$/, '');
+    const season = (cells[cols.season] || '').trim();
+    if (!season || !/[A-Za-z]{3}/.test(season)) continue; // needs a month
+    const bag = cols.bag >= 0 ? (cells[cols.bag] || '').trim() : '';
+    if (!out[key]) out[key] = { s: season, b: bag, n: '' };
   }
-  if(Object.keys(out).length<20) throw new Error('That doesn\'t look like an "Applicants by Hunt Choice" report.');
+  return { year: year || null, map: out };
+}
+
+async function updateSeasons(details, getYear) {
+  let updated = 0;
+  const merged = {}; // year -> {huntNum:{s,b}}
+  for (const pg of SEASON_PAGES) {
+    try {
+      console.log('[seasons] fetching', pg.url);
+      const res = await fetchRetry(pg.url, { headers: UA });
+      if (!res.ok) throw new Error(`page ${res.status} (site may be blocking robots)`);
+      const now = new Date();
+      const regsYear = String(now.getUTCMonth() >= 6 ? now.getUTCFullYear() + 1 : now.getUTCFullYear());
+      const { year, map } = parseSeasonTables(await res.text(), regsYear);
+      const n = Object.keys(map).length;
+      if (n < 20) { details.push(`${pg.species} season dates: SKIPPED (only ${n} rows found — page format may have changed)`); continue; }
+      const yd = await getYear(year);
+      if (yd) {
+        const known = new Set(yd.hunts.filter(h => h.species === pg.species).map(h => h.huntNum));
+        const match = Object.keys(map).filter(id => known.has(id)).length;
+        if (known.size && match / n < 0.25) { details.push(`${pg.species} season dates: SKIPPED (only ${match}/${n} match draw data)`); continue; }
+      }
+      console.log(`[seasons] ${pg.species} ${year}: ${n} hunts, ${Object.values(map).filter(v=>/spike/i.test(v.b)).length} spike`);
+      merged[year] = Object.assign(merged[year] || {}, map);
+    } catch (e) { console.error('[err] seasons', pg.species, e.message); details.push(`${pg.species} season dates FAILED: ${e.message}`); }
+  }
+  for (const [year, map] of Object.entries(merged)) {
+    const json = JSON.stringify(map);
+    const cur = await fs_('GET', `years/${year}/seasons/all`);
+    if (cur && gv(cur.fields?.data) === json) { console.log(`[seasons] ${year} current`); continue; }
+    if (DRY) { details.push(`${year} season dates: would load ${Object.keys(map).length}`); continue; }
+    await fs_('PATCH', `years/${year}/seasons/all`, { fields: { data: V.s(json), updatedAt: V.t(new Date()) } });
+    details.push(`${year} season dates: ${Object.keys(map).length} hunts`);
+    updated++;
+  }
+  return updated;
+}
+
+// ═══ Applicants by Hunt Choice (2nd/3rd-choice demand) ════════════════════════
+function parseChoices(buf) {
+  const wb = XLSX.read(buf, { type: 'buffer' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+  let idx = null;
+  const out = {};
+  for (const r of rows) {
+    if (!r) continue;
+    const cells = r.map(c => String(c ?? '').trim());
+    if (idx === null) {
+      const hi = cells.findIndex(c => /hunt\s*number/i.test(c));
+      if (hi >= 0) {
+        idx = { id: hi,
+          c1: cells.findIndex(c => /1st/i.test(c)), c2: cells.findIndex(c => /2nd/i.test(c)),
+          c3: cells.findIndex(c => /3rd/i.test(c)), c4: cells.findIndex(c => /4th/i.test(c)),
+          c5: cells.findIndex(c => /5th/i.test(c)), lop: cells.findIndex(c => /lop/i.test(c)),
+          tot: cells.findIndex(c => /total/i.test(c)) };
+      }
+      continue;
+    }
+    const id = cells[idx.id];
+    if (!id || !/^(\d{3}[A-Z]?\d{0,2}|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/.test(id)) continue;
+    const num = i => i >= 0 ? (Number(r[i]) || 0) : 0;
+    out[id] = { c1: num(idx.c1), c2: num(idx.c2), c3: num(idx.c3), c4: num(idx.c4), c5: num(idx.c5), lop: num(idx.lop), tot: num(idx.tot) };
+  }
+  if (Object.keys(out).length < 20) throw new Error('too few hunts parsed from choice report');
   return out;
 }
 
-// Parse hunt-table text pasted from the regulations page (fallback when the
-// automatic scrape can't reach the site). Rows look like:
-// "231 Metolius Unit One spike bull elk Nov. 7 - Nov. 13 250 812"
-function parsePastedRegs(text){
-  const MON='(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sept?|Oct|Nov|Dec)\\.?';
-  const D=MON+'\\s*\\d{1,2}(?:,\\s*\\d{4})?';
-  const RANGE=new RegExp('('+D+'\\s*[-–]\\s*'+D+'(?:\\s*&\\s*'+D+'\\s*[-–]\\s*'+D+')*)');
-  const toks=text.replace(/[\t\r]/g,'\n').split(/\s+/).filter(Boolean);
-  const idFull=/^(\d{3}[A-Z]\d{0,2}|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)\*?$/;
-  const idBare=/^\d{3}\*?$/;
-  const isLetter=t=>/[A-Za-z]/.test(t);
-  // find row anchors: an ID token whose next token (or one after) is a word
-  const anchors=[];
-  for(let i=0;i<toks.length;i++){
-    const t=toks[i];
-    if(!(idFull.test(t)||idBare.test(t))) continue;
-    if(isLetter(toks[i+1]||'')||(idBare.test(t)&&(idFull.test(toks[i+1]||'')||idBare.test(toks[i+1]||''))&&isLetter(toks[i+2]||''))){
-      // prefer the later candidate when two numbers precede a name (tag counts vs ID)
-      if(!isLetter(toks[i+1]||'')) continue;
-      anchors.push(i);
-    }
+function findChoiceReports(html, pageUrl) {
+  const found = [];
+  for (const a of anchors(html, pageUrl)) {
+    if (!/\.xlsx/i.test(a.url)) continue;
+    const fname = decodeURIComponent(a.url.split('/').pop() || '');
+    if (!/applicants[\s_-]*by[\s_-]*hunt[\s_-]*choice/i.test(fname)) continue;
+    const ym = fname.match(/(20\d{2})/); if (!ym) continue;
+    let species = null;
+    if (/elk/i.test(fname)) species = 'elk';
+    else if (/deer/i.test(fname) && !/antlerless/i.test(fname)) species = 'deer';
+    if (!species) continue;
+    found.push({ url: a.url, fname, year: ym[1], species });
   }
-  const out={};
-  for(let a=0;a<anchors.length;a++){
-    const st=anchors[a], en=a+1<anchors.length?anchors[a+1]:toks.length;
-    const id=toks[st].replace(/\*$/,'');
-    const row=toks.slice(st+1,en).join(' ');
-    const dm=row.match(RANGE);
-    if(!dm) continue;
-    const season=dm[1].replace(/\s+/g,' ').trim();
-    const om=row.search(/\bOne\b/);
-    let bag='';
-    if(om>=0) bag=row.slice(om, dm.index).replace(/\*/g,'').replace(/\s+/g,' ').trim();
-    if(!out[id]) out[id]={s:season,b:bag,n:''};
+  const best = {};
+  for (const f of found) if (!best[f.species + f.year]) best[f.species + f.year] = f;
+  return Object.values(best);
+}
+
+// ═══ Public land % (regs unit-map pages) ══════════════════════════════════════
+const LAND_PAGES = [
+  'https://www.eregulations.com/oregon/hunting/western-oregon-unit-map',
+  'https://www.eregulations.com/oregon/hunting/eastern-oregon-unit-map'
+];
+function parsePublicLand(html) {
+  const text = html.replace(/<script[\s\S]*?<\/script>/gi, ' ');
+  const out = { byArea: {}, byName: {} };
+  // Herd-area style: "EH01: 46% public lands" / "JT01: 50% public land"
+  let m;
+  const areaRe = /\b([A-Z]{2}\d{2})\s*:\s*(\d{1,3})\s*%\s*public\s*land/gi;
+  while ((m = areaRe.exec(text))) out.byArea[m[1].toUpperCase()] = Number(m[2]);
+  // Heading style: <h#>Unit Name</h#> ... "42% public lands"
+  const secRe = /<h[2-4][^>]*>([^<]{2,60})<\/h[2-4]>([\s\S]{0,600}?)(\d{1,3})\s*%\s*public\s*land/gi;
+  while ((m = secRe.exec(html))) {
+    const name = m[1].replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim().toUpperCase()
+      .replace(/\s*\(.*$/, '').replace(/\bUNIT\b/g, '').trim();
+    if (name && !/GENERAL|SEASON|MAP|OREGON/.test(name)) out.byName[name] = Number(m[3]);
+  }
+  return out;
+}
+async function updatePublicLand(details) {
+  const merged = { byArea: {}, byName: {} };
+  let got = 0;
+  for (const url of LAND_PAGES) {
+    try {
+      const res = await fetchRetry(url, { headers: UA });
+      if (!res.ok) throw new Error(`page ${res.status} (site may be blocking robots)`);
+      const p = parsePublicLand(await res.text());
+      Object.assign(merged.byArea, p.byArea); Object.assign(merged.byName, p.byName);
+      got += Object.keys(p.byArea).length + Object.keys(p.byName).length;
+    } catch (e) { details.push('public land page failed: ' + e.message); }
+  }
+  if (got < 20) { details.push(`public land %: SKIPPED (only ${got} entries found)`); return 0; }
+  const json = JSON.stringify(merged);
+  const cur = await fs_('GET', `meta/publicLand`);
+  if (cur && gv(cur.fields?.data) === json) return 0;
+  if (DRY) { details.push(`public land %: would load ${got} entries`); return 0; }
+  await fs_('PATCH', `meta/publicLand`, { fields: { data: V.s(json), updatedAt: V.t(new Date()) } });
+  details.push(`public land %: ${got} units/areas`);
+  return 1;
+}
+
+// ═══ Unit boundary export (writes units.geojson / deer_areas.geojson for the app)
+import { writeFileSync, existsSync, readFileSync as rfs } from 'fs';
+const WMU_ITEM = '8bfaa3a4e10e49dd9b0cc95693977e37'; // Oregon GEOHub: Wildlife Management Units
+
+function decimate(coords, eps) { // thin dense rings; keep shape, shrink file
+  const out = [coords[0]];
+  for (let i = 1; i < coords.length - 1; i++) {
+    const [x1, y1] = out[out.length - 1], [x2, y2] = coords[i];
+    if (Math.abs(x2 - x1) + Math.abs(y2 - y1) > eps) out.push(coords[i]);
+  }
+  out.push(coords[coords.length - 1]);
+  return out.map(([x, y]) => [Math.round(x * 1e4) / 1e4, Math.round(y * 1e4) / 1e4]);
+}
+function slimFeature(f, nameField, eps) {
+  const g = f.geometry; if (!g) return null;
+  const doPoly = rings => rings.map(r => decimate(r, eps)).filter(r => r.length > 3);
+  let geom = null;
+  if (g.type === 'Polygon') { const r = doPoly(g.coordinates); if (r.length) geom = { type: 'Polygon', coordinates: r }; }
+  else if (g.type === 'MultiPolygon') { const p = g.coordinates.map(doPoly).filter(x => x.length); if (p.length) geom = { type: 'MultiPolygon', coordinates: p }; }
+  if (!geom) return null;
+  return { type: 'Feature', properties: { name: String(f.properties?.[nameField] ?? '').trim() }, geometry: geom };
+}
+async function fetchLayerGeoJSON(layerUrl, nameField) {
+  const feats = []; let offset = 0;
+  for (let page = 0; page < 40; page++) {
+    const u = `${layerUrl}/query?where=1%3D1&outFields=${encodeURIComponent(nameField)}&returnGeometry=true&outSR=4326&f=geojson&resultOffset=${offset}&resultRecordCount=200`;
+    const gj = await (await fetch(u, { headers: UA })).json();
+    if (!gj.features || !gj.features.length) break;
+    feats.push(...gj.features);
+    if (!gj.properties?.exceededTransferLimit && gj.features.length < 200) break;
+    offset += gj.features.length;
+  }
+  return feats;
+}
+async function resolveItemLayer(itemId) {
+  const item = await (await fetch(`https://www.arcgis.com/sharing/rest/content/items/${itemId}?f=json`, { headers: UA })).json();
+  if (!item?.url) throw new Error('item has no service url');
+  const base = item.url.replace(/\/$/, '') + (/(Feature|Map)Server$/i.test(item.url) ? '/0' : '');
+  const meta = await (await fetch(base + '?f=json', { headers: UA })).json();
+  const fields = (meta.fields || []).map(f => f.name);
+  const nameField = fields.find(f => /unit.*name|area.*name|name.*unit/i.test(f)) || fields.find(f => /^(unit|name|area)$/i.test(f)) || fields.find(f => /name/i.test(f));
+  if (!nameField) throw new Error('no name field on layer');
+  return { base, nameField };
+}
+async function exportBoundaries(details) {
+  // WMUs
+  try {
+    const { base, nameField } = await resolveItemLayer(WMU_ITEM);
+    const feats = await fetchLayerGeoJSON(base, nameField);
+    const slim = feats.map(f => slimFeature(f, nameField, 0.004)).filter(Boolean);
+    if (slim.length < 40) throw new Error(`only ${slim.length} units`);
+    const gj = JSON.stringify({ type: 'FeatureCollection', features: slim });
+    const changed = !existsSync('units.geojson') || rfs('units.geojson', 'utf8') !== gj;
+    if (changed && !DRY) writeFileSync('units.geojson', gj);
+    console.log(`[geo] units.geojson: ${slim.length} units, ${(gj.length / 1024).toFixed(0)} KB${changed ? '' : ' (unchanged)'}`);
+    if (changed) details.push(`unit boundaries: ${slim.length} units`);
+  } catch (e) { console.error('[geo] WMU export failed:', e.message); details.push('unit boundaries FAILED: ' + e.message); }
+  // 2026 Deer Hunt Areas — discover via ArcGIS search
+  try {
+    const q = encodeURIComponent('title:("Deer Hunt Area" OR "Deer Hunt Areas") AND Oregon type:"Feature Service"');
+    const sr = await (await fetch(`https://www.arcgis.com/sharing/rest/search?f=json&num=10&q=${q}`, { headers: UA })).json();
+    const hit = (sr.results || []).find(r => /deer.*hunt.*area/i.test(r.title) && r.url);
+    if (!hit) { console.log('[geo] deer hunt area layer not found in search'); return; }
+    const { base, nameField } = await resolveItemLayer(hit.id);
+    const feats = await fetchLayerGeoJSON(base, nameField);
+    const slim = feats.map(f => slimFeature(f, nameField, 0.004)).filter(Boolean);
+    if (slim.length < 10) throw new Error(`only ${slim.length} areas`);
+    const gj = JSON.stringify({ type: 'FeatureCollection', features: slim });
+    const changed = !existsSync('deer_areas.geojson') || rfs('deer_areas.geojson', 'utf8') !== gj;
+    if (changed && !DRY) writeFileSync('deer_areas.geojson', gj);
+    console.log(`[geo] deer_areas.geojson: ${slim.length} areas from "${hit.title}"${changed ? '' : ' (unchanged)'}`);
+    if (changed) details.push(`deer hunt area boundaries: ${slim.length} areas`);
+  } catch (e) { console.error('[geo] deer areas export failed:', e.message); details.push('deer area boundaries: not available (' + e.message + ')'); }
+}
+
+// ═══ Firestore REST ═══════════════════════════════════════════════════════════
+async function fs_(method, path, body) {
+  const url = `${BASE}/${path}${path.includes('?') ? '&' : '?'}key=${API_KEY}`;
+  const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Firestore ${method} ${path}: ${res.status} ${await res.text()}`);
+  return res.json();
+}
+const V = { s: v => ({ stringValue: String(v) }), i: v => ({ integerValue: String(v) }), t: d => ({ timestampValue: d.toISOString() }) };
+const gv = f => f == null ? null : 'stringValue' in f ? f.stringValue : 'integerValue' in f ? Number(f.integerValue) : 'timestampValue' in f ? f.timestampValue : null;
+
+async function loadYear(year) {
+  const doc = await fs_('GET', `years/${year}`);
+  if (!doc) return null;
+  const chunkCount = Number(gv(doc.fields?.chunkCount) || 0);
+  let hunts = [];
+  for (let ci = 0; ci < chunkCount; ci++) {
+    const cd = await fs_('GET', `years/${year}/chunks/${ci}`);
+    if (cd) hunts = hunts.concat(JSON.parse(gv(cd.fields?.hunts) || '[]'));
+  }
+  return { hunts, chunkCount };
+}
+async function writeYearHunts(year, hunts, oldChunkCount) {
+  const chunks = [];
+  for (let i = 0; i < hunts.length; i += CHUNK) chunks.push(hunts.slice(i, i + CHUNK));
+  await fs_('PATCH', `years/${year}`, { fields: { year: V.s(year), huntCount: V.i(hunts.length), chunkCount: V.i(chunks.length), updatedAt: V.t(new Date()) } });
+  for (let ci = 0; ci < chunks.length; ci++)
+    await fs_('PATCH', `years/${year}/chunks/${ci}`, { fields: { hunts: V.s(JSON.stringify(chunks[ci])) } });
+  for (let ci = chunks.length; ci < oldChunkCount; ci++)
+    await fs_('DELETE', `years/${year}/chunks/${ci}`).catch(() => {});
+}
+async function getHarvestDoc(year) {
+  const d = await fs_('GET', `years/${year}/harvest/all`);
+  return d ? JSON.parse(gv(d.fields?.data) || '{}') : {};
+}
+async function setHarvestDoc(year, data) {
+  await fs_('PATCH', `years/${year}/harvest/all`, { fields: { data: V.s(JSON.stringify(data)), updatedAt: V.t(new Date()) } });
+}
+async function getMeta(year, key) {
+  const d = await fs_('GET', `years/${year}/pdfMeta/${key}`);
+  return d ? { fileName: gv(d.fields?.fileName), source: gv(d.fields?.source) } : null;
+}
+async function setMeta(year, key, fileName, huntCount) {
+  await fs_('PATCH', `years/${year}/pdfMeta/${key}`, { fields: { fileName: V.s(fileName), huntCount: V.i(huntCount), uploadedAt: V.t(new Date()), source: V.s('auto') } });
+}
+async function setStatus(summary, details) {
+  await fs_('PATCH', `meta/autoUpdate`, { fields: {
+    lastRun: V.t(new Date()), lastRunStr: V.s(new Date().toLocaleDateString('en-US')),
+    summary: V.s(summary), details: V.s(details.join(' | ') || '—')
+  } });
+}
+
+// ═══ Link discovery ═══════════════════════════════════════════════════════════
+function anchors(html, pageUrl) {
+  const out = [];
+  const re = /<a[^>]+href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    let url = m[1];
+    try { url = new URL(url.replace(/ /g, '%20'), pageUrl).href; } catch { continue; }
+    out.push({ url, text: m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() });
   }
   return out;
 }
 
-// ─── FILE HANDLING (admin uploads) ────────────────────────────────────────────
-const readBuf = f => new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsArrayBuffer(f);});
-async function handleFile(target, file) {
-  if (!file) return;
-  if (!S.pendingYear) { toast('Pick a year first (Step 1)', true); return; }
-  const year = S.pendingYear;
-  if (!S.years[year]) S.years[year] = {hunts:[],files:{},harvestData:{},choices:{},seasons:{}};
-  const yd = S.years[year];
+function findDrawReports(html, pageUrl) {
+  const found = [];
+  for (const a of anchors(html, pageUrl)) {
+    if (!/\.xlsx/i.test(a.url)) continue;
+    const fname = decodeURIComponent(a.url.split('/').pop() || '');
+    if (!/preference[\s_-]*point[\s_-]*draw[\s_-]*report/i.test(fname)) continue;
+    const ym = fname.match(/(20\d{2})/); if (!ym) continue;
+    let species = null;
+    if (/elk/i.test(fname)) species = 'elk';
+    else if (/deer/i.test(fname) && !/antlerless/i.test(fname)) species = 'deer';
+    if (!species) continue;
+    found.push({ url: a.url, fname, year: ym[1], species });
+  }
+  const best = {};
+  for (const f of found) if (!best[f.species + f.year]) best[f.species + f.year] = f;
+  return Object.values(best);
+}
+
+function findHarvestReports(html, pageUrl) {
+  const found = [];
+  for (const a of anchors(html, pageUrl)) {
+    if (!/\.pdf/i.test(a.url)) continue;
+    const t = a.text.toLowerCase();
+    if (/public vs private|antlerless|damage|bear|cougar|sheep|goat|pronghorn/.test(t)) continue;
+    const ym = a.text.match(/(20\d{2})/); if (!ym) continue;
+    const year = ym[1];
+    if (Number(year) < 2022) continue;
+    let species = null;
+    if (/elk/.test(t)) species = 'elk';
+    else if (/deer/.test(t)) species = 'deer';
+    if (!species) continue;
+    let wep = null;
+    if (/archery/.test(t)) wep = 'Archery';
+    else if (/muzzleloader|\bml\b/.test(t)) wep = 'Muzz';
+    else if (/any legal weapon|rifle|\balw\b|100 series/.test(t)) wep = 'Rifle';
+    if (!wep) continue;
+    const key = species + wep + 'Harvest'; // elkRifleHarvest, deerMuzzHarvest, ...
+    const fname = decodeURIComponent(a.url.split('/').pop() || '');
+    found.push({ url: a.url, fname, year, species, key: key.charAt(0).toLowerCase() + key.slice(1), label: a.text });
+  }
+  const best = {};
+  for (const f of found) if (!best[f.key + f.year]) best[f.key + f.year] = f;
+  return Object.values(best);
+}
+
+// ═══ Main ═════════════════════════════════════════════════════════════════════
+async function main() {
+  const details = [];
+  let updated = 0, failed = 0;
+  const yearCache = new Map();
+  const getYear = async y => { if (!yearCache.has(y)) yearCache.set(y, await loadYear(y)); return yearCache.get(y); };
+
+  // ── Draw reports ──
   try {
-    const buf = await readBuf(file);
-    const ext = file.name.split('.').pop().toLowerCase();
-    if (target==='elkChoices'||target==='deerChoices') {
-      const parsed=parseChoicesXlsx(buf);
-      yd.choices=Object.assign(yd.choices||{},parsed);
-      yd.files[target]={name:file.name,loadedAt:Date.now(),count:Object.keys(parsed).length};
-      toast(`Choice data loaded for ${Object.keys(parsed).length} hunts ✓`);
-      if(!S.selectedYear) S.selectedYear=year;
-      saveLocal(); renderAll();
-      banner('','Saving to cloud…',true);
-      const ok1=await fbSaveChoices(year, yd.choices);
-      fbSavePdfMeta(year, target, file.name, Object.keys(parsed).length);
-      banner(ok1?'ok':'err', ok1?'Saved to cloud ✓':'Cloud save failed', false);
-      return;
+    console.log('[draw] fetching', DRAW_PAGE);
+    const res = await fetch(DRAW_PAGE, { headers: UA });
+    if (!res.ok) throw new Error(`page ${res.status}`);
+    const reports = findDrawReports(await res.text(), DRAW_PAGE);
+    console.log(`[draw] found ${reports.length} report link(s)`);
+    for (const r of reports) {
+      const key = r.species === 'elk' ? 'elkPoints' : 'deerPoints';
+      try {
+        const meta = await getMeta(r.year, key);
+        if (meta && meta.fileName === r.fname) { console.log(`[skip] ${r.year} ${key} current`); continue; }
+        console.log(`[dl] ${r.fname}`);
+        const fres = await fetch(r.url, { headers: UA });
+        if (!fres.ok) throw new Error(`download ${fres.status}`);
+        const hunts = parseHunts(Buffer.from(await fres.arrayBuffer()), r.species);
+        console.log(`[parse] ${r.year} ${r.species}: ${hunts.length} hunts`);
+        if (DRY) { details.push(`${r.year} ${r.species} draw: would load ${hunts.length}`); continue; }
+        const existing = (await getYear(r.year)) || { hunts: [], chunkCount: 0 };
+        const merged = existing.hunts.filter(h => h.species !== r.species).concat(hunts);
+        await writeYearHunts(r.year, merged, existing.chunkCount);
+        yearCache.set(r.year, { hunts: merged, chunkCount: Math.ceil(merged.length / CHUNK) });
+        await setMeta(r.year, key, r.fname, hunts.length);
+        details.push(`${r.year} ${r.species} draw: ${hunts.length} hunts`);
+        updated++;
+      } catch (e) { console.error(`[err] draw ${r.year} ${r.species}:`, e.message); details.push(`${r.year} ${r.species} draw FAILED: ${e.message}`); failed++; }
     }
-    if (target==='elkPoints'||target==='deerPoints') {
-      const sp = target==='elkPoints'?'elk':'deer';
-      const hunts = parseXlsx(buf, sp);
-      yd.hunts = yd.hunts.filter(h=>h.species!==sp);
-      yd.hunts.push(...hunts);
-      yd.files[target] = {name:file.name,loadedAt:Date.now(),count:hunts.length};
-      applyHarvest(year);
-      toast(`Loaded ${hunts.length} ${sp} hunts for ${year} ✓`);
-    } else {
-      const defaultK = target.startsWith('elk') ? 11 : 9;
-      const harvest = ext==='pdf' ? await parsePdf(buf, defaultK) : parseHarvestXlsx(buf);
-      const n = Object.keys(harvest).length;
-      if (n < 10) { toast('That file only had '+n+' hunts in it — double-check it\'s the right one', true); return; }
-      yd.harvestData[target] = harvest;
-      yd.files[target] = {name:file.name,loadedAt:Date.now(),count:n,matched:0};
-      applyHarvest(year);
-      toast(`Harvest loaded — ${yd.files[target].matched} hunts matched ✓`);
-      fbSavePdfMeta(year, target, file.name, n);
-    }
-    if (!S.selectedYear) S.selectedYear = year;
-    saveLocal(); renderAll();
-    banner('', 'Saving to cloud…', true);
-    const ok = await fbSave(year, yd.hunts, yd.harvestData);
-    banner(ok?'ok':'err', ok?'Saved to cloud ✓ — the whole family will see this data':'Cloud save failed — data is only on this device', false);
-  } catch(e) { console.error(e); toast('Problem with that file: '+e.message, true); }
-}
+  } catch (e) { console.error('[err] draw page:', e.message); details.push('draw page unreachable: ' + e.message); failed++; }
 
-// ─── LOCAL STORAGE ────────────────────────────────────────────────────────────
-function saveLocal() {
-  try { localStorage.setItem(SK, JSON.stringify({years:S.years,selectedYear:S.selectedYear,pendingYear:S.pendingYear})); } catch(e){}
-}
-function loadLocal() {
+  // ── Harvest PDFs ──
   try {
-    const d=JSON.parse(localStorage.getItem(SK)||'null'); if(!d) return false;
-    S.years=d.years||{}; S.selectedYear=d.selectedYear||yList()[0]||null; S.pendingYear=d.pendingYear||S.selectedYear||null; return true;
-  } catch(e){ return false; }
-}
-
-// ─── FAVORITES ────────────────────────────────────────────────────────────────
-const FAV_KEY = 'odfw_favs_v1';
-function loadFavs() { try { return JSON.parse(localStorage.getItem(FAV_KEY)||'[]'); } catch(e){ return []; } }
-function saveFavs(f) { try { localStorage.setItem(FAV_KEY, JSON.stringify(f)); } catch(e){} }
-function isFav(num,sp) { return loadFavs().some(f=>f.huntNum===num&&f.species===sp); }
-function toggleFav(num,sp) {
-  let favs=loadFavs();
-  const idx=favs.findIndex(f=>f.huntNum===num&&f.species===sp);
-  if(idx>=0){ favs.splice(idx,1); toast('Removed from My List'); }
-  else {
-    const h=getH().find(x=>x.huntNum===num&&x.species===sp);
-    if(h){ favs.push({huntNum:h.huntNum,species:h.species,huntName:h.huntName,addedAt:Date.now()}); toast('Saved to My List ★'); }
-  }
-  saveFavs(favs);
-}
-
-// ─── FILTER + SORT ────────────────────────────────────────────────────────────
-function applyFilters(hunts) {
-  const q = ($('#fSearch')?.value||'').trim().toLowerCase();
-  return hunts.filter(h=>{
-    if(P.sp!=='all' && h.species!==P.sp) return false;
-    if(P.wep!=='all' && h.weapon!==P.wep) return false;
-    // Special-requirement hunts can be shown/hidden per tag (picking Youth as
-    // the weapon overrides the youth hide)
-    const ks=specialKeys(h);
-    const hid=ks.filter(k=>P.specialShow[k]===false&&!(k==='youth'&&P.wep==='youth'));
-    if(hid.length) return false;
-    // "Only these types" mode: standard hunts (no tags) drop out entirely
-    if(P.specialOnly && !ks.some(k=>P.specialShow[k]!==false)) return false;
-    if(q && !(h.huntNum+' '+h.huntName).toLowerCase().includes(q)) return false;
-    if(P.canDraw){
-      const my=ptsFor(h);
-      if(my===null || h.pts100===null || my<h.pts100) return false;
+    console.log('[harvest] fetching', HARVEST_PAGE);
+    const res = await fetch(HARVEST_PAGE, { headers: UA });
+    if (!res.ok) throw new Error(`page ${res.status}`);
+    const reports = findHarvestReports(await res.text(), HARVEST_PAGE);
+    // only the two most recent years listed — older data rarely changes
+    const years = [...new Set(reports.map(r => r.year))].sort().reverse().slice(0, 2);
+    const wanted = reports.filter(r => years.includes(r.year));
+    console.log(`[harvest] found ${reports.length} link(s); processing years ${years.join(', ')}`);
+    for (const r of wanted) {
+      try {
+        const yd = await getYear(r.year);
+        if (!yd) { console.log(`[skip] ${r.year} ${r.key}: no draw data for that year yet`); continue; }
+        const meta = await getMeta(r.year, r.key);
+        if (meta && meta.source !== 'auto') { console.log(`[skip] ${r.year} ${r.key}: manual upload present — leaving it alone`); continue; }
+        if (meta && meta.fileName === r.fname) { console.log(`[skip] ${r.year} ${r.key} current`); continue; }
+        console.log(`[dl] ${r.fname || r.url}`);
+        const fres = await fetch(r.url, { headers: UA });
+        if (!fres.ok) throw new Error(`download ${fres.status}`);
+        const lines = await pdfToLines(await fres.arrayBuffer());
+        const parsed = parseHarvestLines(lines, r.species === 'elk' ? 11 : 9);
+        const knownIds = new Set(yd.hunts.filter(h => h.species === r.species).map(h => h.huntNum));
+        const v = validateHarvest(parsed, knownIds);
+        if (!v.ok) { console.error(`[reject] ${r.year} ${r.key}: ${v.reason}`); details.push(`${r.year} ${r.label}: NEEDS MANUAL UPLOAD (${v.reason})`); failed++; continue; }
+        console.log(`[parse] ${r.year} ${r.key}: ${v.count} hunts, validated`);
+        if (DRY) { details.push(`${r.year} ${r.key}: would load ${v.count}`); continue; }
+        const harvestAll = await getHarvestDoc(r.year);
+        harvestAll[r.key] = parsed;
+        await setHarvestDoc(r.year, harvestAll);
+        await setMeta(r.year, r.key, r.fname || r.url.split('/').pop(), v.count);
+        details.push(`${r.year} ${r.key}: ${v.count} hunts`);
+        updated++;
+      } catch (e) { console.error(`[err] harvest ${r.year} ${r.key}:`, e.message); details.push(`${r.year} ${r.label || r.key} FAILED: ${e.message}`); failed++; }
     }
-    return true;
-  });
-}
-function sortHunts(hunts) {
-  const cmpNum=(a,b)=>String(a.huntNum).localeCompare(String(b.huntNum),undefined,{numeric:true});
-  const arr=[...hunts];
-  if(P.sort==='num') return arr.sort(cmpNum);
-  if(P.sort==='success') return arr.sort((a,b)=>{
-    const sa=effHarvest(a).hv?.successPct??-1, sb=effHarvest(b).hv?.successPct??-1;
-    return sb-sa || cmpNum(a,b);
-  });
-  if(P.sort==='easy') return arr.sort((a,b)=>{
-    const pa=a.pts100===null?-1:a.pts100, pb=b.pts100===null?-1:b.pts100;
-    return pa-pb || (b.resOdds??0)-(a.resOdds??0) || cmpNum(a,b);
-  });
-  if(P.sort==='hard') return arr.sort((a,b)=>{
-    const pa=a.pts100===null?-1:a.pts100, pb=b.pts100===null?-1:b.pts100;
-    return pb-pa || cmpNum(a,b);
-  });
-  if(P.sort==='backup') return arr.sort((a,b)=>{
-    const ca=choiceOdds(a), cb=choiceOdds(b);
-    const oa=ca&&ca.left1>0?ca.o2:-1, ob=cb&&cb.left1>0?cb.o2:-1;
-    return ob-oa || ((cb?cb.left1:0)-(ca?ca.left1:0)) || cmpNum(a,b);
-  });
-  // 'best' — the silent grade: harvest success + antler size, scaled by drawability
-  return arr.sort((a,b)=> grade(b)-grade(a) || cmpNum(a,b));
-}
+  } catch (e) { console.error('[err] harvest page:', e.message); details.push('harvest page unreachable: ' + e.message); failed++; }
 
-// ─── RENDER: points panel ─────────────────────────────────────────────────────
-function renderPts() {
-  const el=$('#ptsBody');
-  if(P.ptsSet && (P.deerPts!==null||P.elkPts!==null)){
-    el.innerHTML=`<div class="pts-summary">
-      <div class="txt">Your points: <strong>Deer ${P.deerPts??'—'}</strong> · <strong>Elk ${P.elkPts??'—'}</strong></div>
-      <button class="linkbtn" id="ptsChange">Change</button></div>`;
-    $('#ptsChange').onclick=()=>{P.ptsSet=false;savePrefs();renderPts();};
-    return;
-  }
-  const step=(sp,val)=>`<div class="stepper"><div class="lbl">${sp==='deer'?'Deer':'Elk'} points</div>
-    <div class="step-row">
-      <button class="step-btn" data-step="${sp}" data-d="-1" aria-label="fewer">−</button>
-      <span class="step-val" id="sv-${sp}">${val??0}</span>
-      <button class="step-btn" data-step="${sp}" data-d="1" aria-label="more">+</button>
-    </div></div>`;
-  el.innerHTML=`<p class="ptitle">Your preference points</p>
-    <p class="help" style="margin-bottom:12px">These are on your ODFW account. Set them once and every hunt below gets a personal answer.</p>
-    <div class="pts-grid">${step('deer',P.deerPts)}${step('elk',P.elkPts)}</div>
-    <button class="btn primary" id="ptsDone" style="width:100%;margin-top:12px">Done — show my chances</button>`;
-  $$('[data-step]').forEach(b=>b.onclick=()=>{
-    const sp=b.dataset.step, d=Number(b.dataset.d);
-    const cur=(sp==='deer'?P.deerPts:P.elkPts)??0;
-    const nv=Math.max(0,Math.min(30,cur+d));
-    if(sp==='deer')P.deerPts=nv; else P.elkPts=nv;
-    $('#sv-'+sp).textContent=nv;
-    savePrefs(); renderCards();
-  });
-  $('#ptsDone').onclick=()=>{ if(P.deerPts===null)P.deerPts=0; if(P.elkPts===null)P.elkPts=0; P.ptsSet=true; savePrefs(); renderPts(); renderCards(); };
-}
-
-// ─── RENDER: hunt cards ───────────────────────────────────────────────────────
-function cardHTML(h){
-  const v=verdict(h), my=ptsFor(h), mo=myOdds(h,my);
-  const bl=blendHarvest(h,3);
-  const succ=bl?bl.succ:null;
-  const lowRep=bl&&bl.repRate!==null&&bl.repRate<LOW_REPORT;
-  const succLbl=lowRep?'Got one ⚠ few reported':(bl?(bl.n>1?`Got one (${bl.n}-yr avg)`:`Got one (${bl.years[0]})`):'Hunters who got one');
-  const t=trendData(h);
-  const moTxt = my===null?'—':(mo===null?'<1%':fmtP(mo));
-  const specials=specialTags(h).map(s=>`<span class="chip sp">${esc(s)}</span>`).join('');
-  return `<div class="card ${v.cls}" data-id="${esc(h.huntNum)}_${h.species}">
-    <div class="crow1"><span class="cid">${esc(h.huntNum)}</span><span class="cname">${esc(h.huntName)}</span>
-      <span class="cstar ${isFav(h.huntNum,h.species)?'on':''}" data-fav="${esc(h.huntNum)}_${h.species}" role="button" aria-label="save to my list">${isFav(h.huntNum,h.species)?'★':'☆'}</span></div>
-    <div class="chips"><span class="chip">${wLabel(h.weapon)}</span><span class="chip">${h.species==='elk'?'Elk':'Deer'}</span>${specials}${(seasonOf(h)?.n)?'<span class="chip sp">Special rules</span>':''}</div>
-    <div class="verdict">${v.text}</div>
-    <div class="stats">
-      <div class="stat"><div class="n">${moTxt}</div><div class="l">Your chance this year</div></div>
-      <div class="stat"><div class="n" ${lowRep?'style="color:var(--warn)"':''}>${succ==null?'—':fmtP(succ)}</div><div class="l" ${lowRep?'style="color:var(--warn)"':''}>${succLbl}</div></div>
-      <div class="stat"><div class="n">${h.pts100===null?'Luck':h.pts100}</div><div class="l">Points for a sure tag</div></div>
-    </div>
-    ${(()=>{const b=blendHarvest(h,3);
-      if(!b) return `<div class="csize dim">No harvest data yet for this hunt.</div>`;
-      const span=b.n>1?`${b.n}-yr avg`:`${b.years[0]} results`;
-      return b.top
-        ? `<div class="csize">Typical size: <strong>${esc(b.top.label)}</strong> — ${fmt(b.top.cnt)} of ${fmt(b.top.den)} ${h.species==='elk'?'bulls':'bucks'} (${span})</div>`
-        : `<div class="csize dim">Antler sizes not reported for this hunt.</div>`;})()}
-    ${(()=>{const co=choiceOdds(h);
-      if(!co||co.left1<=0) return '';
-      const lbl=co.o2>=99?'near-sure':'~'+Math.round(co.o2)+'%';
-      return `<div class="cseason" style="border-left:3px solid var(--good)">Backup pick: <strong>${lbl}</strong> as a 2nd choice — ${fmt(co.left1)} tags left over, ${fmt(co.ch.c2)} competing${co.current?'':' ('+co.year+')'}</div>`;})()}
-    ${(()=>{const se=seasonOf(h);return se?`<div class="cseason">Season: <strong>${esc(se.s)}</strong></div>`:'';})()}
-    ${t.sentence?`<div class="ctrend ${t.dir}">${esc(t.sentence)}</div>`:''}
-    <button class="detailbtn" data-open="${esc(h.huntNum)}_${h.species}">See full details ›</button>
-  </div>`;
-}
-function renderCards(){
-  const all=getH();
-  const box=$('#cards');
-  if(!all.length){
-    box.innerHTML=`<div class="empty">No hunt data yet.<br>It loads automatically — check back in a minute, or pull to refresh.</div>`;
-    $('#rcount').textContent=''; return;
-  }
-  const rows=sortHunts(applyFilters(all));
-  const spTxt=P.sp==='all'?'':P.sp+' ';
-  $('#rcount').textContent=`Showing ${rows.length} of ${all.length} ${spTxt}hunts · ${S.selectedYear} season data`;
-  if(!rows.length){ box.innerHTML=`<div class="empty">Nothing matches those filters.<br>Try "All weapons" or turn off the sure-tag switch.</div>`; return; }
-  box.innerHTML=rows.slice(0,200).map(cardHTML).join('')+(rows.length>200?`<div class="empty">…and ${rows.length-200} more. Use search to narrow down.</div>`:'');
-  wireCards(box);
-}
-function wireCards(box){
-  box.querySelectorAll('.card').forEach(c=>c.addEventListener('click',e=>{
-    const fav=e.target.closest('[data-fav]');
-    if(fav){ e.stopPropagation(); const [n,s]=fav.dataset.fav.split('_'); toggleFav(n,s);
-      fav.textContent=isFav(n,s)?'★':'☆'; fav.classList.toggle('on',isFav(n,s)); renderMyList(); return; }
-    const opener=e.target.closest('[data-open]');
-    openDetail(opener?opener.dataset.open:c.dataset.id);
-  }));
-}
-
-// ─── RENDER: detail sheet ─────────────────────────────────────────────────────
-// ─── UNIT MAP — self-hosted: draws ODFW boundaries from units.geojson /
-// deer_areas.geojson committed to this repo by the auto-updater. No external
-// services; if the files aren't there yet, falls back to official map links.
-function unitNameFor(h){
-  let n=(h.huntName||'').trim();
-  n=n.replace(/^(N|S|E|W|NE|NW|SE|SW)\s+/i,'');
-  n=n.replace(/\b(Unit|Youth|Muzzleloader|Archery|Bow|Traditional|Late|Early|Plus|Experimental Forest|Whitetail|Mule Deer)\b/gi,' ');
-  n=n.replace(/\bNo\.?\s*\d+\b/gi,' ').replace(/[-–].*$/,' ').replace(/\d+/g,' ');
-  return n.replace(/\s+/g,' ').trim();
-}
-const isHerdArea=h=>/^[A-Z]{2}\d{3}/.test(String(h.huntNum));
-const herdCode=h=>{ const m=String(h.huntNum).match(/^([A-Z]{2})1(\d\d)/); return m?m[1]+m[2]:null; };
-
-const GEO={units:undefined, areas:undefined}; // undefined=not tried, null=missing
-async function loadGeo(which){
-  if(GEO[which]!==undefined) return GEO[which];
-  try{
-    const r=await fetch(which==='units'?'units.geojson':'deer_areas.geojson',{cache:'force-cache'});
-    GEO[which]=r.ok?await r.json():null;
-  }catch(e){ GEO[which]=null; }
-  return GEO[which];
-}
-const featBBox=f=>{
-  let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
-  const polys=f.geometry.type==='Polygon'?[f.geometry.coordinates]:f.geometry.coordinates;
-  polys.forEach(p=>p[0].forEach(([x,y])=>{ if(x<x1)x1=x; if(x>x2)x2=x; if(y<y1)y1=y; if(y>y2)y2=y; }));
-  return [x1,y1,x2,y2];
-};
-const featCentroid=f=>{
-  const ring=(f.geometry.type==='Polygon'?f.geometry.coordinates:f.geometry.coordinates[0])[0];
-  let sx=0,sy=0; ring.forEach(([x,y])=>{sx+=x;sy+=y;});
-  return [sx/ring.length, sy/ring.length];
-};
-// Expand ODFW's abbreviations so "Saddle Mtn" matches the GIS "Saddle Mountain"
-function normUnit(s){
-  const AB={MTN:'MOUNTAIN',MT:'MOUNT',CR:'CREEK',RVR:'RIVER',FK:'FORK',PT:'POINT'};
-  return String(s||'').toUpperCase().replace(/[^A-Z0-9 ]/g,' ')
-    .split(/\s+/).filter(Boolean).map(t=>AB[t]||t).join(' ');
-}
-function matchFeatures(gj,h){
-  const feats=gj.features||[];
-  const norm=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
-  if(isHerdArea(h)){
-    const code=norm(herdCode(h)||'');
-    let hit=feats.filter(f=>norm(f.properties.name).includes(code));
-    if(hit.length) return hit;
-    const nm=norm(unitNameFor(h));
-    return nm?feats.filter(f=>{const fn=norm(f.properties.name);return fn.includes(nm)||nm.includes(fn);}):[];
-  }
-  const nm=normUnit(unitNameFor(h));
-  if(!nm) return [];
-  let hit=feats.filter(f=>normUnit(f.properties.name)===nm);
-  if(!hit.length) hit=feats.filter(f=>{const fn=normUnit(f.properties.name);return fn.includes(nm)||nm.includes(fn);});
-  return hit;
-}
-function renderUnitSVG(gj, targets, wholeState){
-  const midLat=44.1, kx=Math.cos(midLat*Math.PI/180);
-  const px=([x,y])=>[(x*kx).toFixed(4), (-y).toFixed(4)];
-  let bb;
-  if(wholeState||!targets.length){
-    bb=[1e9,1e9,-1e9,-1e9];
-    gj.features.forEach(f=>{const b=featBBox(f); bb=[Math.min(bb[0],b[0]),Math.min(bb[1],b[1]),Math.max(bb[2],b[2]),Math.max(bb[3],b[3])];});
-  } else {
-    bb=[1e9,1e9,-1e9,-1e9];
-    targets.forEach(f=>{const b=featBBox(f); bb=[Math.min(bb[0],b[0]),Math.min(bb[1],b[1]),Math.max(bb[2],b[2]),Math.max(bb[3],b[3])];});
-    const padx=(bb[2]-bb[0])*0.5+0.02, pady=(bb[3]-bb[1])*0.5+0.02;
-    bb=[bb[0]-padx, bb[1]-pady, bb[2]+padx, bb[3]+pady];
-  }
-  const vx=bb[0]*kx, vy=-bb[3], vw=(bb[2]-bb[0])*kx, vh=bb[3]-bb[1];
-  const tset=new Set(targets);
-  const paths=gj.features.map(f=>{
-    const polys=f.geometry.type==='Polygon'?[f.geometry.coordinates]:f.geometry.coordinates;
-    const d=polys.map(p=>p.map(ring=>'M'+ring.map(pt=>px(pt).join(',')).join('L')+'Z').join('')).join('');
-    const on=tset.has(f);
-    return `<path d="${d}" fill="${on?'rgba(217,165,78,.28)':'none'}" stroke="${on?'#d9a54e':'#5b6f60'}" stroke-width="${on?3:1.2}" vector-effect="non-scaling-stroke"/>`;
-  }).join('');
-  const fs=vh*0.032;
-  const labels=gj.features.map(f=>{
-    const b=featBBox(f);
-    if(b[2]<bb[0]||b[0]>bb[2]||b[3]<bb[1]||b[1]>bb[3]) return '';
-    const frac=((b[2]-b[0])*(b[3]-b[1]))/((bb[2]-bb[0])*(bb[3]-bb[1]));
-    const on=tset.has(f);
-    if(!on&&frac<0.02) return '';
-    const [cx,cy]=px(featCentroid(f));
-    return `<text x="${cx}" y="${cy}" text-anchor="middle" font-size="${on?fs*1.25:fs}" font-weight="${on?800:500}" fill="${on?'#f0c778':'#b9c4b0'}" font-family="-apple-system,sans-serif">${esc(String(f.properties.name))}</text>`;
-  }).join('');
-  return `<svg viewBox="${vx} ${vy} ${vw} ${vh}" style="width:100%;height:auto;display:block;background:#18231c" xmlns="http://www.w3.org/2000/svg">${paths}${labels}</svg>`;
-}
-let mapWhole=false, mapHunt=null;
-async function showUnitMap(h){
-  mapHunt=h;
-  const name=unitNameFor(h);
-  $('#mapTitle').textContent=name?name:'Unit map';
-  $('#mapSub').textContent=`Hunt ${h.huntNum} · ${h.huntName}`;
-  $('#mapSheet').classList.add('open');
-  $('#mapSheet').scrollTop=0;
-  document.body.style.overflow='hidden';
-  $('#mapBody').innerHTML='<div style="display:flex;justify-content:center;padding:40px"><div class="spin" style="width:28px;height:28px"></div></div>';
-  const herd=isHerdArea(h);
-  const gj=await loadGeo(herd?'areas':'units');
-  const links=`<a class="srcbtn" style="margin-bottom:10px" href="${herd?'https://myodfw.com/articles/eastern-oregon-deer-hunt-areas-2026':'https://www.eregulations.com/oregon/hunting/western-oregon-unit-map'}" target="_blank" rel="noopener">${herd?'ODFW Deer Hunt Area maps ↗':'Official unit maps &amp; boundary descriptions ↗'}</a>
-    <a class="srcbtn" href="https://www.oregonhuntingmap.com" target="_blank" rel="noopener">ODFW interactive hunting map ↗</a>`;
-  // ODFW's official map image for this hunt type (the familiar reference map)
-  const offImg=herd
-    ? `<p class="plain" style="margin-top:14px">ODFW's official 2026 Deer Hunt Areas map:</p>
-       <div style="overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff;margin-bottom:12px">
-       <img src="https://myodfw.com/sites/default/files/2025-09/EasternORDeerHuntAreas%20updated%20Sept%2015%202025.jpg" onerror="this.onerror=null;this.src='https://myodfw.com/sites/default/files/styles/380_max_width/public/2025-09/EasternORDeerHuntAreas%20updated%20Sept%2015%202025.jpg?itok=eVl42pp8'" alt="Eastern Oregon Deer Hunt Areas map" style="width:100%;display:block" loading="lazy"></div>`
-    : `<p class="plain" style="margin-top:14px">ODFW's official unit map:</p>
-       <div style="overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff;margin-bottom:12px">
-       <img src="https://myodfw.com/sites/default/files/2017-09/WMU_Map.PNG" onerror="this.onerror=null;this.src='https://myodfw.com/sites/default/files/styles/380_max_width/public/2017-09/WMU_Map.PNG?itok=LCpSXD0T'" alt="Oregon Wildlife Management Units map" style="width:100%;display:block" loading="lazy"></div>`;
-  if(!gj){
-    $('#mapBody').innerHTML=`${offImg}<p class="help">The zoom-to-your-unit view appears after the next automatic data update.</p>${links}`;
-    return;
-  }
-  const targets=matchFeatures(gj,h);
-  const draw=()=>{
-    $('#mapBody').innerHTML=`
-      <div class="hselrow" style="margin-bottom:10px">
-        <button class="hsel ${!mapWhole?'on':''}" id="mzUnit">Zoomed to unit</button>
-        <button class="hsel ${mapWhole?'on':''}" id="mzState">Whole Oregon</button>
-      </div>
-      ${targets.length?'':'<p class="plain" style="color:var(--warn)">Couldn’t match this hunt to a boundary by name — showing the whole map.</p>'}
-      <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:12px">${renderUnitSVG(gj,targets,mapWhole||!targets.length)}</div>
-      <p class="help">Gold = this hunt's ${herd?'hunt area':'unit'}. Boundaries from ODFW's public GIS data — for planning; the regs' written descriptions are the legal boundary.</p>
-      ${offImg}
-      ${links}`;
-    $('#mzUnit').onclick=()=>{mapWhole=false;draw();};
-    $('#mzState').onclick=()=>{mapWhole=true;draw();};
-  };
-  mapWhole=!targets.length;
-  draw();
-}
-
-// Requirements & special rules — ODFW's fine print from the regs tables,
-// plus family-added rules (weed-free feed, pack-out-waste areas, road closures…)
-async function loadReqsInto(h){
-  const sec=$('#reqsSec'); if(!sec) return;
-  const key=hkey(h);
-  const items=await fbLoadReqs(key);
-  if(!$('#reqsSec')) return; // sheet closed while loading
-  renderReqs(sec, h, key, items===null?[]:items, items===null);
-}
-function renderReqs(sec, h, key, items, offline){
-  const se=seasonOf(h);
-  const auto=(se&&se.n)?se.n.split(' • ').filter(x=>x):[];
-  const autoHtml=auto.map(t=>`<div style="display:flex;gap:9px;padding:8px 0;border-bottom:1px solid var(--card2)">
-    <span style="color:var(--gold);flex-shrink:0">▸</span><span style="font-size:.93rem">${esc(t)} <span class="help" style="margin:0;display:inline">— from the ${S.selectedYear} regulations</span></span></div>`).join('');
-  const manHtml=items.map((n,i)=>`<div style="display:flex;gap:9px;padding:8px 0;border-bottom:1px solid var(--card2);align-items:baseline">
-    <span style="color:var(--warn);flex-shrink:0">▸</span><span style="font-size:.93rem;flex:1">${esc(n.t)}</span>
-    <button class="bmini dan" data-delreq="${i}" style="min-height:34px;padding:2px 8px;flex-shrink:0">✕</button></div>`).join('');
-  sec.innerHTML=`<h3>Requirements &amp; special rules</h3>
-    ${auto.length||items.length?autoHtml+manHtml:'<p class="help">No special requirements on record for this hunt.</p>'}
-    ${offline?'<p class="help">Couldn\'t reach the cloud — family-added rules may be missing.</p>':''}
-    <p class="help" style="margin-top:10px">Always double-check the current Oregon Big Game Regulations and land-manager rules (Forest Service / BLM) before your hunt.</p>
-    <button class="linkbtn" id="reqAddBtn" style="padding-left:0">+ Add a rule everyone should know</button>
-    <div id="reqAddBox" style="display:none">
-      <textarea id="reqText" placeholder="e.g. Eagle Cap Wilderness — certified weed-free feed required for stock; pack out all waste" style="width:100%;min-height:74px;font-size:1rem;font-family:inherit;background:var(--card2);color:var(--text);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px"></textarea>
-      <button class="btn primary" id="reqSave" style="width:100%;margin-top:8px">Save for the whole family</button>
-    </div>`;
-  sec.querySelectorAll('[data-delreq]').forEach(b=>b.onclick=()=>{
-    confirm2('Remove this rule for everyone?', async ()=>{
-      items.splice(Number(b.dataset.delreq),1);
-      await fbSaveReqs(key, items);
-      renderReqs(sec, h, key, items, false);
-    });
-  });
-  $('#reqAddBtn').onclick=()=>{ $('#reqAddBox').style.display='block'; $('#reqAddBtn').style.display='none'; $('#reqText').focus(); };
-  $('#reqSave').onclick=async ()=>{
-    const t=$('#reqText').value.trim();
-    if(!t){ toast('Write the rule first', true); return; }
-    $('#reqSave').textContent='Saving…'; $('#reqSave').disabled=true;
-    items.push({t, ts:Date.now()});
-    const ok=await fbSaveReqs(key, items);
-    toast(ok?'Saved — everyone will see it on this hunt ✓':'Save failed — check your connection', !ok);
-    renderReqs(sec, h, key, items, false);
-  };
-}
-let sheetId=null, sheetHSel='avg';
-function openDetail(id, keepSel){
-  if(!keepSel) sheetHSel='avg';
-  const [num,sp]=id.split('_');
-  const h=getH().find(x=>x.huntNum===num&&x.species===sp); if(!h) return;
-  sheetId=id;
-  $('#shTitle').textContent=`${h.huntNum} — ${h.huntName}`;
-  $('#shSub').textContent=`${S.selectedYear} season · ${h.species==='elk'?'Elk':'Deer'} · ${wLabel(h.weapon)}`;
-  const star=$('#shStar');
-  star.textContent=isFav(num,sp)?'★':'☆'; star.classList.toggle('on',isFav(num,sp));
-
-  const v=verdict(h), my=ptsFor(h), mo=myOdds(h,my);
-  const t=trendData(h);
-  let html=`<div class="callout ${v.cls}">${v.text}</div>`;
-  const sps=specialTags(h);
-  if(sps.length) html+=`<div class="chips" style="margin:-6px 0 14px">${sps.map(s=>`<span class="chip sp">${esc(s)}</span>`).join('')}</div>`;
-
-  const se=seasonOf(h);
-  html+=`<div class="sec"><h3>The basics</h3>
-    <p class="plain">A ${wLabel(h.weapon).toLowerCase()} ${h.species} hunt. In ${S.selectedYear}, ODFW gave out <strong>${fmt(h.tags)} tags</strong> and <strong>${fmt(h.residentApps)} Oregon residents</strong> put it as a choice. ${h.resOdds!=null?`Overall, about ${fmtP(h.resOdds)} of resident applicants drew it.`:''}</p>
-    <button class="btn" id="unitMapBtn" style="width:100%;margin-bottom:12px;border-color:var(--gold);color:var(--gold)">🗺 View this unit on the map</button>
-    ${(()=>{const pl=publicLandOf(h);return pl!=null?`<div class="kvg" style="margin-bottom:9px"><div class="kv" style="grid-column:1/-1"><div class="k">Public land in this unit</div><div class="v">${pl}%</div></div></div>`:'';})()}
-    ${se?`<div class="kvg">
-      <div class="kv" style="grid-column:1/-1"><div class="k">Season dates (${S.selectedYear})</div><div class="v" style="font-size:1.05rem">${esc(se.s)}</div></div>
-      ${se.b?`<div class="kv" style="grid-column:1/-1"><div class="k">Bag limit</div><div class="v" style="font-size:.95rem;font-weight:600">${esc(se.b)}</div></div>`:''}
-    </div>`:`<p class="help">Season dates for ${S.selectedYear} aren't loaded yet — they come from the regulations tables each spring.</p>`}
-  </div>`;
-
-  if(my!==null){
-    html+=`<div class="sec"><h3>Your odds</h3>
-      <div class="kvg">
-        <div class="kv"><div class="k">Your points</div><div class="v">${my}</div></div>
-        <div class="kv"><div class="k">Chance this year</div><div class="v">${mo===null?'<1%':fmtP(mo)}</div></div>
-        <div class="kv"><div class="k">Points for a sure tag</div><div class="v">${h.pts100===null?'Luck only':h.pts100}</div></div>
-        <div class="kv"><div class="k">Lowest points that drew</div><div class="v">${h.minPointsToDraw??'—'}</div></div>
-      </div></div>`;
-  }
-
-  const hyrs=harvestYears(h);
-  {
-    const co=choiceOdds(h);
-    const z=zeroPointOdds(h);
-    html+=`<div class="sec"><h3>Drawing it with 0 points</h3>`;
-    if(z!==null){
-      html+=`<p class="plain">As a <strong>1st choice</strong> with 0 points: <strong>${z<1&&z>0?'under 1%':fmtP(z)}</strong> — that's how the zero-point applicants actually did in the ${S.selectedYear} drawing${z>0?'':' (none drew)'}.</p>`;
-    }
-    if(co){
-      if(co.left1<=0){
-        html+=`<p class="plain" style="background:var(--badbg);color:var(--bad);padding:11px 13px;border-radius:10px;font-size:.92rem">As a <strong>2nd choice</strong>: no shot — ${fmt(co.ch.c1)} people put it first for ${fmt(co.tags)} tags, so nothing was left over. ${fmt(co.ch.c2)} people listed it 2nd anyway.</p>`;
-      } else {
-        html+=`<div class="kvg" style="margin-bottom:10px">
-          <div class="kv"><div class="k">Tags left after 1st choice</div><div class="v" style="color:var(--good)">${fmt(co.left1)}</div></div>
-          <div class="kv"><div class="k">People who listed it 2nd</div><div class="v">${fmt(co.ch.c2)}</div></div>
-        </div>
-        <p class="plain">As a <strong>2nd choice</strong>: ${co.o2>=99?'<strong>near-sure</strong>':'about <strong>'+Math.round(co.o2)+'%</strong>'} — no points needed, and you keep yours either way.</p>`;
-      }
-      html+=`<p class="help">${co.current?`From the ${co.year} drawing's applicant counts.`:`Choice counts are from the ${co.year} drawing (the most recent available).`} Resident/nonresident splits can shift these estimates a little.</p>`;
-    } else if(z===null){
-      html+=`<p class="plain" style="color:var(--dim)">No zero-point draw data for this hunt.</p>`;
-    } else {
-      html+=`<p class="help">2nd-choice numbers aren't loaded for any year yet — they'll appear after the next data update.</p>`;
-    }
-    html+=`</div>`;
-  }
-  if(hyrs.length){
-    const selYr = sheetHSel && hyrs.some(r=>r.year===sheetHSel) ? sheetHSel : 'avg';
-    const b = selYr==='avg' ? blendHarvest(h,3) : null;
-    const one = selYr!=='avg' ? hyrs.find(r=>r.year===selYr).hv : null;
-    html+=`<div class="sec"><h3>How hunters did</h3>`;
-    if(hyrs.length>1||selYr!=='avg'){
-      html+=`<div class="hselrow"><button class="hsel ${selYr==='avg'?'on':''}" data-hsel="avg">Average (${blendHarvest(h,3).n} yr)</button>`+
-        hyrs.map(r=>`<button class="hsel ${selYr===r.year?'on':''}" data-hsel="${r.year}">${r.year}</button>`).join('')+`</div>`;
-    }
-    const succ = b?b.succ:one.successPct, hunters=b?b.hunters:one.hunters,
-          taken=b?b.taken:one.totalHarvest, days=b?b.days:(one.hunters>0?Math.round(one.days/one.hunters):null);
-    // Tags issued come from the draw data. Blend view averages tags over the same seasons.
-    let tagsIssued;
-    if(b){
-      const tv=b.years.map(y=>findH(y,h.huntNum,h.species)?.tags).filter(x=>x!=null);
-      tagsIssued = tv.length ? Math.round(tv.reduce((s,x)=>s+x,0)/tv.length) : null;
-    } else {
-      tagsIssued = findH(selYr,h.huntNum,h.species)?.tags ?? null;
-    }
-    const per=b?' per year':'', avgTag=b?' (avg/yr)':'';
-    html+=`<p class="plain">${b?`Over the ${b.n} most recent seasons with results (${b.years[b.years.length-1]}–${b.years[0]}), on average${per}:`:`In the ${selYr} season:`}</p>
-      <div class="kvg" style="margin-bottom:10px">
-        <div class="kv"><div class="k">Tags given out${avgTag}</div><div class="v">${tagsIssued==null?'—':fmt(tagsIssued)}</div></div>
-        <div class="kv"><div class="k">Hunters who reported${avgTag}</div><div class="v">${fmt(hunters)}</div></div>
-        <div class="kv"><div class="k">Filled their tag${avgTag}</div><div class="v" style="color:var(--good)">${fmt(taken)}</div></div>
-        <div class="kv"><div class="k">Days hunted per hunter (avg)</div><div class="v">${days??'—'}</div></div>
-      </div>
-      <p class="plain" style="margin-bottom:14px"><strong>${fmtP(succ)} success</strong> — about ${succ>=100?'every':Math.round(succ/10)+' in 10'} hunter${succ>=100?'':'s'} who held this ${h.species} tag ${succ>=100?'filled it':'brought a '+(h.species==='elk'?'bull or cow':'buck')+' home'}.</p>`;
-    // flag thin reporting — success rates from a fraction of tag holders skew high
-    {
-      const repN = b ? b.repN : hunters, tagsN = b ? b.tagN : (tagsIssued ?? 0);
-      if (tagsN > 0 && repN / tagsN < LOW_REPORT) {
-        html+=`<p class="plain" style="background:var(--warnbg);color:var(--warn);padding:11px 13px;border-radius:10px;font-size:.9rem;margin-bottom:14px">⚠ <strong>Take this success rate with a grain of salt.</strong> Only ${fmt(repN)} of the ${fmt(tagsN)} tags given out${b?' over these seasons':''} were reported (${Math.round(repN/tagsN*100)}%). Hunters who fill their tag are more likely to report, so the real success rate is probably lower than shown.</p>`;
+  // ── Applicants by Hunt Choice (from the same draw report page) ──
+  try {
+    const res = await fetch(DRAW_PAGE, { headers: UA });
+    if (res.ok) {
+      const reports = findChoiceReports(await res.text(), DRAW_PAGE);
+      console.log(`[choices] found ${reports.length} choice report link(s)`);
+      for (const r of reports) {
+        const key = r.species === 'elk' ? 'elkChoices' : 'deerChoices';
+        try {
+          const yd = await getYear(r.year);
+          if (!yd) { console.log(`[skip] ${r.year} ${key}: no draw data yet`); continue; }
+          const meta = await getMeta(r.year, key);
+          if (meta && meta.fileName === r.fname) { console.log(`[skip] ${r.year} ${key} current`); continue; }
+          const fres = await fetch(r.url, { headers: UA });
+          if (!fres.ok) throw new Error(`download ${fres.status}`);
+          const parsed = parseChoices(Buffer.from(await fres.arrayBuffer()));
+          console.log(`[parse] ${r.year} ${key}: ${Object.keys(parsed).length} hunts`);
+          if (DRY) { details.push(`${r.year} ${key}: would load`); continue; }
+          const doc = await fs_('GET', `years/${r.year}/choices/all`);
+          const all = doc ? JSON.parse(gv(doc.fields?.data) || '{}') : {};
+          Object.assign(all, parsed); // deer 1xx and elk 2xx hunt numbers never collide
+          await fs_('PATCH', `years/${r.year}/choices/all`, { fields: { data: V.s(JSON.stringify(all)), updatedAt: V.t(new Date()) } });
+          await setMeta(r.year, key, r.fname, Object.keys(parsed).length);
+          details.push(`${r.year} ${r.species} choices: ${Object.keys(parsed).length} hunts`);
+          updated++;
+        } catch (e) { console.error(`[err] choices ${r.year}:`, e.message); details.push(`${r.year} ${r.species} choices FAILED: ${e.message}`); failed++; }
       }
     }
-    // antler sizes as fractions (animals of that class ÷ total antlered animals)
-    let counts=null, denom=0, denomLbl='';
-    if(b){
-      // sum real animal counts across the same blended years
-      const ay=b.years.map(y=>findH(y,h.huntNum,h.species)?.harvest).filter(hv=>hv&&hv.antlerValid&&hv.totalBull>0);
-      if(ay.length){
-        counts={}; CLASS_KEYS.forEach(k=>counts[k]=ay.reduce((s,hv)=>s+(hv[k]||0),0));
-        denom=ay.reduce((s,hv)=>s+hv.totalBull,0);
-        denomLbl=ay.length>1?` (${ay.length} seasons combined)`:'';
-      }
-    } else if(one&&one.antlerValid&&one.totalBull>0){
-      counts={}; CLASS_KEYS.forEach(k=>counts[k]=one[k]||0); denom=one.totalBull;
-    }
-    if(counts&&denom>0){
-      const keys=h.species==='elk'?CLASS_KEYS:CLASS_KEYS.slice(0,4);
-      const mx=Math.max(...keys.map(k=>counts[k]));
-      html+=`<p class="plain" style="margin-top:12px">Antler sizes of the ${fmt(denom)} ${h.species==='elk'?'bulls':'bucks'} taken${denomLbl}:</p>`;
-      keys.forEach(k=>{
-        const c=counts[k], pct=denom>0?(c/denom*100):0;
-        html+=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-          <span style="flex:0 0 84px;font-size:.85rem">${classLabel(k,h.species)}</span>
-          <div class="bar" style="flex:1"><div class="barf" style="width:${pct}%;${c===mx&&mx>0?'background:var(--gold)':''}"></div></div>
-          <span style="flex:0 0 52px;text-align:right;font-size:.85rem;font-weight:700">${fmt(c)}/${fmt(denom)}</span></div>`;
-      });
-    }
-    html+=`</div>`;
-  } else {
-    html+=`<div class="sec"><h3>How hunters did</h3><p class="plain" style="color:var(--dim)">No harvest results loaded for this hunt in any year yet.</p></div>`;
-  }
+  } catch (e) { details.push('choice reports unreachable: ' + e.message); }
 
-  if(t.rows.length>=2){
-    const pr=t.rows.filter(r=>r.pts100!==null);
-    html+=`<div class="sec"><h3>Over the years</h3>`;
-    if(t.sentence) html+=`<p class="plain" style="${t.dir==='harder'?'color:var(--warn)':t.dir==='easier'?'color:var(--good)':''}">${esc(t.sentence)}</p>`;
-    if(pr.length>=2){
-      const mx=Math.max(...pr.map(r=>r.pts100),1);
-      const pred=predictPts(h);
-      const mx2=pred?Math.max(mx,pred.pts,1):mx;
-      html+=`<p class="help">Points needed for a sure tag, by year${pred?' (dashed = next year\'s guess)':''}:</p><div class="trendline">${pr.map(r=>
-        `<div class="tcol"><span class="tval">${r.pts100}</span><div class="tbar" style="height:${Math.max(6,r.pts100/mx2*46)}px"></div><span class="tyr">${r.year}</span></div>`).join('')}${pred?`<div class="tcol"><span class="tval" style="color:var(--gold)">~${pred.pts}</span><div class="tbar pred" style="height:${Math.max(6,pred.pts/mx2*46)}px"></div><span class="tyr">${pred.year}</span></div>`:''}</div>`;
-      if(pred){
-        const my=ptsFor(h);
-        let extra='';
-        if(my!==null&&h.pts100!==null&&my<h.pts100&&my+1>=pred.pts) extra=' With the point you earn this year, that would put a sure tag within reach.';
-        else if(my!==null&&my>=h.pts100&&pred.pts>h.pts100) extra=' If you\'re thinking about this hunt, sooner may be better than later.';
-        html+=`<p class="plain" style="font-size:.92rem">Best guess for ${pred.year}: <strong style="color:var(--gold)">about ${pred.pts} points</strong> for a sure tag — based on the trend, not a promise.${extra}</p>`;
-      }
-    }
-    html+=`<table class="simple"><thead><tr><th>Year</th><th>Sure-tag pts</th><th>Reported / Filled</th><th>Success</th><th>Tags</th></tr></thead><tbody>
-      ${t.rows.map(r=>`<tr><td>${r.year}</td><td>${r.pts100===null?'Luck':r.pts100}</td><td>${r.hunters==null?'—':fmt(r.hunters)+' / '+fmt(r.harvested)}</td><td>${r.success==null?'—':fmtP(r.success)+(r.hunters!=null&&r.tags>0&&r.hunters/r.tags<LOW_REPORT?' ⚠':'')}</td><td>${fmt(r.tags)}</td></tr>`).join('')}
-    </tbody></table></div>`;
-  }
+  // ── Public land % ──
+  try { updated += await updatePublicLand(details); }
+  catch (e) { details.push('public land failed: ' + e.message); failed++; }
 
-  const bd=[...h.pointBreakdown].sort((a,b)=>b.points-a.points);
-  if(bd.length){
-    html+=`<div class="sec"><h3>Draw results by point level</h3>
-      <p class="help" style="margin-bottom:8px">What happened to Oregon residents at each point level in the ${S.selectedYear} drawing. Green rows: everyone at that level drew a tag.</p>
-      <table class="simple"><thead><tr><th>Points held</th><th>Applied</th><th>Drew a tag</th><th>Odds</th></tr></thead><tbody>
-      ${bd.map(p=>{
-        const pct=p.resApps>0?(p.resDrawn/p.resApps)*100:0;
-        const full=p.resApps>0&&p.resDrawn>=p.resApps;
-        const mine=my!==null&&p.points===my?' style="outline:2px solid var(--gold)"':'';
-        return `<tr ${full?'class="hl"':''}${mine}><td>${p.points}${my!==null&&p.points===my?' ← you':''}</td><td>${fmt(p.resApps)}</td><td>${fmt(p.resDrawn)}</td><td>${fmtP(pct)}</td></tr>`;
-      }).join('')}
-      </tbody></table></div>`;
-  }
+  // ── Unit boundary files for the in-app map ──
+  try { await exportBoundaries(details); }
+  catch (e) { details.push('boundary export failed: ' + e.message); }
 
-  html+=`<div class="sec" id="reqsSec"><h3>Requirements &amp; special rules</h3><p class="help">Checking…</p></div>`;
-  $('#shBody').innerHTML=html;
-  const umb=$('#unitMapBtn'); if(umb) umb.onclick=()=>showUnitMap(h);
-  loadReqsInto(h);
-  $('#shBody').querySelectorAll('[data-hsel]').forEach(b=>b.onclick=()=>{
-    sheetHSel=b.dataset.hsel; const keep=$('#sheet').scrollTop;
-    openDetail(sheetId,true); $('#sheet').scrollTop=keep;
-  });
-  $('#sheet').classList.add('open');
-  if(!keepSel) $('#sheet').scrollTop=0;
-  document.body.style.overflow='hidden';
-}
-function closeDetail(){ $('#sheet').classList.remove('open'); document.body.style.overflow=''; sheetId=null; }
+  // ── Season dates + bag limits ──
+  try { updated += await updateSeasons(details, getYear); }
+  catch (e) { console.error('[err] seasons:', e.message); details.push('season dates unreachable: ' + e.message); failed++; }
 
-// ─── RENDER: My List ──────────────────────────────────────────────────────────
-function renderMyList(){
-  const box=$('#mylistCards'); if(!box) return;
-  const favs=loadFavs();
-  if(!favs.length){ box.innerHTML=`<div class="empty">Your list is empty.<br><br>Tap the <span style="font-size:1.3rem">☆</span> star on any hunt to save it here for quick comparison.</div>`; return; }
-  const cards=favs.map(f=>{
-    const h=getH().find(x=>x.huntNum===f.huntNum&&x.species===f.species);
-    if(!h) return `<div class="card v-luck" style="cursor:default"><div class="crow1"><span class="cid">${esc(f.huntNum)}</span><span class="cname">${esc(f.huntName)}</span></div><div class="help">Not in the ${S.selectedYear} data — this hunt may have been renamed or retired.</div></div>`;
-    return cardHTML(h);
-  }).join('');
-  box.innerHTML=cards;
-  wireCards(box);
+  let summary;
+  if (updated) summary = `loaded ${updated} new report(s)` + (failed ? `, ${failed} need attention` : '');
+  else if (failed) summary = `no new data loaded — ${failed} item(s) need attention`;
+  else summary = 'no new data — everything is current';
+  console.log('[done]', summary);
+  if (!DRY) await setStatus(summary, details);
 }
 
-// ─── RENDER: admin ────────────────────────────────────────────────────────────
-function renderSpecialMgr(){
-  const custom=loadJSON(CUSTOM_K,[]);
-  const cl=$('#customList');
-  if(cl){
-    cl.innerHTML = custom.length
-      ? custom.map(d=>`<div class="yrow" style="padding:8px 0"><span style="font-weight:600">${esc(d.label)}</span>
-          <button class="bmini dan" data-delk="${esc(d.k)}">Remove</button></div>`).join('')
-      : '<p class="help" style="margin:0">No custom labels yet.</p>';
-    cl.querySelectorAll('[data-delk]').forEach(b=>b.onclick=()=>{
-      confirm2('Remove the "'+labelFor(b.dataset.delk)+'" label? It will be cleared from any hunts using it.',()=>{
-        saveJSON(CUSTOM_K, loadJSON(CUSTOM_K,[]).filter(d=>d.k!==b.dataset.delk));
-        const ov=loadJSON(OVERRIDE_K,{});
-        Object.keys(ov).forEach(hk=>{ ['add','remove'].forEach(t=>{ if(ov[hk][t]) ov[hk][t]=ov[hk][t].filter(k=>k!==b.dataset.delk); }); });
-        saveJSON(OVERRIDE_K,ov);
-        delete P.specialShow[b.dataset.delk]; savePrefs();
-        renderSpecialMgr(); if(window._renderSpChecks)window._renderSpChecks(); renderCards();
-        toast('Label removed');
-      });
-    });
-  }
-  renderTagHuntResults();
-}
-function renderTagHuntResults(){
-  const box=$('#tagHuntResults'); if(!box) return;
-  const q=($('#tagHuntSearch')?.value||'').trim().toLowerCase();
-  if(!q){ box.innerHTML='<p class="help" style="margin:0">Type above to find a hunt.</p>'; return; }
-  const hits=getH().filter(h=>(h.huntNum+' '+h.huntName).toLowerCase().includes(q)).slice(0,12);
-  if(!hits.length){ box.innerHTML='<p class="help" style="margin:0">No hunts match.</p>'; return; }
-  const defs=allSpecialDefs();
-  box.innerHTML=hits.map(h=>{
-    const active=new Set(specialKeys(h));
-    const chips=defs.map(d=>`<button class="hsel ${active.has(d.k)?'on':''}" data-tag="${esc(hkey(h))}" data-tk="${esc(d.k)}" style="min-height:40px;font-size:.82rem">${esc(d.label)}</button>`).join('');
-    return `<div style="padding:10px 0;border-bottom:1px solid var(--card2)">
-      <div style="font-weight:700;margin-bottom:6px"><span style="color:var(--gold)">${esc(h.huntNum)}</span> ${esc(h.huntName)} <span class="help" style="margin:0">· ${wLabel(h.weapon)} ${h.species}</span></div>
-      <div class="hselrow" style="margin:0">${chips}</div></div>`;
-  }).join('');
-  box.querySelectorAll('[data-tag]').forEach(b=>b.onclick=()=>{
-    toggleHuntTag(b.dataset.tag, b.dataset.tk);
-    renderTagHuntResults(); renderCards();
-  });
-}
-function toggleHuntTag(huntKey, k){
-  const [num,sp]=huntKey.split('_');
-  const h=getH().find(x=>x.huntNum===num&&x.species===sp); if(!h) return;
-  const defs=allSpecialDefs(), d=defs.find(x=>x.k===k);
-  let auto=false; const hay=specialHaystack(h);
-  if(d){ if(d.auto)auto=d.auto(h); else if(d.rx){ try{auto=new RegExp(d.rx,'i').test(hay);}catch(e){} } }
-  const ov=loadJSON(OVERRIDE_K,{}); const cur=ov[huntKey]||{add:[],remove:[]};
-  cur.add=cur.add||[]; cur.remove=cur.remove||[];
-  const isOn=specialKeys(h).includes(k);
-  if(isOn){
-    cur.add=cur.add.filter(x=>x!==k);
-    if(auto && !cur.remove.includes(k)) cur.remove.push(k);
-  } else {
-    cur.remove=cur.remove.filter(x=>x!==k);
-    if(!auto && !cur.add.includes(k)) cur.add.push(k);
-  }
-  if(!cur.add.length && !cur.remove.length) delete ov[huntKey]; else ov[huntKey]=cur;
-  saveJSON(OVERRIDE_K,ov);
-}
-async function renderAdmin(){
-  renderSpecialMgr();
-  $('#pyDisp').textContent=S.pendingYear||'none';
-  if($('#pyInput')&&!$('#pyInput').value&&S.pendingYear) $('#pyInput').value=S.pendingYear;
-  // years list
-  const list=$('#ylist'), yrs=yList();
-  if(!yrs.length){ list.innerHTML='<p class="help">No data yet. The automatic updater will fill this in, or add files below.</p>'; }
-  else{
-    list.innerHTML=yrs.map(y=>{
-      const yd=S.years[y];
-      const hc=yd.harvestData?Object.values(yd.harvestData).reduce((s,h)=>s+Object.keys(h||{}).length,0):0;
-      return `<div class="yrow"><div><div class="yrl">${y}</div><div class="yrm">${yd.hunts.length} hunts · ${hc} harvest records · ${Object.keys(yd.seasons||{}).length} season/bag entries · ${Object.keys(yd.choices||{}).length} choice entries</div></div>
-        <div style="display:flex;gap:6px"><button class="bmini dan" data-fby="${y}">Delete from cloud</button></div></div>`;
-    }).join('');
-    list.querySelectorAll('[data-fby]').forEach(b=>b.addEventListener('click',()=>{
-      confirm2(`Delete all ${b.dataset.fby} data from the cloud? Everyone loses it.`, async ()=>{
-        b.textContent='Deleting…'; b.disabled=true;
-        const ok=await fbDeleteYear(b.dataset.fby);
-        if(ok){ delete S.years[b.dataset.fby];
-          if(S.selectedYear===b.dataset.fby)S.selectedYear=yList()[0]||null;
-          if(S.pendingYear===b.dataset.fby)S.pendingYear=S.selectedYear;
-          saveLocal(); }
-        toast(ok?'Deleted from cloud':'Delete failed',!ok);
-        renderAll(); renderAdmin();
-      });
-    }));
-  }
-  // upload zone file labels
-  ['elkPoints','deerPoints','elkChoices','deerChoices','elkRifleHarvest','elkArcheryHarvest','elkMuzzHarvest','deerRifleHarvest','deerArcheryHarvest','deerMuzzHarvest'].forEach(k=>{
-    const yd=S.pendingYear?S.years[S.pendingYear]:null, f=yd?.files?.[k];
-    const el=document.querySelector(`[data-file="${k}"]`), zone=document.querySelector(`[data-key="${k}"]`);
-    if(!el||!zone) return;
-    if(f){el.textContent='✓ '+f.name;zone.classList.add('hf');}
-    else{el.textContent='';zone.classList.remove('hf');}
-  });
-  // auto-update card
-  const m=await fbLoadAutoMeta();
-  const card=$('#autoCard');
-  if(!m){ card.innerHTML='The automatic updater hasn\'t run yet.'; return; }
-  const when=m.lastRun?.toDate?m.lastRun.toDate().toLocaleDateString():(m.lastRunStr||'—');
-  const dets=(m.details||'').split(' | ').filter(x=>x&&x!=='—');
-  card.innerHTML=`<div class="statusline"><strong>Last check:</strong> ${esc(when)} — ${esc(m.summary||'')}</div>`+
-    dets.map(d=>`<div class="statusline" style="${/FAILED|NEEDS MANUAL/.test(d)?'color:var(--bad)':''}">${esc(d)}</div>`).join('');
-}
-
-// ─── SYNC NOTE ────────────────────────────────────────────────────────────────
-function setSyncNote(cls,msg){ const el=$('#syncNote'); el.className='syncnote '+(cls||''); el.textContent=msg; }
-function snapshot(){ const o={}; yList().forEach(y=>{ const yd=S.years[y]; o[y]=yd.hunts.length+':'+Object.values(yd.harvestData||{}).reduce((s,h)=>s+Object.keys(h||{}).length,0)+':'+Object.keys(yd.seasons||{}).length+':'+Object.keys(yd.choices||{}).length; }); return o; }
-function diffSnapshot(prev){
-  const now=snapshot(); const changed=[];
-  for(const y of Object.keys(now)) if(prev[y]!==now[y]) changed.push(y);
-  return changed;
-}
-
-// ─── PAGES + TABS ─────────────────────────────────────────────────────────────
-function showPage(name){
-  $$('.page').forEach(p=>p.classList.toggle('active',p.dataset.page===name));
-  $$('.tab').forEach(t=>t.classList.toggle('on',t.dataset.tab===name));
-  if(name==='mylist') renderMyList();
-  if(name==='admin') renderAdmin();
-  window.scrollTo(0,0);
-}
-
-// ─── GLOBAL RENDER ────────────────────────────────────────────────────────────
-function renderYearSelect(){
-  const sel=$('#fYear'), yrs=yList();
-  sel.innerHTML=yrs.map(y=>`<option value="${y}" ${y===S.selectedYear?'selected':''}>${y}</option>`).join('');
-}
-function renderAll(){ renderPts(); renderYearSelect(); renderCards(); renderMyList(); }
-
-// ─── WIRING ───────────────────────────────────────────────────────────────────
-function wire(){
-  $$('.tab').forEach(t=>t.onclick=()=>showPage(t.dataset.tab));
-  const ADMIN_PIN='2325';
-  let pinOk=false;
-  function openAdmin(){ showPage('admin'); }
-  function gate(){
-    if(pinOk){ openAdmin(); return; }
-    pinPrompt(pin=>{
-      if(pin===ADMIN_PIN){ pinOk=true; openAdmin(); }
-      else toast('Wrong PIN',true);
-    });
-  }
-  $('#gearBtn').onclick=gate;
-  $('#adminLink').onclick=gate;
-  $('#adminLink2').onclick=gate;
-  $('#adminBack').onclick=()=>showPage('hunts');
-  $('#shClose').onclick=closeDetail;
-  $('#mapClose').onclick=()=>{ $('#mapSheet').classList.remove('open'); document.body.style.overflow='hidden'; };
-  $('#shStar').onclick=()=>{ if(!sheetId)return; const [n,s]=sheetId.split('_'); toggleFav(n,s);
-    $('#shStar').textContent=isFav(n,s)?'★':'☆'; renderCards(); renderMyList(); };
-  // filters
-  const spSeg=$('#spSeg');
-  const paintSeg=()=>spSeg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.sp===P.sp));
-  paintSeg();
-  spSeg.querySelectorAll('button').forEach(b=>b.onclick=()=>{P.sp=b.dataset.sp;savePrefs();paintSeg();renderCards();});
-  $('#fWeapon').value=P.wep; $('#fWeapon').onchange=e=>{P.wep=e.target.value;savePrefs();renderCards();};
-  $('#fSort').value=P.sort;  $('#fSort').onchange=e=>{P.sort=e.target.value;savePrefs();renderCards();};
-  $('#fCanDraw').checked=P.canDraw; $('#fCanDraw').onchange=e=>{P.canDraw=e.target.checked;savePrefs();renderCards();};
-  $('#spBtn').onclick=()=>{const p=$('#spPanel');p.style.display=p.style.display==='none'?'block':'none';};
-  $('#spOnly').checked=P.specialOnly;
-  $('#spOnly').onchange=e=>{P.specialOnly=e.target.checked;savePrefs();spSum();renderCards();};
-  const renderSpChecks=()=>{
-    $('#spChecks').innerHTML=allSpecialDefs().map(d=>`<label class="chkrow" style="margin-bottom:8px"><input type="checkbox" data-spk="${d.k}" ${P.specialShow[d.k]!==false?'checked':''}><span>${esc(d.label)}</span></label>`).join('');
-    $$('#spChecks input').forEach(i=>i.onchange=e=>{P.specialShow[i.dataset.spk]=e.target.checked;savePrefs();spSum();renderCards();});
-  };
-  const spSum=()=>{
-    if(P.specialOnly){ const on=allSpecialDefs().filter(d=>P.specialShow[d.k]!==false).map(d=>d.label);
-      $('#spSum').textContent='Only: '+(on.length?on.join(', '):'none'); return; }
-    const off=allSpecialDefs().filter(d=>P.specialShow[d.k]===false).map(d=>d.label);
-    $('#spSum').textContent=off.length?off.join(', ')+' hidden':'All shown';};
-  window._renderSpChecks=renderSpChecks;
-  renderSpChecks();
-  spSum();
-  $('#fSearch').oninput=()=>renderCards();
-  $('#fYear').onchange=e=>{S.selectedYear=e.target.value;saveLocal();renderCards();renderMyList();};
-  // admin
-  $('#btnSetYear').onclick=()=>{
-    const v=$('#pyInput').value.trim();
-    if(!/^\d{4}$/.test(v)){toast('Type a 4-digit year like 2026',true);return;}
-    S.pendingYear=v; saveLocal(); renderAdmin(); toast('Now editing '+v);
-  };
-  // special-requirement manager
-  $('#btnAddLabel').onclick=()=>{
-    const inp=$('#newLabel'), label=inp.value.trim();
-    if(!label){ toast('Type a label first',true); return; }
-    const custom=loadJSON(CUSTOM_K,[]);
-    if(allSpecialDefs().some(d=>d.label.toLowerCase()===label.toLowerCase())){ toast('That label already exists',true); return; }
-    const k='c_'+Date.now().toString(36);
-    custom.push({k,label}); saveJSON(CUSTOM_K,custom);
-    P.specialShow[k]=true; savePrefs();
-    inp.value='';
-    renderSpecialMgr(); if(window._renderSpChecks)window._renderSpChecks(); renderCards();
-    toast('Label added — now tag hunts with it below');
-  };
-  $('#tagHuntSearch').oninput=()=>renderTagHuntResults();
-  // regs paste-import
-  $('#regsParse').onclick=()=>{
-    const year=S.pendingYear;
-    if(!year){ toast('Pick a year in Step 1 first', true); return; }
-    let parsed;
-    try{ parsed=parsePastedRegs($('#regsPaste').value); }catch(e){ parsed={}; }
-    const n=Object.keys(parsed).length;
-    const pv=$('#regsPreview');
-    if(n<3){ pv.innerHTML='<p class="help" style="color:var(--bad)">Couldn’t find hunt rows in that. Make sure you copied the table itself, including the hunt numbers.</p>'; return; }
-    const sample=Object.entries(parsed).slice(0,4).map(([id,v])=>`<div class="statusline"><strong style="color:var(--gold)">${esc(id)}</strong> · ${esc(v.s)} · ${esc(v.b||'—')}</div>`).join('');
-    pv.innerHTML=`<p class="plain" style="font-size:.92rem">Found <strong>${n} hunts</strong> for ${esc(year)}. First few:</p>${sample}
-      <button class="btn primary" id="regsSave" style="width:100%;margin-top:10px">Looks right — save for everyone</button>`;
-    $('#regsSave').onclick=async ()=>{
-      if(!S.years[year]) S.years[year]={hunts:[],files:{},harvestData:{},choices:{},seasons:{}};
-      const yd=S.years[year];
-      yd.seasons=Object.assign(yd.seasons||{},parsed);
-      saveLocal(); renderAll(); renderAdmin();
-      $('#regsSave').textContent='Saving…'; $('#regsSave').disabled=true;
-      const ok=await fbSaveSeasons(year, yd.seasons);
-      toast(ok?`Saved ${n} season/bag entries ✓ — spike & whitetail tags will show now`:'Cloud save failed', !ok);
-      $('#regsPaste').value=''; pv.innerHTML='';
-    };
-  };
-  $$('.upzone input[type=file]').forEach(inp=>inp.addEventListener('change',e=>{
-    handleFile(inp.dataset.target, e.target.files[0]); e.target.value='';
-  }));
-  $('#btnClear').onclick=()=>confirm2('Clear the copy on this device? Cloud data is untouched and will reload.',()=>{
-    S.years={};S.selectedYear=null;S.pendingYear=null;
-    try{localStorage.removeItem(SK);}catch(e){}
-    renderAll(); toast('Cleared — reloading from cloud…'); init(false);
-  });
-}
-
-// ─── INIT ─────────────────────────────────────────────────────────────────────
-async function init(firstRun){
-  if(firstRun){ loadLocal(); renderAll(); }
-  const before=snapshot();
-  fbLoadPublicLand().then(()=>renderCards());
-  setSyncNote('','Checking the cloud for new hunt data…');
-  const data=await fbLoad();
-  if(data && Object.keys(data).length){
-    for(const y of Object.keys(data)){
-      const localFiles=S.years[y]?.files||{};
-      S.years[y]={hunts:data[y].hunts,harvestData:data[y].harvestData,seasons:data[y].seasons||{},choices:data[y].choices||{},files:localFiles};
-      applyHarvest(y);
-    }
-    if(!S.selectedYear||!S.years[S.selectedYear]) S.selectedYear=yList()[0];
-    if(!S.pendingYear) S.pendingYear=S.selectedYear;
-    saveLocal(); renderAll();
-    banner('ok','Cloud connected ✓',false);
-    const changed=diffSnapshot(before);
-    const m=await fbLoadAutoMeta();
-    const checkStr=m&&(m.lastRun?.toDate?m.lastRun.toDate().toLocaleDateString():m.lastRunStr)||null;
-    if(changed.length && !firstRunEmpty(before)){
-      setSyncNote('new',`✓ New data was added for ${changed.join(', ')} — you're seeing the latest.`);
-    } else {
-      const extra=m&&/no new data/.test(m.summary||'')?` ODFW checked ${checkStr}: no new reports yet.`:(checkStr?` Last ODFW check: ${checkStr}.`:'');
-      setSyncNote('ok',`✓ You have the latest data (newest season: ${yList()[0]}).${extra}`);
-    }
-  } else if(yList().length){
-    setSyncNote('err','Couldn\'t reach the cloud — showing this device\'s saved copy.');
-  } else {
-    setSyncNote('err','Couldn\'t load hunt data. Check your connection and reopen the app.');
-    banner('err','Cloud unreachable',false);
-  }
-}
-function firstRunEmpty(before){ return Object.keys(before).length===0; }
-
-// Application deadline countdown (controlled hunt apps due May 15)
-function renderDeadline(){
-  const el=$('#deadline'); if(!el) return;
-  const now=new Date(), y=now.getFullYear();
-  const dl=new Date(y,4,15,23,59,59);
-  let show=null, urgent=false;
-  if(now<=dl){
-    const days=Math.ceil((dl-now)/86400000);
-    if(days<=75){ show=`⏰ Controlled hunt applications are due May 15 — ${days} day${days===1?'':'s'} left to put in.`; urgent=days<=14; }
-  } else {
-    const results=new Date(y,5,20);
-    if(now<results) show=`Applications for ${y} are closed. Draw results usually post around June 20 — good luck!`;
-  }
-  if(show){ el.style.display='block'; el.textContent=show;
-    if(urgent){ el.style.background='var(--badbg)'; el.style.color='var(--bad)'; } }
-  else el.style.display='none';
-}
-renderDeadline();
-
-wire();
-init(true);
-</script>
-</body>
-</html>
+main().catch(async e => {
+  console.error('[fatal]', e);
+  try { if (!DRY) await setStatus('update run failed: ' + e.message, []); } catch {}
+  process.exit(1);
+});
