@@ -6,8 +6,6 @@
 <title>Oregon Hunt Planner</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
 :root{
   --bg:#141d17; --card:#1d2a21; --card2:#243428; --line:#3a4c3e;
@@ -182,7 +180,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v4.1</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v4.4</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -205,7 +203,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
       <div class="field"><label>Weapon</label>
         <select id="fWeapon"><option value="all">All weapons</option><option value="rifle">Rifle</option><option value="archery">Bow</option><option value="muzz">Muzzleloader</option><option value="youth">Youth</option></select></div>
       <div class="field"><label>Sort by</label>
-        <select id="fSort"><option value="best">Suggested for me</option><option value="success">Highest success rate</option><option value="easy">Easiest to draw</option><option value="hard">Hardest to draw</option><option value="num">Hunt number</option></select></div>
+        <select id="fSort"><option value="best">Suggested for me</option><option value="success">Highest success rate</option><option value="easy">Easiest to draw</option><option value="hard">Hardest to draw</option><option value="backup">Best backup (2nd choice)</option><option value="num">Hunt number</option></select></div>
     </div>
     <div class="fgrid">
       <div class="field"><label>Search</label><input type="search" id="fSearch" placeholder="Hunt name or number"></div>
@@ -213,9 +211,9 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
     </div>
     <label class="chkrow"><input type="checkbox" id="fCanDraw"><span>Only show hunts I can draw for sure this year</span></label>
     <button class="chkrow" id="spBtn" style="width:100%;border-style:solid;background:var(--card2)">
-      <span style="font-weight:700">Special hunts shown ▾</span><span class="help" id="spSum" style="margin:0;text-align:right;flex:1"></span></button>
+      <span style="font-weight:700">Hunt types shown ▾</span><span class="help" id="spSum" style="margin:0;text-align:right;flex:1"></span></button>
     <div id="spPanel" style="display:none;padding:4px 2px 2px">
-      <p class="help" style="margin:0 0 8px">Check the kinds of special hunts you want in the list:</p>
+      <p class="help" style="margin:0 0 8px">Checked = shown in the list. Uncheck a type to hide those hunts:</p>
       <div id="spChecks"></div>
     </div>
   </div></div>
@@ -312,6 +310,8 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
     <p class="help" style="margin-bottom:12px">Tap the box that matches your file, choose the file, and wait for the green check. It saves to the cloud by itself — everyone in the family gets it.</p>
     <label class="upzone" data-key="deerPoints"><input type="file" accept=".xlsx,.xls" data-target="deerPoints"><div class="uzl">Deer — Draw Report</div><div class="uzh">Preference Point Draw Report (XLSX)</div><div class="uzf" data-file="deerPoints"></div></label>
     <label class="upzone" data-key="elkPoints"><input type="file" accept=".xlsx,.xls" data-target="elkPoints"><div class="uzl">Elk — Draw Report</div><div class="uzh">Preference Point Draw Report (XLSX)</div><div class="uzf" data-file="elkPoints"></div></label>
+    <label class="upzone" data-key="deerChoices"><input type="file" accept=".xlsx,.xls" data-target="deerChoices"><div class="uzl">Deer — Hunt Choice Report</div><div class="uzh">"Applicants by Hunt Choice" (XLSX)</div><div class="uzf" data-file="deerChoices"></div></label>
+    <label class="upzone" data-key="elkChoices"><input type="file" accept=".xlsx,.xls" data-target="elkChoices"><div class="uzl">Elk — Hunt Choice Report</div><div class="uzh">"Applicants by Hunt Choice" (XLSX)</div><div class="uzf" data-file="elkChoices"></div></label>
     <label class="upzone" data-key="deerRifleHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="deerRifleHarvest"><div class="uzl">Deer — Rifle Harvest</div><div class="uzh">"Any Legal Weapon Buck Deer" (PDF)</div><div class="uzf" data-file="deerRifleHarvest"></div></label>
     <label class="upzone" data-key="elkRifleHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="elkRifleHarvest"><div class="uzl">Elk — Rifle Harvest</div><div class="uzh">"Any Legal Weapon Elk" (PDF)</div><div class="uzf" data-file="elkRifleHarvest"></div></label>
     <label class="upzone" data-key="deerArcheryHarvest"><input type="file" accept=".pdf,.xlsx,.xls" data-target="deerArcheryHarvest"><div class="uzl">Deer — Bow Harvest</div><div class="uzh">"Archery Buck Deer" (PDF)</div><div class="uzf" data-file="deerArcheryHarvest"></div></label>
@@ -356,10 +356,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
     <div class="t"><h2 id="mapTitle">Unit map</h2><div class="sub" id="mapSub"></div></div>
     <button class="closebtn" id="mapClose">Close</button>
   </div>
-  <div id="leafWrap" style="position:absolute;top:78px;bottom:0;left:0;right:0">
-    <div id="leafMap" style="width:100%;height:100%"></div>
-    <div id="mapMsg" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:var(--bg);z-index:500;padding:24px;text-align:center"></div>
-  </div>
+  <div class="sbody" id="mapBody"></div>
 </div>
 
 <div class="cbackdrop" id="confirmBox"><div class="cbox">
@@ -431,6 +428,20 @@ async function fbSavePdfMeta(year, fileKey, fileName, huntCount) {
     return true;
   } catch(e) { return false; }
 }
+async function fbSaveChoices(year, choices) {
+  if (!db) return false;
+  try { await db.collection('years').doc(String(year)).collection('choices').doc('all').set({
+      data: JSON.stringify(choices), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    return true; }
+  catch(e) { return false; }
+}
+let PL = null; // public land % lookup (meta/publicLand)
+async function fbLoadPublicLand() {
+  if (!db) return;
+  try { const d = await db.collection('meta').doc('publicLand').get();
+    if (d.exists) PL = JSON.parse(d.data().data || 'null'); }
+  catch(e) {}
+}
 async function fbLoadReqs(key) {
   if (!db) return null;
   try { const d = await db.collection('reqs').doc(key).get();
@@ -463,8 +474,10 @@ async function fbLoad() {
       }
       const hd = await db.collection('years').doc(year).collection('harvest').doc('all').get();
       const sd = await db.collection('years').doc(year).collection('seasons').doc('all').get();
+      const cd2 = await db.collection('years').doc(year).collection('choices').doc('all').get();
       out[year] = { hunts, harvestData: hd.exists ? JSON.parse(hd.data().data || '{}') : {},
-        seasons: sd.exists ? JSON.parse(sd.data().data || '{}') : {}, files: {} };
+        seasons: sd.exists ? JSON.parse(sd.data().data || '{}') : {},
+        choices: cd2.exists ? JSON.parse(cd2.data().data || '{}') : {}, files: {} };
     }
     return out;
   } catch(e) { console.warn('[FB] Load error:', e); return null; }
@@ -577,6 +590,30 @@ function myOdds(h, myPts) {
 const ptsFor = h => h.species==='elk' ? P.elkPts : P.deerPts;
 // Season dates + bag limit for a hunt in the selected year (from the regs tables)
 const seasonOf = h => (curYD()?.seasons||{})[h.huntNum] || null;
+const choicesOf = h => (curYD()?.choices||{})[h.huntNum] || null;
+// 2nd/3rd-choice odds: leftovers after 1st choice go randomly to 2nd-choice
+// applicants (no points used or burned), then 3rd. Demand is the whole story.
+function choiceOdds(h){
+  const ch=choicesOf(h); if(!ch) return null;
+  const tags=h.tags||0;
+  const left1=Math.max(0,tags-ch.c1);
+  const o2=left1<=0?0:(ch.c2<=0?100:Math.min(100,left1/ch.c2*100));
+  const left2=Math.max(0,left1-ch.c2);
+  const o3=left2<=0?0:(ch.c3<=0?100:Math.min(100,left2/ch.c3*100));
+  return {ch,tags,left1,o2,left2,o3};
+}
+function publicLandOf(h){
+  if(!PL) return null;
+  const m=String(h.huntNum).match(/^([A-Z]{2})1(\d\d)/);
+  if(m&&PL.byArea&&PL.byArea[m[1]+m[2]]!=null) return PL.byArea[m[1]+m[2]];
+  const n=unitNameFor(h).toUpperCase();
+  if(n&&PL.byName){
+    if(PL.byName[n]!=null) return PL.byName[n];
+    const hit=Object.keys(PL.byName).find(k=>k.includes(n)||n.includes(k));
+    if(hit) return PL.byName[hit];
+  }
+  return null;
+}
 
 // Most recent harvest results for this hunt: this year's if published,
 // otherwise walk back through prior years.
@@ -628,7 +665,7 @@ const BUILTIN_SPECIALS = [
   {k:'youth',     label:'Youth only',        rx:null, auto:h=>h.weapon==='youth'},
   {k:'spike',     label:'Spike bulls only',  rx:'spike'},
   {k:'trad',      label:'Traditional bow',   rx:'trad'},
-  {k:'whitetail', label:'Whitetail',         rx:'whitetail'},
+  {k:'whitetail', label:'Whitetail',         rx:'white.?tail'},
   {k:'late',      label:'Late season',       rx:'\\blate\\b'},
   {k:'damage',    label:'Damage hunt',       rx:'emergency|damage'}
 ];
@@ -638,14 +675,20 @@ const loadJSON=(k,d)=>{ try{ return JSON.parse(localStorage.getItem(k))??d; }cat
 const saveJSON=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
 const hkey=h=>h.huntNum+'_'+h.species;
 function allSpecialDefs(){ return BUILTIN_SPECIALS.concat(loadJSON(CUSTOM_K,[])); }
+// What we scan for tag words: the hunt name PLUS the bag limit and fine print
+// from the regs — spike-only hunts say "spike" in the bag limit, not the name.
+function specialHaystack(h){
+  const se=(curYD()?.seasons||{})[h.huntNum]||{};
+  return [(h.huntName||''),(se.b||''),(se.n||'')].join(' ');
+}
 function specialKeys(h){
   const defs=allSpecialDefs(), ov=loadJSON(OVERRIDE_K,{})[hkey(h)]||{};
-  const name=(h.huntName||'');
+  const hay=specialHaystack(h);
   const set=new Set();
   defs.forEach(d=>{
     let hit=false;
     if(d.auto) hit=d.auto(h);
-    else if(d.rx){ try{ hit=new RegExp(d.rx,'i').test(name); }catch(e){} }
+    else if(d.rx){ try{ hit=new RegExp(d.rx,'i').test(hay); }catch(e){} }
     if(hit) set.add(d.k);
   });
   (ov.remove||[]).forEach(k=>set.delete(k));
@@ -880,17 +923,53 @@ function parseHarvestXlsx(buf) {
   return out;
 }
 
+// Applicants by Hunt Choice XLSX (2nd/3rd-choice demand)
+function parseChoicesXlsx(buf){
+  const wb=XLSX.read(buf,{type:'array'}), ws=wb.Sheets[wb.SheetNames[0]];
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+  let idx=null; const out={};
+  const idRe=/^(\d{3}[A-Z]?\d{0,2}|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/;
+  for(const r of rows){
+    if(!r) continue;
+    const cells=r.map(c=>String(c??'').trim());
+    if(idx===null){
+      const hi=cells.findIndex(c=>/hunt\s*number/i.test(c));
+      if(hi>=0) idx={id:hi,c1:cells.findIndex(c=>/1st/i.test(c)),c2:cells.findIndex(c=>/2nd/i.test(c)),c3:cells.findIndex(c=>/3rd/i.test(c)),c4:cells.findIndex(c=>/4th/i.test(c)),c5:cells.findIndex(c=>/5th/i.test(c)),lop:cells.findIndex(c=>/lop/i.test(c)),tot:cells.findIndex(c=>/total/i.test(c))};
+      continue;
+    }
+    const id=cells[idx.id];
+    if(!id||!idRe.test(id)) continue;
+    const num=i=>i>=0?(Number(r[i])||0):0;
+    out[id]={c1:num(idx.c1),c2:num(idx.c2),c3:num(idx.c3),c4:num(idx.c4),c5:num(idx.c5),lop:num(idx.lop),tot:num(idx.tot)};
+  }
+  if(Object.keys(out).length<20) throw new Error('That doesn\'t look like an "Applicants by Hunt Choice" report.');
+  return out;
+}
+
 // ─── FILE HANDLING (admin uploads) ────────────────────────────────────────────
 const readBuf = f => new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsArrayBuffer(f);});
 async function handleFile(target, file) {
   if (!file) return;
   if (!S.pendingYear) { toast('Pick a year first (Step 1)', true); return; }
   const year = S.pendingYear;
-  if (!S.years[year]) S.years[year] = {hunts:[],files:{},harvestData:{}};
+  if (!S.years[year]) S.years[year] = {hunts:[],files:{},harvestData:{},choices:{},seasons:{}};
   const yd = S.years[year];
   try {
     const buf = await readBuf(file);
     const ext = file.name.split('.').pop().toLowerCase();
+    if (target==='elkChoices'||target==='deerChoices') {
+      const parsed=parseChoicesXlsx(buf);
+      yd.choices=Object.assign(yd.choices||{},parsed);
+      yd.files[target]={name:file.name,loadedAt:Date.now(),count:Object.keys(parsed).length};
+      toast(`Choice data loaded for ${Object.keys(parsed).length} hunts ✓`);
+      if(!S.selectedYear) S.selectedYear=year;
+      saveLocal(); renderAll();
+      banner('','Saving to cloud…',true);
+      const ok1=await fbSaveChoices(year, yd.choices);
+      fbSavePdfMeta(year, target, file.name, Object.keys(parsed).length);
+      banner(ok1?'ok':'err', ok1?'Saved to cloud ✓':'Cloud save failed', false);
+      return;
+    }
     if (target==='elkPoints'||target==='deerPoints') {
       const sp = target==='elkPoints'?'elk':'deer';
       const hunts = parseXlsx(buf, sp);
@@ -979,6 +1058,11 @@ function sortHunts(hunts) {
     const pa=a.pts100===null?-1:a.pts100, pb=b.pts100===null?-1:b.pts100;
     return pb-pa || cmpNum(a,b);
   });
+  if(P.sort==='backup') return arr.sort((a,b)=>{
+    const ca=choiceOdds(a), cb=choiceOdds(b);
+    const oa=ca&&ca.left1>0?ca.o2:-1, ob=cb&&cb.left1>0?cb.o2:-1;
+    return ob-oa || ((cb?cb.left1:0)-(ca?ca.left1:0)) || cmpNum(a,b);
+  });
   // 'best' — the silent grade: harvest success + antler size, scaled by drawability
   return arr.sort((a,b)=> grade(b)-grade(a) || cmpNum(a,b));
 }
@@ -1040,6 +1124,10 @@ function cardHTML(h){
       return b.top
         ? `<div class="csize">Typical size: <strong>${esc(b.top.label)}</strong> — ${fmt(b.top.cnt)} of ${fmt(b.top.den)} ${h.species==='elk'?'bulls':'bucks'} (${span})</div>`
         : `<div class="csize dim">Antler sizes not reported for this hunt.</div>`;})()}
+    ${(()=>{const co=choiceOdds(h);
+      if(!co||co.left1<=0) return '';
+      const lbl=co.o2>=99?'near-sure':'~'+Math.round(co.o2)+'%';
+      return `<div class="cseason" style="border-left:3px solid var(--good)">Backup pick: <strong>${lbl}</strong> as a 2nd choice — ${fmt(co.left1)} tags left over, ${fmt(co.ch.c2)} competing</div>`;})()}
     ${(()=>{const se=seasonOf(h);return se?`<div class="cseason">Season: <strong>${esc(se.s)}</strong></div>`:'';})()}
     ${t.sentence?`<div class="ctrend ${t.dir}">${esc(t.sentence)}</div>`:''}
     <button class="detailbtn" data-open="${esc(h.huntNum)}_${h.species}">See full details ›</button>
@@ -1070,14 +1158,7 @@ function wireCards(box){
 }
 
 // ─── RENDER: detail sheet ─────────────────────────────────────────────────────
-// ─── UNIT MAP (ODFW boundaries from Oregon GEOHub's public GIS layer) ────────
-const GIS_ITEM='8bfaa3a4e10e49dd9b0cc95693977e37'; // Wildlife Management Units
-const GIS_CACHE_K='odfw_gis_v1';
-let leafMap=null, unitLayer=null;
-const geoCache={};
-
-// Derive the ODFW unit name from a hunt name: "W High Cascade" → "High Cascade",
-// "Walla Walla Unit No. 2 Youth" → "Walla Walla"
+// ─── UNIT MAP — simple: ODFW's official statewide unit map + official map pages
 function unitNameFor(h){
   let n=(h.huntName||'').trim();
   n=n.replace(/^(N|S|E|W|NE|NW|SE|SW)\s+/i,'');
@@ -1087,62 +1168,27 @@ function unitNameFor(h){
 }
 const isHerdArea=h=>/^[A-Z]{2}\d{3}/.test(String(h.huntNum));
 
-async function gisResolve(){
-  const cached=loadJSON(GIS_CACHE_K,null);
-  if(cached&&cached.url&&cached.field) return cached;
-  const item=await (await fetch(`https://www.arcgis.com/sharing/rest/content/items/${GIS_ITEM}?f=json`)).json();
-  if(!item||!item.url) throw new Error('service not found');
-  const base=item.url.replace(/\/$/,'')+(/FeatureServer$|MapServer$/i.test(item.url)?'/0':'');
-  const meta=await (await fetch(base+'?f=json')).json();
-  const fields=(meta.fields||[]).map(f=>f.name);
-  const field=fields.find(f=>/unit.*name|name.*unit/i.test(f))||fields.find(f=>/^(unit|name)$/i.test(f))||fields.find(f=>/name/i.test(f));
-  if(!field) throw new Error('no name field');
-  const cfg={url:base, field};
-  saveJSON(GIS_CACHE_K,cfg);
-  return cfg;
-}
-async function gisUnitGeo(name){
-  if(geoCache[name]) return geoCache[name];
-  const cfg=await gisResolve();
-  const where=`UPPER(${cfg.field}) LIKE '%${name.toUpperCase().replace(/'/g,"''")}%'`;
-  const u=`${cfg.url}/query?where=${encodeURIComponent(where)}&outFields=${encodeURIComponent(cfg.field)}&returnGeometry=true&outSR=4326&f=geojson`;
-  const gj=await (await fetch(u)).json();
-  if(!gj||!gj.features||!gj.features.length) throw new Error('unit not found');
-  geoCache[name]=gj;
-  return gj;
-}
-function mapMsg(html){ const m=$('#mapMsg'); m.style.display='flex'; m.innerHTML=html; }
 function showUnitMap(h){
   const name=unitNameFor(h);
-  $('#mapTitle').textContent=(name||h.huntName)+' — unit map';
-  $('#mapSub').textContent=`Hunt ${h.huntNum} · boundary from ODFW public GIS data`;
+  $('#mapTitle').textContent=name?name+' — unit map':'Unit map';
+  $('#mapSub').textContent=`Hunt ${h.huntNum} · ${esc(h.huntName)}`;
+  const herd=isHerdArea(h);
+  $('#mapBody').innerHTML=`
+    ${herd?`<p class="plain">This is one of the new 2026 Deer Hunt Areas. ODFW has a map and boundary description for each one:</p>
+      <a class="srcbtn" style="margin-bottom:10px" href="https://myodfw.com/articles/eastern-oregon-deer-hunt-areas-2026" target="_blank" rel="noopener">Open the Deer Hunt Area maps ↗</a>`:''}
+    <p class="plain">Statewide unit map (pinch to zoom):</p>
+    <div style="overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff;margin-bottom:14px">
+      <img src="https://www.dfw.state.or.us/resources/hunting/big_game/units/images/bigmapa2.gif" alt="ODFW statewide wildlife management unit map" style="width:100%;display:block" loading="lazy"
+        onerror="this.parentNode.innerHTML='<p style=&quot;padding:16px;color:#333&quot;>Map image unavailable — use the links below.</p>'">
+    </div>
+    <p class="plain">Official maps with full boundary descriptions${name?` for the <strong>${esc(name)}</strong> unit`:''}:</p>
+    <a class="srcbtn" style="margin-bottom:10px" href="https://www.eregulations.com/oregon/hunting/western-oregon-unit-map" target="_blank" rel="noopener">Western Oregon unit map &amp; boundaries ↗</a>
+    <a class="srcbtn" style="margin-bottom:10px" href="https://www.eregulations.com/oregon/hunting/eastern-oregon-unit-map" target="_blank" rel="noopener">Eastern Oregon unit map &amp; boundaries ↗</a>
+    <a class="srcbtn" href="https://www.oregonhuntingmap.com" target="_blank" rel="noopener">ODFW interactive hunting map ↗</a>
+    <p class="help" style="margin-top:12px">The regulation map pages include the written boundary description for every unit — the legal definition of where you can hunt.</p>`;
   $('#mapSheet').classList.add('open');
+  $('#mapSheet').scrollTop=0;
   document.body.style.overflow='hidden';
-  const fallback=`<p class="plain" style="max-width:400px">Couldn't load this unit's boundary right now.</p>
-    <a class="srcbtn" style="width:min(320px,90%)" href="https://www.oregonhuntingmap.com" target="_blank" rel="noopener">Open ODFW's Oregon Hunting Map ↗</a>
-    ${isHerdArea(h)?`<a class="srcbtn" style="width:min(320px,90%)" href="https://myodfw.com/articles/eastern-oregon-deer-hunt-areas-2026" target="_blank" rel="noopener">Deer Hunt Area maps &amp; descriptions ↗</a>`:''}`;
-  if(!window.L){ mapMsg(fallback); return; }
-  if(!leafMap){
-    leafMap=L.map('leafMap',{zoomControl:true});
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:16,attribution:'© OpenStreetMap · Boundary: ODFW / Oregon GEOHub'}).addTo(leafMap);
-  }
-  setTimeout(()=>leafMap.invalidateSize(),60);
-  if(isHerdArea(h)){
-    // 2026+ deer hunt areas aren't in the WMU layer — send to ODFW's official maps
-    mapMsg(`<p class="plain" style="max-width:420px">This is one of the new 2026 Deer Hunt Areas. ODFW publishes each area's map and boundary description on their site:</p>
-      <a class="srcbtn" style="width:min(340px,90%)" href="https://myodfw.com/articles/eastern-oregon-deer-hunt-areas-2026" target="_blank" rel="noopener">Deer Hunt Area maps &amp; descriptions ↗</a>
-      <a class="srcbtn" style="width:min(340px,90%)" href="https://www.oregonhuntingmap.com" target="_blank" rel="noopener">Open ODFW's Oregon Hunting Map ↗</a>`);
-    return;
-  }
-  if(!name){ mapMsg(fallback); return; }
-  mapMsg('<div class="spin" style="width:28px;height:28px"></div><p class="help">Loading '+esc(name)+' unit boundary…</p>');
-  gisUnitGeo(name).then(gj=>{
-    if(!$('#mapSheet').classList.contains('open')) return;
-    $('#mapMsg').style.display='none';
-    if(unitLayer) leafMap.removeLayer(unitLayer);
-    unitLayer=L.geoJSON(gj,{style:{color:'#d9a54e',weight:3,fillColor:'#d9a54e',fillOpacity:0.14}}).addTo(leafMap);
-    leafMap.fitBounds(unitLayer.getBounds(),{padding:[24,24]});
-  }).catch(e=>{ console.warn('[map]',e); mapMsg(fallback); });
 }
 
 // Requirements & special rules — ODFW's fine print from the regs tables,
@@ -1210,6 +1256,7 @@ function openDetail(id, keepSel){
   html+=`<div class="sec"><h3>The basics</h3>
     <p class="plain">A ${wLabel(h.weapon).toLowerCase()} ${h.species} hunt. In ${S.selectedYear}, ODFW gave out <strong>${fmt(h.tags)} tags</strong> and <strong>${fmt(h.residentApps)} Oregon residents</strong> put it as a choice. ${h.resOdds!=null?`Overall, about ${fmtP(h.resOdds)} of resident applicants drew it.`:''}</p>
     <button class="btn" id="unitMapBtn" style="width:100%;margin-bottom:12px;border-color:var(--gold);color:var(--gold)">🗺 View this unit on the map</button>
+    ${(()=>{const pl=publicLandOf(h);return pl!=null?`<div class="kvg" style="margin-bottom:9px"><div class="kv" style="grid-column:1/-1"><div class="k">Public land in this unit</div><div class="v">${pl}%</div></div></div>`:'';})()}
     ${se?`<div class="kvg">
       <div class="kv" style="grid-column:1/-1"><div class="k">Season dates (${S.selectedYear})</div><div class="v" style="font-size:1.05rem">${esc(se.s)}</div></div>
       ${se.b?`<div class="kv" style="grid-column:1/-1"><div class="k">Bag limit</div><div class="v" style="font-size:.95rem;font-weight:600">${esc(se.b)}</div></div>`:''}
@@ -1227,6 +1274,24 @@ function openDetail(id, keepSel){
   }
 
   const hyrs=harvestYears(h);
+  {
+    const co=choiceOdds(h);
+    html+=`<div class="sec"><h3>Drawing it as a 2nd or 3rd choice</h3>`;
+    if(!co){
+      html+=`<p class="plain" style="color:var(--dim)">Choice data isn't loaded for ${S.selectedYear} yet.</p>`;
+    } else if(co.left1<=0){
+      html+=`<p class="plain" style="background:var(--badbg);color:var(--bad);padding:11px 13px;border-radius:10px;font-size:.92rem">This hunt fills up on 1st choice — ${fmt(co.ch.c1)} people put it first for ${fmt(co.tags)} tags. The ${fmt(co.ch.c2)} who listed it 2nd choice had no shot. To draw it, it has to be your 1st choice.</p>`;
+    } else {
+      html+=`<div class="kvg" style="margin-bottom:10px">
+        <div class="kv"><div class="k">Tags left after 1st choice</div><div class="v" style="color:var(--good)">${fmt(co.left1)}</div></div>
+        <div class="kv"><div class="k">People who listed it 2nd</div><div class="v">${fmt(co.ch.c2)}</div></div>
+      </div>
+      <p class="plain"><strong>${co.o2>=99?'Near-sure':'About '+Math.round(co.o2)+'%'}</strong> as a 2nd choice — and you keep your points either way.</p>`;
+      if(co.left2>0) html+=`<p class="plain" style="font-size:.92rem">3rd choice: about ${Math.round(co.o3)}% — ${fmt(co.left2)} tags reach the 3rd round, ${fmt(co.ch.c3)} people listed it.</p>`;
+      else html+=`<p class="plain" style="font-size:.92rem;color:var(--dim)">Nothing is left by the 3rd choice round (${fmt(co.ch.c3)} people listed it 3rd anyway).</p>`;
+    }
+    html+=`<p class="help">Based on the ${S.selectedYear} drawing's applicant counts. Resident/nonresident tag splits can shift these estimates a little.</p></div>`;
+  }
   if(hyrs.length){
     const selYr = sheetHSel && hyrs.some(r=>r.year===sheetHSel) ? sheetHSel : 'avg';
     const b = selYr==='avg' ? blendHarvest(h,3) : null;
@@ -1403,8 +1468,8 @@ function toggleHuntTag(huntKey, k){
   const [num,sp]=huntKey.split('_');
   const h=getH().find(x=>x.huntNum===num&&x.species===sp); if(!h) return;
   const defs=allSpecialDefs(), d=defs.find(x=>x.k===k);
-  let auto=false; const name=h.huntName||'';
-  if(d){ if(d.auto)auto=d.auto(h); else if(d.rx){ try{auto=new RegExp(d.rx,'i').test(name);}catch(e){} } }
+  let auto=false; const hay=specialHaystack(h);
+  if(d){ if(d.auto)auto=d.auto(h); else if(d.rx){ try{auto=new RegExp(d.rx,'i').test(hay);}catch(e){} } }
   const ov=loadJSON(OVERRIDE_K,{}); const cur=ov[huntKey]||{add:[],remove:[]};
   cur.add=cur.add||[]; cur.remove=cur.remove||[];
   const isOn=specialKeys(h).includes(k);
@@ -1446,7 +1511,7 @@ async function renderAdmin(){
     }));
   }
   // upload zone file labels
-  ['elkPoints','deerPoints','elkRifleHarvest','elkArcheryHarvest','elkMuzzHarvest','deerRifleHarvest','deerArcheryHarvest','deerMuzzHarvest'].forEach(k=>{
+  ['elkPoints','deerPoints','elkChoices','deerChoices','elkRifleHarvest','elkArcheryHarvest','elkMuzzHarvest','deerRifleHarvest','deerArcheryHarvest','deerMuzzHarvest'].forEach(k=>{
     const yd=S.pendingYear?S.years[S.pendingYear]:null, f=yd?.files?.[k];
     const el=document.querySelector(`[data-file="${k}"]`), zone=document.querySelector(`[data-key="${k}"]`);
     if(!el||!zone) return;
@@ -1465,7 +1530,7 @@ async function renderAdmin(){
 
 // ─── SYNC NOTE ────────────────────────────────────────────────────────────────
 function setSyncNote(cls,msg){ const el=$('#syncNote'); el.className='syncnote '+(cls||''); el.textContent=msg; }
-function snapshot(){ const o={}; yList().forEach(y=>{ const yd=S.years[y]; o[y]=yd.hunts.length+':'+Object.values(yd.harvestData||{}).reduce((s,h)=>s+Object.keys(h||{}).length,0)+':'+Object.keys(yd.seasons||{}).length; }); return o; }
+function snapshot(){ const o={}; yList().forEach(y=>{ const yd=S.years[y]; o[y]=yd.hunts.length+':'+Object.values(yd.harvestData||{}).reduce((s,h)=>s+Object.keys(h||{}).length,0)+':'+Object.keys(yd.seasons||{}).length+':'+Object.keys(yd.choices||{}).length; }); return o; }
 function diffSnapshot(prev){
   const now=snapshot(); const changed=[];
   for(const y of Object.keys(now)) if(prev[y]!==now[y]) changed.push(y);
@@ -1563,12 +1628,13 @@ function wire(){
 async function init(firstRun){
   if(firstRun){ loadLocal(); renderAll(); }
   const before=snapshot();
+  fbLoadPublicLand().then(()=>renderCards());
   setSyncNote('','Checking the cloud for new hunt data…');
   const data=await fbLoad();
   if(data && Object.keys(data).length){
     for(const y of Object.keys(data)){
       const localFiles=S.years[y]?.files||{};
-      S.years[y]={hunts:data[y].hunts,harvestData:data[y].harvestData,seasons:data[y].seasons||{},files:localFiles};
+      S.years[y]={hunts:data[y].hunts,harvestData:data[y].harvestData,seasons:data[y].seasons||{},choices:data[y].choices||{},files:localFiles};
       applyHarvest(y);
     }
     if(!S.selectedYear||!S.years[S.selectedYear]) S.selectedYear=yList()[0];
