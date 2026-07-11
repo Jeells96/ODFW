@@ -2,15 +2,17 @@ name: ODFW Data Auto-Update
 
 on:
   schedule:
-    # 1st of every month, 9:15 AM Pacific (16:15 UTC). Draw reports post each
-    # fall; harvest results each spring. Monthly checks catch both.
+    # 1st of every month, 9:15 AM Pacific (16:15 UTC)
     - cron: '15 16 1 * *'
   workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -23,3 +25,10 @@ jobs:
 
       - name: Fetch ODFW reports and sync to Firebase
         run: node scripts/fetch-odfw.mjs
+
+      - name: Commit updated unit boundary files
+        run: |
+          git config user.name "odfw-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add units.geojson deer_areas.geojson 2>/dev/null || true
+          git diff --staged --quiet || (git commit -m "Update unit boundary map data" && git push)
