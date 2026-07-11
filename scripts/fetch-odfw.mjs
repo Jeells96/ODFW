@@ -182,44 +182,43 @@ const strip = s => s.replace(/<br\s*\/?>/gi, ' — ').replace(/<[^>]+>/g, ' ')
   .replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 
 function parseSeasonTables(html, forcedYear) {
-  // eRegulations renders controlled-hunt tables as markdown pipe tables:
-  //   | Hunt # | Hunt Name | Bag Limit | Open Season | 2026 Tags | 2025 1st... |
-  // Table captions ("Youth Only Controlled 200 Series Hunts", "Muzzleloader
-  // Controlled...", "Archery Controlled...") tell us the weapon context.
+  // eRegulations serves HTML <table>s where each cell wraps content in <p> tags:
+  //   <td><p>210</p></td> <td><p>Saddle Mtn Unit</p></td> <td><p>One antlerless elk</p></td>
+  //   <td><p>Dec. 1 - Mar. 31, 2027</p></td> <td><p>11</p></td> <td><p>707</p></td>
+  // We strip the inner tags, then read cells positionally per the header row.
   const out = {};
   let year = forcedYear || null;
-  if (!year) { const ym = html.match(/\b(20\d{2})\s+Tags\b/); if (ym) year = ym[1]; }
 
-  const idRe = /^(\d{3}[A-Z]?\d{0,2}|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)\*?$/;
-  const stripCell = s => s.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/[*†‡]/g, '').replace(/\s+/g, ' ').trim();
+  const idRe = /^(\d{3}(?:[A-Z]\d{0,2})?|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/;
+  const cellText = td => td
+    .replace(/<[^>]+>/g, ' ')          // drop <p>, <a>, <br>, etc.
+    .replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
+    .replace(/[*\u2020\u2021]/g, '')
+    .replace(/\s+/g, ' ').trim();
 
-  const lines = html.split('\n');
-  let cols = null; // {id,name,bag,season}
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (line[0] !== '|') { cols = null; continue; } // table break resets header
-    const cells = line.split('|').slice(1, -1).map(stripCell);
-    if (!cells.length || cells.every(c => /^[-\s:]*$/.test(c))) continue; // separator row
-    // Header row?
-    const hi = cells.findIndex(c => /^hunt\s*#/i.test(c));
-    if (hi >= 0) {
-      cols = { id: hi,
-        name: cells.findIndex(c => /hunt\s*name/i.test(c)),
-        bag: cells.findIndex(c => /bag\s*limit/i.test(c)),
-        season: cells.findIndex(c => /open\s*season/i.test(c)) };
-      // year from a "2026 Tags" column if we still don't have it
-      if (!year) { const yc = cells.find(c => /20\d{2}\s*tags/i.test(c)); if (yc) year = yc.match(/(20\d{2})/)[1]; }
-      continue;
+  const tables = html.match(/<table[\s\S]*?<\/table>/gi) || [];
+  for (const tbl of tables) {
+    const rows = tbl.match(/<tr[\s\S]*?<\/tr>/gi) || [];
+    let cols = null;
+    for (const row of rows) {
+      const cells = (row.match(/<t[hd][\s\S]*?<\/t[hd]>/gi) || []).map(cellText);
+      if (!cells.length) continue;
+      const hi = cells.findIndex(c => /^hunt\s*#/i.test(c));
+      if (hi >= 0) {
+        cols = { id: hi,
+          bag: cells.findIndex(c => /bag\s*limit/i.test(c)),
+          season: cells.findIndex(c => /open\s*season/i.test(c)) };
+        if (!year) { const yc = cells.find(c => /20\d{2}\s*tags/i.test(c)); if (yc) year = yc.match(/(20\d{2})/)[1]; }
+        continue;
+      }
+      if (!cols || cols.season < 0) continue;
+      const id = (cells[cols.id] || '').split(' ')[0];
+      if (!idRe.test(id)) continue;
+      const season = (cells[cols.season] || '').trim();
+      if (!season || !/[A-Za-z]{3}/.test(season)) continue;
+      const bag = cols.bag >= 0 ? (cells[cols.bag] || '').trim() : '';
+      if (!out[id]) out[id] = { s: season, b: bag, n: '' };
     }
-    if (!cols || cols.season < 0) continue;
-    const id = (cells[cols.id] || '').split(' ')[0];
-    if (!idRe.test(id)) continue;
-    const key = id.replace(/\*$/, '');
-    const season = (cells[cols.season] || '').trim();
-    if (!season || !/[A-Za-z]{3}/.test(season)) continue; // needs a month
-    const bag = cols.bag >= 0 ? (cells[cols.bag] || '').trim() : '';
-    if (!out[key]) out[key] = { s: season, b: bag, n: '' };
   }
   return { year: year || null, map: out };
 }
@@ -243,15 +242,9 @@ async function updateSeasons(details, getYear) {
       const has210 = /\b210[A-Z]?\d?\b/.test(rawHtml);
       const hasSpike = /spike\s*(?:bull\s*)?elk|spike\s*elk/i.test(rawHtml);
       console.log(`[seasons:diag] ${pg.species}: ${rawHtml.length} chars | <table>:${htmlTables} | pipe-rows:${pipeRows} | "Hunt #":${huntHdr} | has-210:${has210} | has-spike:${hasSpike}`);
-      // print a window around the first "Hunt #" so we can see the real row format
-      const hi = rawHtml.search(/hunt\s*#/i);
-      if (hi >= 0) {
-        const sample = rawHtml.slice(hi, hi + 600).replace(/\s+/g, ' ');
-        console.log(`[seasons:sample] ${pg.species}: ${sample}`);
-      } else {
-        console.log(`[seasons:sample] ${pg.species}: no "Hunt #" found; first 400 chars of body: ${rawHtml.slice(0, 400).replace(/\s+/g, ' ')}`);
-      }
-      const { year, map } = parseSeasonTables(rawHtml, regsYear);
+      // Prefer the year printed in the "20XX Tags" column; else the calendar guess.
+      const tagYear = (rawHtml.match(/(20\d{2})\s*Tags/i) || [])[1];
+      const { year, map } = parseSeasonTables(rawHtml, tagYear || regsYear);
       const n = Object.keys(map).length;
       console.log(`[seasons] ${pg.species} parsed ${n} hunts (year ${year})`);
       if (n < 20) { console.log(`[seasons] ${pg.species} SKIPPED — only ${n} rows`); details.push(`${pg.species} season dates: SKIPPED (only ${n} rows found — page format may have changed)`); continue; }
