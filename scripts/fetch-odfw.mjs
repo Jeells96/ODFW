@@ -161,6 +161,85 @@ function validateHarvest(out, knownIds) {
   return { ok: true, count: ids.length };
 }
 
+// ═══ Season dates + bag limits (eRegulations hunt tables) ═════════════════════
+const SEASON_PAGES = [
+  { url: 'https://www.eregulations.com/oregon/hunting/buck-deer-seasons', species: 'deer' },
+  { url: 'https://www.eregulations.com/oregon/hunting/elk-seasons', species: 'elk' }
+];
+const strip = s => s.replace(/<br\s*\/?>/gi, ' — ').replace(/<[^>]+>/g, ' ')
+  .replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+
+function parseSeasonTables(html) {
+  const out = {};
+  let year = null;
+  const ym = html.match(/(20\d{2})\s+Tags/);
+  if (ym) year = ym[1];
+  const tables = html.match(/<table[\s\S]*?<\/table>/gi) || [];
+  for (const tbl of tables) {
+    const rows = tbl.match(/<tr[\s\S]*?<\/tr>/gi) || [];
+    let idIdx = -1, seasonIdx = -1, bagIdx = -1;
+    for (const row of rows) {
+      const cells = (row.match(/<t[hd][\s\S]*?<\/t[hd]>/gi) || []).map(strip);
+      if (!cells.length) continue;
+      const hi = cells.findIndex(c => /^hunt\s*#/i.test(c));
+      if (hi >= 0) { // header row — locate the columns
+        idIdx = hi;
+        seasonIdx = cells.findIndex(c => /open\s*season/i.test(c));
+        bagIdx = cells.findIndex(c => /bag\s*limit/i.test(c));
+        continue;
+      }
+      if (idIdx < 0 || seasonIdx < 0) continue;
+      const rawId = (cells[idIdx] || '').replace(/[*†‡]/g, '').trim().split(/\s/)[0];
+      if (!ID_RE.test(rawId)) continue;
+      const seasonParts = (cells[seasonIdx] || '').replace(/[*†‡]/g, '').split(' — ');
+      const season = seasonParts[0].trim();
+      const bagParts = bagIdx >= 0 ? (cells[bagIdx] || '').replace(/[*†‡]/g, '').split(' — ') : [''];
+      const bag = bagParts[0].trim();
+      // Everything after the <br> breaks in the name/season/bag cells is ODFW's
+      // fine print for that hunt ("Tag valid for both hunts", weapon notes, etc.)
+      const nameParts = (cells[idIdx + 1] || '').replace(/[*†‡]/g, '').split(' — ').slice(1);
+      const notes = [...nameParts, ...seasonParts.slice(1), ...bagParts.slice(1)]
+        .map(x => x.trim()).filter(x => x.length > 3);
+      if (!season || !/[A-Za-z]{3}/.test(season)) continue;
+      if (!out[rawId]) out[rawId] = { s: season, b: bag, n: [...new Set(notes)].join(' • ') };
+    }
+  }
+  return { year, map: out };
+}
+
+async function updateSeasons(details, getYear) {
+  let updated = 0;
+  const merged = {}; // year -> {huntNum:{s,b}}
+  for (const pg of SEASON_PAGES) {
+    try {
+      console.log('[seasons] fetching', pg.url);
+      const res = await fetch(pg.url, { headers: UA });
+      if (!res.ok) throw new Error(`page ${res.status}`);
+      const { year, map } = parseSeasonTables(await res.text());
+      const n = Object.keys(map).length;
+      if (!year || n < 30) { details.push(`${pg.species} season dates: SKIPPED (${n} rows, year ${year||'?'})`); continue; }
+      const yd = await getYear(year);
+      if (yd) {
+        const known = new Set(yd.hunts.filter(h => h.species === pg.species).map(h => h.huntNum));
+        const match = Object.keys(map).filter(id => known.has(id)).length;
+        if (known.size && match / n < 0.4) { details.push(`${pg.species} season dates: SKIPPED (only ${match}/${n} match draw data)`); continue; }
+      }
+      console.log(`[seasons] ${pg.species} ${year}: ${n} hunts with dates`);
+      merged[year] = Object.assign(merged[year] || {}, map);
+    } catch (e) { console.error('[err] seasons', pg.species, e.message); details.push(`${pg.species} season dates FAILED: ${e.message}`); }
+  }
+  for (const [year, map] of Object.entries(merged)) {
+    const json = JSON.stringify(map);
+    const cur = await fs_('GET', `years/${year}/seasons/all`);
+    if (cur && gv(cur.fields?.data) === json) { console.log(`[seasons] ${year} current`); continue; }
+    if (DRY) { details.push(`${year} season dates: would load ${Object.keys(map).length}`); continue; }
+    await fs_('PATCH', `years/${year}/seasons/all`, { fields: { data: V.s(json), updatedAt: V.t(new Date()) } });
+    details.push(`${year} season dates: ${Object.keys(map).length} hunts`);
+    updated++;
+  }
+  return updated;
+}
+
 // ═══ Firestore REST ═══════════════════════════════════════════════════════════
 async function fs_(method, path, body) {
   const url = `${BASE}/${path}${path.includes('?') ? '&' : '?'}key=${API_KEY}`;
@@ -343,6 +422,10 @@ async function main() {
       } catch (e) { console.error(`[err] harvest ${r.year} ${r.key}:`, e.message); details.push(`${r.year} ${r.label || r.key} FAILED: ${e.message}`); failed++; }
     }
   } catch (e) { console.error('[err] harvest page:', e.message); details.push('harvest page unreachable: ' + e.message); failed++; }
+
+  // ── Season dates + bag limits ──
+  try { updated += await updateSeasons(details, getYear); }
+  catch (e) { console.error('[err] seasons:', e.message); details.push('season dates unreachable: ' + e.message); failed++; }
 
   let summary;
   if (updated) summary = `loaded ${updated} new report(s)` + (failed ? `, ${failed} need attention` : '');
