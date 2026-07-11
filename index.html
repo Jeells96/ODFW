@@ -180,7 +180,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v4.6</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v4.7</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -322,6 +322,14 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
   </div></div>
 
   <div class="panel"><div class="pbody">
+    <p class="ptitle">Season dates &amp; bag limits — paste-in</p>
+    <p class="help" style="margin-bottom:10px">If the automatic updater can't reach the regulations site, do it by hand: open the <a href="https://www.eregulations.com/oregon/hunting/buck-deer-seasons" target="_blank" rel="noopener">Buck Deer Seasons</a> or <a href="https://www.eregulations.com/oregon/hunting/elk-seasons" target="_blank" rel="noopener">Elk Seasons</a> page, select the whole hunt table with your finger, copy it, and paste it below. This is what powers season dates on cards and the Spike-only / Whitetail tags.</p>
+    <textarea id="regsPaste" placeholder="Paste the hunt table here…" style="width:100%;min-height:110px;font-size:.95rem;font-family:inherit;background:var(--card2);color:var(--text);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px"></textarea>
+    <button class="btn" id="regsParse" style="width:100%;margin-top:8px">Check what I pasted</button>
+    <div id="regsPreview" style="margin-top:10px"></div>
+  </div></div>
+
+  <div class="panel"><div class="pbody">
     <p class="ptitle">If something looks wrong</p>
     <p class="plain" style="font-size:.9rem">Uploading a file again always replaces what's there — that's the fix for almost everything. If a whole year is bad, delete it from the cloud below and re-upload its files. Manual uploads are never overwritten by the automatic updater.</p>
     <button class="btn danger" id="btnClear" style="margin-top:6px">Clear this device's local copy</button>
@@ -428,6 +436,13 @@ async function fbSavePdfMeta(year, fileKey, fileName, huntCount) {
     });
     return true;
   } catch(e) { return false; }
+}
+async function fbSaveSeasons(year, seasons) {
+  if (!db) return false;
+  try { await db.collection('years').doc(String(year)).collection('seasons').doc('all').set({
+      data: JSON.stringify(seasons), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    return true; }
+  catch(e) { return false; }
 }
 async function fbSaveChoices(year, choices) {
   if (!db) return false;
@@ -961,6 +976,44 @@ function parseChoicesXlsx(buf){
     out[id]={c1:num(idx.c1),c2:num(idx.c2),c3:num(idx.c3),c4:num(idx.c4),c5:num(idx.c5),lop:num(idx.lop),tot:num(idx.tot)};
   }
   if(Object.keys(out).length<20) throw new Error('That doesn\'t look like an "Applicants by Hunt Choice" report.');
+  return out;
+}
+
+// Parse hunt-table text pasted from the regulations page (fallback when the
+// automatic scrape can't reach the site). Rows look like:
+// "231 Metolius Unit One spike bull elk Nov. 7 - Nov. 13 250 812"
+function parsePastedRegs(text){
+  const MON='(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sept?|Oct|Nov|Dec)\\.?';
+  const D=MON+'\\s*\\d{1,2}(?:,\\s*\\d{4})?';
+  const RANGE=new RegExp('('+D+'\\s*[-–]\\s*'+D+'(?:\\s*&\\s*'+D+'\\s*[-–]\\s*'+D+')*)');
+  const toks=text.replace(/[\t\r]/g,'\n').split(/\s+/).filter(Boolean);
+  const idFull=/^(\d{3}[A-Z]\d{0,2}|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)\*?$/;
+  const idBare=/^\d{3}\*?$/;
+  const isLetter=t=>/[A-Za-z]/.test(t);
+  // find row anchors: an ID token whose next token (or one after) is a word
+  const anchors=[];
+  for(let i=0;i<toks.length;i++){
+    const t=toks[i];
+    if(!(idFull.test(t)||idBare.test(t))) continue;
+    if(isLetter(toks[i+1]||'')||(idBare.test(t)&&(idFull.test(toks[i+1]||'')||idBare.test(toks[i+1]||''))&&isLetter(toks[i+2]||''))){
+      // prefer the later candidate when two numbers precede a name (tag counts vs ID)
+      if(!isLetter(toks[i+1]||'')) continue;
+      anchors.push(i);
+    }
+  }
+  const out={};
+  for(let a=0;a<anchors.length;a++){
+    const st=anchors[a], en=a+1<anchors.length?anchors[a+1]:toks.length;
+    const id=toks[st].replace(/\*$/,'');
+    const row=toks.slice(st+1,en).join(' ');
+    const dm=row.match(RANGE);
+    if(!dm) continue;
+    const season=dm[1].replace(/\s+/g,' ').trim();
+    const om=row.search(/\bOne\b/);
+    let bag='';
+    if(om>=0) bag=row.slice(om, dm.index).replace(/\*/g,'').replace(/\s+/g,' ').trim();
+    if(!out[id]) out[id]={s:season,b:bag,n:''};
+  }
   return out;
 }
 
@@ -1747,6 +1800,29 @@ function wire(){
     toast('Label added — now tag hunts with it below');
   };
   $('#tagHuntSearch').oninput=()=>renderTagHuntResults();
+  // regs paste-import
+  $('#regsParse').onclick=()=>{
+    const year=S.pendingYear;
+    if(!year){ toast('Pick a year in Step 1 first', true); return; }
+    let parsed;
+    try{ parsed=parsePastedRegs($('#regsPaste').value); }catch(e){ parsed={}; }
+    const n=Object.keys(parsed).length;
+    const pv=$('#regsPreview');
+    if(n<3){ pv.innerHTML='<p class="help" style="color:var(--bad)">Couldn’t find hunt rows in that. Make sure you copied the table itself, including the hunt numbers.</p>'; return; }
+    const sample=Object.entries(parsed).slice(0,4).map(([id,v])=>`<div class="statusline"><strong style="color:var(--gold)">${esc(id)}</strong> · ${esc(v.s)} · ${esc(v.b||'—')}</div>`).join('');
+    pv.innerHTML=`<p class="plain" style="font-size:.92rem">Found <strong>${n} hunts</strong> for ${esc(year)}. First few:</p>${sample}
+      <button class="btn primary" id="regsSave" style="width:100%;margin-top:10px">Looks right — save for everyone</button>`;
+    $('#regsSave').onclick=async ()=>{
+      if(!S.years[year]) S.years[year]={hunts:[],files:{},harvestData:{},choices:{},seasons:{}};
+      const yd=S.years[year];
+      yd.seasons=Object.assign(yd.seasons||{},parsed);
+      saveLocal(); renderAll(); renderAdmin();
+      $('#regsSave').textContent='Saving…'; $('#regsSave').disabled=true;
+      const ok=await fbSaveSeasons(year, yd.seasons);
+      toast(ok?`Saved ${n} season/bag entries ✓ — spike & whitetail tags will show now`:'Cloud save failed', !ok);
+      $('#regsPaste').value=''; pv.innerHTML='';
+    };
+  };
   $$('.upzone input[type=file]').forEach(inp=>inp.addEventListener('change',e=>{
     handleFile(inp.dataset.target, e.target.files[0]); e.target.value='';
   }));
