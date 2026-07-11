@@ -331,6 +331,81 @@ async function updatePublicLand(details) {
   return 1;
 }
 
+// ═══ Unit boundary export (writes units.geojson / deer_areas.geojson for the app)
+import { writeFileSync, existsSync, readFileSync as rfs } from 'fs';
+const WMU_ITEM = '8bfaa3a4e10e49dd9b0cc95693977e37'; // Oregon GEOHub: Wildlife Management Units
+
+function decimate(coords, eps) { // thin dense rings; keep shape, shrink file
+  const out = [coords[0]];
+  for (let i = 1; i < coords.length - 1; i++) {
+    const [x1, y1] = out[out.length - 1], [x2, y2] = coords[i];
+    if (Math.abs(x2 - x1) + Math.abs(y2 - y1) > eps) out.push(coords[i]);
+  }
+  out.push(coords[coords.length - 1]);
+  return out.map(([x, y]) => [Math.round(x * 1e4) / 1e4, Math.round(y * 1e4) / 1e4]);
+}
+function slimFeature(f, nameField, eps) {
+  const g = f.geometry; if (!g) return null;
+  const doPoly = rings => rings.map(r => decimate(r, eps)).filter(r => r.length > 3);
+  let geom = null;
+  if (g.type === 'Polygon') { const r = doPoly(g.coordinates); if (r.length) geom = { type: 'Polygon', coordinates: r }; }
+  else if (g.type === 'MultiPolygon') { const p = g.coordinates.map(doPoly).filter(x => x.length); if (p.length) geom = { type: 'MultiPolygon', coordinates: p }; }
+  if (!geom) return null;
+  return { type: 'Feature', properties: { name: String(f.properties?.[nameField] ?? '').trim() }, geometry: geom };
+}
+async function fetchLayerGeoJSON(layerUrl, nameField) {
+  const feats = []; let offset = 0;
+  for (let page = 0; page < 40; page++) {
+    const u = `${layerUrl}/query?where=1%3D1&outFields=${encodeURIComponent(nameField)}&returnGeometry=true&outSR=4326&f=geojson&resultOffset=${offset}&resultRecordCount=200`;
+    const gj = await (await fetch(u, { headers: UA })).json();
+    if (!gj.features || !gj.features.length) break;
+    feats.push(...gj.features);
+    if (!gj.properties?.exceededTransferLimit && gj.features.length < 200) break;
+    offset += gj.features.length;
+  }
+  return feats;
+}
+async function resolveItemLayer(itemId) {
+  const item = await (await fetch(`https://www.arcgis.com/sharing/rest/content/items/${itemId}?f=json`, { headers: UA })).json();
+  if (!item?.url) throw new Error('item has no service url');
+  const base = item.url.replace(/\/$/, '') + (/(Feature|Map)Server$/i.test(item.url) ? '/0' : '');
+  const meta = await (await fetch(base + '?f=json', { headers: UA })).json();
+  const fields = (meta.fields || []).map(f => f.name);
+  const nameField = fields.find(f => /unit.*name|area.*name|name.*unit/i.test(f)) || fields.find(f => /^(unit|name|area)$/i.test(f)) || fields.find(f => /name/i.test(f));
+  if (!nameField) throw new Error('no name field on layer');
+  return { base, nameField };
+}
+async function exportBoundaries(details) {
+  // WMUs
+  try {
+    const { base, nameField } = await resolveItemLayer(WMU_ITEM);
+    const feats = await fetchLayerGeoJSON(base, nameField);
+    const slim = feats.map(f => slimFeature(f, nameField, 0.004)).filter(Boolean);
+    if (slim.length < 40) throw new Error(`only ${slim.length} units`);
+    const gj = JSON.stringify({ type: 'FeatureCollection', features: slim });
+    const changed = !existsSync('units.geojson') || rfs('units.geojson', 'utf8') !== gj;
+    if (changed && !DRY) writeFileSync('units.geojson', gj);
+    console.log(`[geo] units.geojson: ${slim.length} units, ${(gj.length / 1024).toFixed(0)} KB${changed ? '' : ' (unchanged)'}`);
+    if (changed) details.push(`unit boundaries: ${slim.length} units`);
+  } catch (e) { console.error('[geo] WMU export failed:', e.message); details.push('unit boundaries FAILED: ' + e.message); }
+  // 2026 Deer Hunt Areas — discover via ArcGIS search
+  try {
+    const q = encodeURIComponent('title:("Deer Hunt Area" OR "Deer Hunt Areas") AND Oregon type:"Feature Service"');
+    const sr = await (await fetch(`https://www.arcgis.com/sharing/rest/search?f=json&num=10&q=${q}`, { headers: UA })).json();
+    const hit = (sr.results || []).find(r => /deer.*hunt.*area/i.test(r.title) && r.url);
+    if (!hit) { console.log('[geo] deer hunt area layer not found in search'); return; }
+    const { base, nameField } = await resolveItemLayer(hit.id);
+    const feats = await fetchLayerGeoJSON(base, nameField);
+    const slim = feats.map(f => slimFeature(f, nameField, 0.004)).filter(Boolean);
+    if (slim.length < 10) throw new Error(`only ${slim.length} areas`);
+    const gj = JSON.stringify({ type: 'FeatureCollection', features: slim });
+    const changed = !existsSync('deer_areas.geojson') || rfs('deer_areas.geojson', 'utf8') !== gj;
+    if (changed && !DRY) writeFileSync('deer_areas.geojson', gj);
+    console.log(`[geo] deer_areas.geojson: ${slim.length} areas from "${hit.title}"${changed ? '' : ' (unchanged)'}`);
+    if (changed) details.push(`deer hunt area boundaries: ${slim.length} areas`);
+  } catch (e) { console.error('[geo] deer areas export failed:', e.message); details.push('deer area boundaries: not available (' + e.message + ')'); }
+}
+
 // ═══ Firestore REST ═══════════════════════════════════════════════════════════
 async function fs_(method, path, body) {
   const url = `${BASE}/${path}${path.includes('?') ? '&' : '?'}key=${API_KEY}`;
@@ -547,6 +622,10 @@ async function main() {
   // ── Public land % ──
   try { updated += await updatePublicLand(details); }
   catch (e) { details.push('public land failed: ' + e.message); failed++; }
+
+  // ── Unit boundary files for the in-app map ──
+  try { await exportBoundaries(details); }
+  catch (e) { details.push('boundary export failed: ' + e.message); }
 
   // ── Season dates + bag limits ──
   try { updated += await updateSeasons(details, getYear); }
