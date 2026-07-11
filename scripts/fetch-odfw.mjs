@@ -161,7 +161,9 @@ function parseHarvestLines(lines, defaultK) {
 
 function validateHarvest(out, knownIds) {
   const ids = Object.keys(out);
-  if (ids.length < 25) return { ok: false, reason: `only ${ids.length} hunts parsed` };
+  // Muzzleloader seasons genuinely have few hunts (often 10-15), so the floor
+  // is low; the ID-match check below is what actually guards against garbage.
+  if (ids.length < 8) return { ok: false, reason: `only ${ids.length} hunts parsed` };
   const sane = ids.filter(id => out[id].successPct >= 0 && out[id].successPct <= 150).length;
   if (sane / ids.length < 0.9) return { ok: false, reason: 'success rates out of range' };
   if (knownIds && knownIds.size) {
@@ -229,19 +231,38 @@ async function updateSeasons(details, getYear) {
     try {
       console.log('[seasons] fetching', pg.url);
       const res = await fetchRetry(pg.url, { headers: UA });
+      console.log(`[seasons] ${pg.species} HTTP ${res.status} ${res.headers.get('content-type')||''}`);
       if (!res.ok) throw new Error(`page ${res.status} (site may be blocking robots)`);
       const now = new Date();
       const regsYear = String(now.getUTCMonth() >= 6 ? now.getUTCFullYear() + 1 : now.getUTCFullYear());
-      const { year, map } = parseSeasonTables(await res.text(), regsYear);
+      const rawHtml = await res.text();
+      // DIAGNOSTICS: what did the robot actually receive?
+      const htmlTables = (rawHtml.match(/<table/gi) || []).length;
+      const pipeRows = (rawHtml.match(/^\s*\|.*\|.*$/gm) || []).length;
+      const huntHdr = /hunt\s*#/i.test(rawHtml);
+      const has210 = /\b210[A-Z]?\d?\b/.test(rawHtml);
+      const hasSpike = /spike\s*(?:bull\s*)?elk|spike\s*elk/i.test(rawHtml);
+      console.log(`[seasons:diag] ${pg.species}: ${rawHtml.length} chars | <table>:${htmlTables} | pipe-rows:${pipeRows} | "Hunt #":${huntHdr} | has-210:${has210} | has-spike:${hasSpike}`);
+      // print a window around the first "Hunt #" so we can see the real row format
+      const hi = rawHtml.search(/hunt\s*#/i);
+      if (hi >= 0) {
+        const sample = rawHtml.slice(hi, hi + 600).replace(/\s+/g, ' ');
+        console.log(`[seasons:sample] ${pg.species}: ${sample}`);
+      } else {
+        console.log(`[seasons:sample] ${pg.species}: no "Hunt #" found; first 400 chars of body: ${rawHtml.slice(0, 400).replace(/\s+/g, ' ')}`);
+      }
+      const { year, map } = parseSeasonTables(rawHtml, regsYear);
       const n = Object.keys(map).length;
-      if (n < 20) { details.push(`${pg.species} season dates: SKIPPED (only ${n} rows found — page format may have changed)`); continue; }
+      console.log(`[seasons] ${pg.species} parsed ${n} hunts (year ${year})`);
+      if (n < 20) { console.log(`[seasons] ${pg.species} SKIPPED — only ${n} rows`); details.push(`${pg.species} season dates: SKIPPED (only ${n} rows found — page format may have changed)`); continue; }
       const yd = await getYear(year);
       if (yd) {
         const known = new Set(yd.hunts.filter(h => h.species === pg.species).map(h => h.huntNum));
         const match = Object.keys(map).filter(id => known.has(id)).length;
+        console.log(`[seasons] ${pg.species} ${match}/${n} match draw data`);
         if (known.size && match / n < 0.25) { details.push(`${pg.species} season dates: SKIPPED (only ${match}/${n} match draw data)`); continue; }
       }
-      console.log(`[seasons] ${pg.species} ${year}: ${n} hunts, ${Object.values(map).filter(v=>/spike/i.test(v.b)).length} spike`);
+      console.log(`[seasons] ${pg.species} ${year}: ${n} hunts, ${Object.values(map).filter(v=>/spike/i.test(v.b)).length} spike ✓`);
       merged[year] = Object.assign(merged[year] || {}, map);
     } catch (e) { console.error('[err] seasons', pg.species, e.message); details.push(`${pg.species} season dates FAILED: ${e.message}`); }
   }
@@ -405,12 +426,23 @@ async function exportBoundaries(details) {
     console.log(`[geo] units.geojson: ${slim.length} units, ${(gj.length / 1024).toFixed(0)} KB${changed ? '' : ' (unchanged)'}`);
     if (changed) details.push(`unit boundaries: ${slim.length} units`);
   } catch (e) { console.error('[geo] WMU export failed:', e.message); details.push('unit boundaries FAILED: ' + e.message); }
-  // 2026 Deer Hunt Areas — discover via ArcGIS search
+  // 2026 Deer Hunt Areas — discover via ArcGIS search (try several phrasings)
   try {
-    const q = encodeURIComponent('title:("Deer Hunt Area" OR "Deer Hunt Areas") AND Oregon type:"Feature Service"');
-    const sr = await (await fetch(`https://www.arcgis.com/sharing/rest/search?f=json&num=10&q=${q}`, { headers: UA })).json();
-    const hit = (sr.results || []).find(r => /deer.*hunt.*area/i.test(r.title) && r.url);
-    if (!hit) { console.log('[geo] deer hunt area layer not found in search'); return; }
+    const queries = [
+      'title:("Deer Hunt Area" OR "Deer Hunt Areas") Oregon type:"Feature Service"',
+      'owner:ODFW_ArcGIS_Online deer hunt area type:"Feature Service"',
+      '"Deer Hunt Area" Oregon ODFW',
+      'Oregon deer hunt boundaries type:"Feature Service"'
+    ];
+    let hit = null, tried = [];
+    for (const q of queries) {
+      const sr = await (await fetch(`https://www.arcgis.com/sharing/rest/search?f=json&num=15&q=${encodeURIComponent(q)}`, { headers: UA })).json();
+      const results = sr.results || [];
+      tried.push(`"${q.slice(0, 30)}"→${results.length}`);
+      hit = results.find(r => /deer.*hunt.*area/i.test(r.title) && r.url && /feature/i.test(r.type || ''));
+      if (hit) { console.log(`[geo] deer area layer found: "${hit.title}" (${hit.id})`); break; }
+    }
+    if (!hit) { console.log(`[geo] deer hunt area layer not found. Searches: ${tried.join(', ')}`); details.push('deer hunt area boundaries: layer not found in ArcGIS (searched 4 ways)'); return; }
     const { base, nameField } = await resolveItemLayer(hit.id);
     const feats = await fetchLayerGeoJSON(base, nameField);
     const slim = feats.map(f => slimFeature(f, nameField, 0.004)).filter(Boolean);
