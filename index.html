@@ -190,7 +190,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v5.0</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v5.1</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -998,37 +998,73 @@ function parseChoicesXlsx(buf){
 // automatic scrape can't reach the site). Rows look like:
 // "231 Metolius Unit One spike bull elk Nov. 7 - Nov. 13 250 812"
 function parsePastedRegs(text){
+  // Handles both paste shapes:
+  //  A) line-per-field (what iOS gives from these pages): ID line, name line,
+  //     bag-limit line, season line, then tag/applicant count lines
+  //  B) row-per-line (tab or space separated desktop pastes)
   const MON='(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sept?|Oct|Nov|Dec)\\.?';
-  const D=MON+'\\s*\\d{1,2}(?:,\\s*\\d{4})?';
-  const RANGE=new RegExp('('+D+'\\s*[-–]\\s*'+D+'(?:\\s*&\\s*'+D+'\\s*[-–]\\s*'+D+')*)');
-  const toks=text.replace(/[\t\r]/g,'\n').split(/\s+/).filter(Boolean);
-  const idFull=/^(\d{3}[A-Z]\d{0,2}|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)\*?$/;
-  const idBare=/^\d{3}\*?$/;
-  const isLetter=t=>/[A-Za-z]/.test(t);
-  // find row anchors: an ID token whose next token (or one after) is a word
-  const anchors=[];
-  for(let i=0;i<toks.length;i++){
-    const t=toks[i];
-    if(!(idFull.test(t)||idBare.test(t))) continue;
-    if(isLetter(toks[i+1]||'')||(idBare.test(t)&&(idFull.test(toks[i+1]||'')||idBare.test(toks[i+1]||''))&&isLetter(toks[i+2]||''))){
-      // prefer the later candidate when two numbers precede a name (tag counts vs ID)
-      if(!isLetter(toks[i+1]||'')) continue;
-      anchors.push(i);
+  const DATE=MON+'\\s*\\d{1,2}(?:,\\s*\\d{4})?';
+  const RANGE=DATE+'\\s*[-\\u2013]\\s*'+DATE+'(?:\\s*&\\s*'+DATE+'\\s*[-\\u2013]\\s*'+DATE+')*';
+  const strictRange=new RegExp('^'+RANGE+'$');
+  const anyRange=new RegExp(RANGE);
+  const idExact=/^(?:\d{3}(?:[A-Z]\d{0,2})?|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)\*?$/;
+  const bareNum=/^\d{3}\*?$/;
+  const countLine=/^(?:NEW|\d{1,3}(?:,\d{3})+|\d{1,4})\*?$/i;
+  const clean=s=>s.replace(/[*\u2020\u2021]/g,'').replace(/\s+/g,' ').trim();
+  const out={};
+  let cur=null;
+  const flush=()=>{ if(cur&&cur.s&&!out[cur.id]) out[cur.id]={s:cur.s,b:cur.b,n:cur.n}; cur=null; };
+
+  // B) single-line rows: "210  Saddle Mtn Unit  One antlerless elk  Dec. 1 - Mar. 31, 2027  11  707"
+  function inlineParse(line){
+    const toks=line.split(/\s+/).filter(Boolean);
+    const anchors=[];
+    for(let i=0;i<toks.length;i++){
+      if(!idExact.test(toks[i])) continue;
+      const nx=toks[i+1]||'';
+      if(/[A-Za-z]/.test(nx)&&!idExact.test(nx)) anchors.push(i);
+    }
+    for(let a=0;a<anchors.length;a++){
+      const st=anchors[a], en=a+1<anchors.length?anchors[a+1]:toks.length;
+      const id=toks[st].replace(/\*+$/,'');
+      const row=toks.slice(st+1,en).join(' ');
+      const om=row.search(/\bOne\b/); if(om<0) continue;
+      const after=row.slice(om);
+      // the season is the LAST date range in the row (bag limits can embed earlier ranges)
+      const g=new RegExp(RANGE,'g'); let m,last=null;
+      while((m=g.exec(after))) last=m;
+      if(!last) continue;
+      if(!out[id]) out[id]={s:clean(last[0]),b:clean(after.slice(0,last.index)),n:''};
     }
   }
-  const out={};
-  for(let a=0;a<anchors.length;a++){
-    const st=anchors[a], en=a+1<anchors.length?anchors[a+1]:toks.length;
-    const id=toks[st].replace(/\*$/,'');
-    const row=toks.slice(st+1,en).join(' ');
-    const dm=row.match(RANGE);
-    if(!dm) continue;
-    const season=dm[1].replace(/\s+/g,' ').trim();
-    const om=row.search(/\bOne\b/);
-    let bag='';
-    if(om>=0) bag=row.slice(om, dm.index).replace(/\*/g,'').replace(/\s+/g,' ').trim();
-    if(!out[id]) out[id]={s:season,b:bag,n:''};
+
+  const lines=text.split(/[\r\n]+/).map(l=>l.trim()).filter(Boolean);
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i], nxt=lines[i+1]||'';
+    if(idExact.test(line)){
+      // Tag/applicant counts sit on their own lines too. A bare 3-digit number
+      // immediately followed by another ID-looking line is a count, not an ID.
+      if(bareNum.test(line)&&idExact.test(nxt)) continue;
+      if(bareNum.test(line)&&cur&&!cur.s) continue; // stray number mid-record
+      flush();
+      cur={id:line.replace(/\*+$/,''),b:'',n:'',s:''};
+      continue;
+    }
+    if(!cur){ if(anyRange.test(line)) inlineParse(line); continue; }
+    if(cur.s){ // record complete: swallow the count lines until the next ID
+      if(countLine.test(line)) continue;
+      flush();
+      if(anyRange.test(line)) inlineParse(line);
+      continue;
+    }
+    const c=clean(line);
+    if(strictRange.test(c)){ cur.s=c; continue; }               // the season line
+    if(/^One\b/i.test(c)){ cur.b=cur.b?cur.b+' '+c:c; continue; } // the bag limit
+    if(/^[(\[]/.test(line)||/^See\b/i.test(c)){ cur.n=(cur.n?cur.n+' ':'')+c; continue; } // fine print
+    if(cur.b&&/[A-Za-z]/.test(c)&&!countLine.test(c)){ cur.n=(cur.n?cur.n+' ':'')+c; }
+    // otherwise it's the hunt-name line — names come from the draw data already
   }
+  flush();
   return out;
 }
 
@@ -1826,8 +1862,12 @@ function wire(){
     const n=Object.keys(parsed).length;
     const pv=$('#regsPreview');
     if(n<3){ pv.innerHTML='<p class="help" style="color:var(--bad)">Couldn’t find hunt rows in that. Make sure you copied the table itself, including the hunt numbers.</p>'; return; }
-    const sample=Object.entries(parsed).slice(0,4).map(([id,v])=>`<div class="statusline"><strong style="color:var(--gold)">${esc(id)}</strong> · ${esc(v.s)} · ${esc(v.b||'—')}</div>`).join('');
-    pv.innerHTML=`<p class="plain" style="font-size:.92rem">Found <strong>${n} hunts</strong> for ${esc(year)}. First few:</p>${sample}
+    const ents=Object.entries(parsed);
+    const suffixed=ents.filter(([k])=>/[A-Z]/.test(k));
+    const spikes=ents.filter(([,v])=>/spike/i.test(v.b)).length;
+    const sample=[...suffixed.slice(0,3),...ents.filter(([k])=>!/[A-Z]/.test(k)).slice(0,2)]
+      .map(([id,v])=>`<div class="statusline"><strong style="color:var(--gold)">${esc(id)}</strong> · ${esc(v.s)} · ${esc(v.b||'—')}</div>`).join('');
+    pv.innerHTML=`<p class="plain" style="font-size:.92rem">Found <strong>${n} hunts</strong> for ${esc(year)} — ${suffixed.length} with letter suffixes (210A1, 256X…), ${spikes} spike-bag. A few of them:</p>${sample}
       <button class="btn primary" id="regsSave" style="width:100%;margin-top:10px">Looks right — save for everyone</button>`;
     $('#regsSave').onclick=async ()=>{
       if(!S.years[year]) S.years[year]={hunts:[],files:{},harvestData:{},choices:{},seasons:{}};
