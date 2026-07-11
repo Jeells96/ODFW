@@ -240,6 +240,97 @@ async function updateSeasons(details, getYear) {
   return updated;
 }
 
+// ═══ Applicants by Hunt Choice (2nd/3rd-choice demand) ════════════════════════
+function parseChoices(buf) {
+  const wb = XLSX.read(buf, { type: 'buffer' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+  let idx = null;
+  const out = {};
+  for (const r of rows) {
+    if (!r) continue;
+    const cells = r.map(c => String(c ?? '').trim());
+    if (idx === null) {
+      const hi = cells.findIndex(c => /hunt\s*number/i.test(c));
+      if (hi >= 0) {
+        idx = { id: hi,
+          c1: cells.findIndex(c => /1st/i.test(c)), c2: cells.findIndex(c => /2nd/i.test(c)),
+          c3: cells.findIndex(c => /3rd/i.test(c)), c4: cells.findIndex(c => /4th/i.test(c)),
+          c5: cells.findIndex(c => /5th/i.test(c)), lop: cells.findIndex(c => /lop/i.test(c)),
+          tot: cells.findIndex(c => /total/i.test(c)) };
+      }
+      continue;
+    }
+    const id = cells[idx.id];
+    if (!id || !/^(\d{3}[A-Z]?\d{0,2}|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/.test(id)) continue;
+    const num = i => i >= 0 ? (Number(r[i]) || 0) : 0;
+    out[id] = { c1: num(idx.c1), c2: num(idx.c2), c3: num(idx.c3), c4: num(idx.c4), c5: num(idx.c5), lop: num(idx.lop), tot: num(idx.tot) };
+  }
+  if (Object.keys(out).length < 20) throw new Error('too few hunts parsed from choice report');
+  return out;
+}
+
+function findChoiceReports(html, pageUrl) {
+  const found = [];
+  for (const a of anchors(html, pageUrl)) {
+    if (!/\.xlsx/i.test(a.url)) continue;
+    const fname = decodeURIComponent(a.url.split('/').pop() || '');
+    if (!/applicants[\s_-]*by[\s_-]*hunt[\s_-]*choice/i.test(fname)) continue;
+    const ym = fname.match(/(20\d{2})/); if (!ym) continue;
+    let species = null;
+    if (/elk/i.test(fname)) species = 'elk';
+    else if (/deer/i.test(fname) && !/antlerless/i.test(fname)) species = 'deer';
+    if (!species) continue;
+    found.push({ url: a.url, fname, year: ym[1], species });
+  }
+  const best = {};
+  for (const f of found) if (!best[f.species + f.year]) best[f.species + f.year] = f;
+  return Object.values(best);
+}
+
+// ═══ Public land % (regs unit-map pages) ══════════════════════════════════════
+const LAND_PAGES = [
+  'https://www.eregulations.com/oregon/hunting/western-oregon-unit-map',
+  'https://www.eregulations.com/oregon/hunting/eastern-oregon-unit-map'
+];
+function parsePublicLand(html) {
+  const text = html.replace(/<script[\s\S]*?<\/script>/gi, ' ');
+  const out = { byArea: {}, byName: {} };
+  // Herd-area style: "EH01: 46% public lands" / "JT01: 50% public land"
+  let m;
+  const areaRe = /\b([A-Z]{2}\d{2})\s*:\s*(\d{1,3})\s*%\s*public\s*land/gi;
+  while ((m = areaRe.exec(text))) out.byArea[m[1].toUpperCase()] = Number(m[2]);
+  // Heading style: <h#>Unit Name</h#> ... "42% public lands"
+  const secRe = /<h[2-4][^>]*>([^<]{2,60})<\/h[2-4]>([\s\S]{0,600}?)(\d{1,3})\s*%\s*public\s*land/gi;
+  while ((m = secRe.exec(html))) {
+    const name = m[1].replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim().toUpperCase()
+      .replace(/\s*\(.*$/, '').replace(/\bUNIT\b/g, '').trim();
+    if (name && !/GENERAL|SEASON|MAP|OREGON/.test(name)) out.byName[name] = Number(m[3]);
+  }
+  return out;
+}
+async function updatePublicLand(details) {
+  const merged = { byArea: {}, byName: {} };
+  let got = 0;
+  for (const url of LAND_PAGES) {
+    try {
+      const res = await fetch(url, { headers: UA });
+      if (!res.ok) throw new Error(`page ${res.status}`);
+      const p = parsePublicLand(await res.text());
+      Object.assign(merged.byArea, p.byArea); Object.assign(merged.byName, p.byName);
+      got += Object.keys(p.byArea).length + Object.keys(p.byName).length;
+    } catch (e) { details.push('public land page failed: ' + e.message); }
+  }
+  if (got < 20) { details.push(`public land %: SKIPPED (only ${got} entries found)`); return 0; }
+  const json = JSON.stringify(merged);
+  const cur = await fs_('GET', `meta/publicLand`);
+  if (cur && gv(cur.fields?.data) === json) return 0;
+  if (DRY) { details.push(`public land %: would load ${got} entries`); return 0; }
+  await fs_('PATCH', `meta/publicLand`, { fields: { data: V.s(json), updatedAt: V.t(new Date()) } });
+  details.push(`public land %: ${got} units/areas`);
+  return 1;
+}
+
 // ═══ Firestore REST ═══════════════════════════════════════════════════════════
 async function fs_(method, path, body) {
   const url = `${BASE}/${path}${path.includes('?') ? '&' : '?'}key=${API_KEY}`;
@@ -422,6 +513,40 @@ async function main() {
       } catch (e) { console.error(`[err] harvest ${r.year} ${r.key}:`, e.message); details.push(`${r.year} ${r.label || r.key} FAILED: ${e.message}`); failed++; }
     }
   } catch (e) { console.error('[err] harvest page:', e.message); details.push('harvest page unreachable: ' + e.message); failed++; }
+
+  // ── Applicants by Hunt Choice (from the same draw report page) ──
+  try {
+    const res = await fetch(DRAW_PAGE, { headers: UA });
+    if (res.ok) {
+      const reports = findChoiceReports(await res.text(), DRAW_PAGE);
+      console.log(`[choices] found ${reports.length} choice report link(s)`);
+      for (const r of reports) {
+        const key = r.species === 'elk' ? 'elkChoices' : 'deerChoices';
+        try {
+          const yd = await getYear(r.year);
+          if (!yd) { console.log(`[skip] ${r.year} ${key}: no draw data yet`); continue; }
+          const meta = await getMeta(r.year, key);
+          if (meta && meta.fileName === r.fname) { console.log(`[skip] ${r.year} ${key} current`); continue; }
+          const fres = await fetch(r.url, { headers: UA });
+          if (!fres.ok) throw new Error(`download ${fres.status}`);
+          const parsed = parseChoices(Buffer.from(await fres.arrayBuffer()));
+          console.log(`[parse] ${r.year} ${key}: ${Object.keys(parsed).length} hunts`);
+          if (DRY) { details.push(`${r.year} ${key}: would load`); continue; }
+          const doc = await fs_('GET', `years/${r.year}/choices/all`);
+          const all = doc ? JSON.parse(gv(doc.fields?.data) || '{}') : {};
+          Object.assign(all, parsed); // deer 1xx and elk 2xx hunt numbers never collide
+          await fs_('PATCH', `years/${r.year}/choices/all`, { fields: { data: V.s(JSON.stringify(all)), updatedAt: V.t(new Date()) } });
+          await setMeta(r.year, key, r.fname, Object.keys(parsed).length);
+          details.push(`${r.year} ${r.species} choices: ${Object.keys(parsed).length} hunts`);
+          updated++;
+        } catch (e) { console.error(`[err] choices ${r.year}:`, e.message); details.push(`${r.year} ${r.species} choices FAILED: ${e.message}`); failed++; }
+      }
+    }
+  } catch (e) { details.push('choice reports unreachable: ' + e.message); }
+
+  // ── Public land % ──
+  try { updated += await updatePublicLand(details); }
+  catch (e) { details.push('public land failed: ' + e.message); failed++; }
 
   // ── Season dates + bag limits ──
   try { updated += await updateSeasons(details, getYear); }
