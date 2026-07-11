@@ -6,6 +6,8 @@
 <title>Oregon Hunt Planner</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
 :root{
   --bg:#141d17; --card:#1d2a21; --card2:#243428; --line:#3a4c3e;
@@ -128,6 +130,7 @@ table.simple tr.hl td{background:var(--goodbg);color:var(--good);font-weight:700
 .trendline{display:flex;align-items:flex-end;gap:5px;height:88px;margin:18px 0 6px}
 .tcol{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px}
 .tbar{width:100%;max-width:44px;background:var(--gold);border-radius:4px 4px 0 0;min-height:3px}
+.tbar.pred{background:transparent;border:2px dashed var(--gold);border-bottom:none}
 .tyr{font-size:.68rem;color:var(--dim)}
 .tval{font-size:.75rem;font-weight:700}
 
@@ -179,12 +182,13 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v3.7</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v4.1</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
 
 <div class="syncnote" id="syncNote">Loading hunt data…</div>
+<div id="deadline" style="display:none;padding:11px 14px;font-size:.92rem;font-weight:700;background:var(--warnbg);color:var(--warn);border-bottom:1px solid var(--line)"></div>
 
 <main class="wrap">
 
@@ -243,6 +247,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
     <p class="plain"><strong>Points for a sure tag</strong> — Hunters who had this many points all drew a tag. If you have this many or more, the tag is yours if you apply.</p>
     <p class="plain"><strong>Success rate</strong> — Of the hunters who held this tag, the share who brought an animal home.</p>
     <p class="plain"><strong>Luck-of-the-draw</strong> — Some hunts never fill up with point-holders, so 25% of tags go out by pure random luck. Anyone can win one.</p>
+    <p class="plain"><strong>⚠ next to a success rate</strong> — Fewer than 6 in 10 tag holders reported their hunt, so the rate is based on a small slice of hunters and probably reads higher than reality.</p>
   </div></div>
   <div class="panel"><div class="pbody">
     <p class="plain" style="font-size:.85rem;color:var(--dim)">Personal reference tool. Not affiliated with ODFW. Always verify hunt numbers, dates, and boundaries in the current Oregon Big Game Regulations before applying. Application deadline is May 15 each year.</p>
@@ -346,6 +351,17 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
   <div class="sbody" id="shBody"></div>
 </div>
 
+<div class="sheet" id="mapSheet">
+  <div class="shead">
+    <div class="t"><h2 id="mapTitle">Unit map</h2><div class="sub" id="mapSub"></div></div>
+    <button class="closebtn" id="mapClose">Close</button>
+  </div>
+  <div id="leafWrap" style="position:absolute;top:78px;bottom:0;left:0;right:0">
+    <div id="leafMap" style="width:100%;height:100%"></div>
+    <div id="mapMsg" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:var(--bg);z-index:500;padding:24px;text-align:center"></div>
+  </div>
+</div>
+
 <div class="cbackdrop" id="confirmBox"><div class="cbox">
   <p id="confirmMsg"></p>
   <div class="cbtns"><button class="btn" id="confirmNo">Cancel</button><button class="btn danger" id="confirmYes" style="min-height:56px">Yes, do it</button></div>
@@ -414,6 +430,19 @@ async function fbSavePdfMeta(year, fileKey, fileName, huntCount) {
     });
     return true;
   } catch(e) { return false; }
+}
+async function fbLoadReqs(key) {
+  if (!db) return null;
+  try { const d = await db.collection('reqs').doc(key).get();
+    return d.exists ? JSON.parse(d.data().items || '[]') : []; }
+  catch(e) { return null; }
+}
+async function fbSaveReqs(key, items) {
+  if (!db) return false;
+  try { await db.collection('reqs').doc(key).set({
+      items: JSON.stringify(items), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    return true; }
+  catch(e) { return false; }
 }
 async function fbLoadAutoMeta() {
   if (!db) return null;
@@ -571,7 +600,11 @@ function trophyIndex(h, hv) {
 function grade(h) {
   const my = ptsFor(h);
   const b = blendHarvest(h, 3);
-  const s = b ? Math.min((b.succ || 0) / 60, 1) : 0.3;
+  let s = b ? Math.min((b.succ || 0) / 60, 1) : 0.3;
+  if (b && b.repRate !== null && b.repRate < LOW_REPORT) {
+    const w = Math.max(0.4, b.repRate / LOW_REPORT); // thin reporting → lean toward neutral
+    s = s * w + 0.3 * (1 - w);
+  }
   let t = 0.2;
   if (b && b.shares) {
     const mature = h.species === 'elk' ? (b.shares.fivePt + b.shares.sixPlusPt) : b.shares.fourPt;
@@ -631,6 +664,7 @@ function harvestYears(h){
   }
   return out;
 }
+const LOW_REPORT=0.6; // below this reported/tags ratio, success rates get flagged
 const CLASS_KEYS=['spike','twoPt','threePt','fourPt','fivePt','sixPlusPt'];
 const classLabel=(k,sp)=>({spike:'Spike',twoPt:'2-point',threePt:'3-point',
   fourPt:'4-point'+(sp==='deer'?'+':''),fivePt:'5-point',sixPlusPt:'6-point+'}[k]);
@@ -643,6 +677,9 @@ function blendHarvest(h, maxN){
   const hunters=Math.round(avg(yrs.map(r=>r.hv.hunters||0)));
   const taken=Math.round(avg(yrs.map(r=>r.hv.totalHarvest||0)));
   const days=Math.round(avg(yrs.map(r=>r.hv.hunters>0?r.hv.days/r.hv.hunters:0)));
+  let repN=0, tagN=0;
+  yrs.forEach(r=>{ const t=findH(r.year,h.huntNum,h.species)?.tags; if(t>0){ repN+=r.hv.hunters||0; tagN+=t; } });
+  const repRate = tagN>0 ? repN/tagN : null;
   const antlerYrs=yrs.filter(r=>r.hv.antlerValid&&r.hv.totalBull>0);
   let shares=null, top=null;
   if(antlerYrs.length){
@@ -657,7 +694,7 @@ function blendHarvest(h, maxN){
       top={key:tk,label:classLabel(tk,h.species),pct:pcts[tk],cnt,den};
     }
   }
-  return {years:yrs.map(r=>r.year), n:yrs.length, succ, hunters, taken, days, shares, top};
+  return {years:yrs.map(r=>r.year), n:yrs.length, succ, hunters, taken, days, shares, top, repN, tagN, repRate};
 }
 
 // The verdict: one plain-English answer per hunt
@@ -697,6 +734,20 @@ function trendData(h) {
     else             { sentence = `Steady — has taken about ${withPts[0].pts100} points since ${withPts[0].year}.`; }
   }
   return { rows, sentence, dir };
+}
+
+// Project next year's sure-tag points from the trend (needs 3+ years of data)
+function predictPts(h){
+  const pr=trendData(h).rows.filter(r=>r.pts100!==null);
+  if(pr.length<3) return null;
+  const pts=pr.slice(-4);
+  const xs=pts.map((_,i)=>i), ys=pts.map(r=>r.pts100);
+  const n=xs.length, sx=xs.reduce((a,b)=>a+b,0), sy=ys.reduce((a,b)=>a+b,0);
+  const sxy=xs.reduce((a,x,i)=>a+x*ys[i],0), sxx=xs.reduce((a,x)=>a+x*x,0);
+  const denom=n*sxx-sx*sx;
+  const slope=denom?(n*sxy-sx*sy)/denom:0;
+  const next=Math.max(0,Math.round(ys[ys.length-1]+slope));
+  return {year:String(Number(pr[pr.length-1].year)+1), pts:next};
 }
 
 // ─── PARSERS ──────────────────────────────────────────────────────────────────
@@ -966,20 +1017,21 @@ function renderPts() {
 // ─── RENDER: hunt cards ───────────────────────────────────────────────────────
 function cardHTML(h){
   const v=verdict(h), my=ptsFor(h), mo=myOdds(h,my);
-  const eh=effHarvest(h);
-  const succ=eh.hv?.successPct;
-  const succLbl=eh.hv ? (eh.current ? 'Hunters who got one' : `Got one (${eh.year} results)`) : 'Hunters who got one';
+  const bl=blendHarvest(h,3);
+  const succ=bl?bl.succ:null;
+  const lowRep=bl&&bl.repRate!==null&&bl.repRate<LOW_REPORT;
+  const succLbl=lowRep?'Got one ⚠ few reported':(bl?(bl.n>1?`Got one (${bl.n}-yr avg)`:`Got one (${bl.years[0]})`):'Hunters who got one');
   const t=trendData(h);
   const moTxt = my===null?'—':(mo===null?'<1%':fmtP(mo));
   const specials=specialTags(h).map(s=>`<span class="chip sp">${esc(s)}</span>`).join('');
   return `<div class="card ${v.cls}" data-id="${esc(h.huntNum)}_${h.species}">
     <div class="crow1"><span class="cid">${esc(h.huntNum)}</span><span class="cname">${esc(h.huntName)}</span>
       <span class="cstar ${isFav(h.huntNum,h.species)?'on':''}" data-fav="${esc(h.huntNum)}_${h.species}" role="button" aria-label="save to my list">${isFav(h.huntNum,h.species)?'★':'☆'}</span></div>
-    <div class="chips"><span class="chip">${wLabel(h.weapon)}</span><span class="chip">${h.species==='elk'?'Elk':'Deer'}</span>${specials}</div>
+    <div class="chips"><span class="chip">${wLabel(h.weapon)}</span><span class="chip">${h.species==='elk'?'Elk':'Deer'}</span>${specials}${(seasonOf(h)?.n)?'<span class="chip sp">Special rules</span>':''}</div>
     <div class="verdict">${v.text}</div>
     <div class="stats">
       <div class="stat"><div class="n">${moTxt}</div><div class="l">Your chance this year</div></div>
-      <div class="stat"><div class="n">${succ==null?'—':fmtP(succ)}</div><div class="l">${succLbl}</div></div>
+      <div class="stat"><div class="n" ${lowRep?'style="color:var(--warn)"':''}>${succ==null?'—':fmtP(succ)}</div><div class="l" ${lowRep?'style="color:var(--warn)"':''}>${succLbl}</div></div>
       <div class="stat"><div class="n">${h.pts100===null?'Luck':h.pts100}</div><div class="l">Points for a sure tag</div></div>
     </div>
     ${(()=>{const b=blendHarvest(h,3);
@@ -1018,6 +1070,125 @@ function wireCards(box){
 }
 
 // ─── RENDER: detail sheet ─────────────────────────────────────────────────────
+// ─── UNIT MAP (ODFW boundaries from Oregon GEOHub's public GIS layer) ────────
+const GIS_ITEM='8bfaa3a4e10e49dd9b0cc95693977e37'; // Wildlife Management Units
+const GIS_CACHE_K='odfw_gis_v1';
+let leafMap=null, unitLayer=null;
+const geoCache={};
+
+// Derive the ODFW unit name from a hunt name: "W High Cascade" → "High Cascade",
+// "Walla Walla Unit No. 2 Youth" → "Walla Walla"
+function unitNameFor(h){
+  let n=(h.huntName||'').trim();
+  n=n.replace(/^(N|S|E|W|NE|NW|SE|SW)\s+/i,'');
+  n=n.replace(/\b(Unit|Youth|Muzzleloader|Archery|Bow|Traditional|Late|Early|Plus|Experimental Forest|Whitetail|Mule Deer)\b/gi,' ');
+  n=n.replace(/\bNo\.?\s*\d+\b/gi,' ').replace(/[-–].*$/,' ').replace(/\d+/g,' ');
+  return n.replace(/\s+/g,' ').trim();
+}
+const isHerdArea=h=>/^[A-Z]{2}\d{3}/.test(String(h.huntNum));
+
+async function gisResolve(){
+  const cached=loadJSON(GIS_CACHE_K,null);
+  if(cached&&cached.url&&cached.field) return cached;
+  const item=await (await fetch(`https://www.arcgis.com/sharing/rest/content/items/${GIS_ITEM}?f=json`)).json();
+  if(!item||!item.url) throw new Error('service not found');
+  const base=item.url.replace(/\/$/,'')+(/FeatureServer$|MapServer$/i.test(item.url)?'/0':'');
+  const meta=await (await fetch(base+'?f=json')).json();
+  const fields=(meta.fields||[]).map(f=>f.name);
+  const field=fields.find(f=>/unit.*name|name.*unit/i.test(f))||fields.find(f=>/^(unit|name)$/i.test(f))||fields.find(f=>/name/i.test(f));
+  if(!field) throw new Error('no name field');
+  const cfg={url:base, field};
+  saveJSON(GIS_CACHE_K,cfg);
+  return cfg;
+}
+async function gisUnitGeo(name){
+  if(geoCache[name]) return geoCache[name];
+  const cfg=await gisResolve();
+  const where=`UPPER(${cfg.field}) LIKE '%${name.toUpperCase().replace(/'/g,"''")}%'`;
+  const u=`${cfg.url}/query?where=${encodeURIComponent(where)}&outFields=${encodeURIComponent(cfg.field)}&returnGeometry=true&outSR=4326&f=geojson`;
+  const gj=await (await fetch(u)).json();
+  if(!gj||!gj.features||!gj.features.length) throw new Error('unit not found');
+  geoCache[name]=gj;
+  return gj;
+}
+function mapMsg(html){ const m=$('#mapMsg'); m.style.display='flex'; m.innerHTML=html; }
+function showUnitMap(h){
+  const name=unitNameFor(h);
+  $('#mapTitle').textContent=(name||h.huntName)+' — unit map';
+  $('#mapSub').textContent=`Hunt ${h.huntNum} · boundary from ODFW public GIS data`;
+  $('#mapSheet').classList.add('open');
+  document.body.style.overflow='hidden';
+  const fallback=`<p class="plain" style="max-width:400px">Couldn't load this unit's boundary right now.</p>
+    <a class="srcbtn" style="width:min(320px,90%)" href="https://www.oregonhuntingmap.com" target="_blank" rel="noopener">Open ODFW's Oregon Hunting Map ↗</a>
+    ${isHerdArea(h)?`<a class="srcbtn" style="width:min(320px,90%)" href="https://myodfw.com/articles/eastern-oregon-deer-hunt-areas-2026" target="_blank" rel="noopener">Deer Hunt Area maps &amp; descriptions ↗</a>`:''}`;
+  if(!window.L){ mapMsg(fallback); return; }
+  if(!leafMap){
+    leafMap=L.map('leafMap',{zoomControl:true});
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:16,attribution:'© OpenStreetMap · Boundary: ODFW / Oregon GEOHub'}).addTo(leafMap);
+  }
+  setTimeout(()=>leafMap.invalidateSize(),60);
+  if(isHerdArea(h)){
+    // 2026+ deer hunt areas aren't in the WMU layer — send to ODFW's official maps
+    mapMsg(`<p class="plain" style="max-width:420px">This is one of the new 2026 Deer Hunt Areas. ODFW publishes each area's map and boundary description on their site:</p>
+      <a class="srcbtn" style="width:min(340px,90%)" href="https://myodfw.com/articles/eastern-oregon-deer-hunt-areas-2026" target="_blank" rel="noopener">Deer Hunt Area maps &amp; descriptions ↗</a>
+      <a class="srcbtn" style="width:min(340px,90%)" href="https://www.oregonhuntingmap.com" target="_blank" rel="noopener">Open ODFW's Oregon Hunting Map ↗</a>`);
+    return;
+  }
+  if(!name){ mapMsg(fallback); return; }
+  mapMsg('<div class="spin" style="width:28px;height:28px"></div><p class="help">Loading '+esc(name)+' unit boundary…</p>');
+  gisUnitGeo(name).then(gj=>{
+    if(!$('#mapSheet').classList.contains('open')) return;
+    $('#mapMsg').style.display='none';
+    if(unitLayer) leafMap.removeLayer(unitLayer);
+    unitLayer=L.geoJSON(gj,{style:{color:'#d9a54e',weight:3,fillColor:'#d9a54e',fillOpacity:0.14}}).addTo(leafMap);
+    leafMap.fitBounds(unitLayer.getBounds(),{padding:[24,24]});
+  }).catch(e=>{ console.warn('[map]',e); mapMsg(fallback); });
+}
+
+// Requirements & special rules — ODFW's fine print from the regs tables,
+// plus family-added rules (weed-free feed, pack-out-waste areas, road closures…)
+async function loadReqsInto(h){
+  const sec=$('#reqsSec'); if(!sec) return;
+  const key=hkey(h);
+  const items=await fbLoadReqs(key);
+  if(!$('#reqsSec')) return; // sheet closed while loading
+  renderReqs(sec, h, key, items===null?[]:items, items===null);
+}
+function renderReqs(sec, h, key, items, offline){
+  const se=seasonOf(h);
+  const auto=(se&&se.n)?se.n.split(' • ').filter(x=>x):[];
+  const autoHtml=auto.map(t=>`<div style="display:flex;gap:9px;padding:8px 0;border-bottom:1px solid var(--card2)">
+    <span style="color:var(--gold);flex-shrink:0">▸</span><span style="font-size:.93rem">${esc(t)} <span class="help" style="margin:0;display:inline">— from the ${S.selectedYear} regulations</span></span></div>`).join('');
+  const manHtml=items.map((n,i)=>`<div style="display:flex;gap:9px;padding:8px 0;border-bottom:1px solid var(--card2);align-items:baseline">
+    <span style="color:var(--warn);flex-shrink:0">▸</span><span style="font-size:.93rem;flex:1">${esc(n.t)}</span>
+    <button class="bmini dan" data-delreq="${i}" style="min-height:34px;padding:2px 8px;flex-shrink:0">✕</button></div>`).join('');
+  sec.innerHTML=`<h3>Requirements &amp; special rules</h3>
+    ${auto.length||items.length?autoHtml+manHtml:'<p class="help">No special requirements on record for this hunt.</p>'}
+    ${offline?'<p class="help">Couldn\'t reach the cloud — family-added rules may be missing.</p>':''}
+    <p class="help" style="margin-top:10px">Always double-check the current Oregon Big Game Regulations and land-manager rules (Forest Service / BLM) before your hunt.</p>
+    <button class="linkbtn" id="reqAddBtn" style="padding-left:0">+ Add a rule everyone should know</button>
+    <div id="reqAddBox" style="display:none">
+      <textarea id="reqText" placeholder="e.g. Eagle Cap Wilderness — certified weed-free feed required for stock; pack out all waste" style="width:100%;min-height:74px;font-size:1rem;font-family:inherit;background:var(--card2);color:var(--text);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px"></textarea>
+      <button class="btn primary" id="reqSave" style="width:100%;margin-top:8px">Save for the whole family</button>
+    </div>`;
+  sec.querySelectorAll('[data-delreq]').forEach(b=>b.onclick=()=>{
+    confirm2('Remove this rule for everyone?', async ()=>{
+      items.splice(Number(b.dataset.delreq),1);
+      await fbSaveReqs(key, items);
+      renderReqs(sec, h, key, items, false);
+    });
+  });
+  $('#reqAddBtn').onclick=()=>{ $('#reqAddBox').style.display='block'; $('#reqAddBtn').style.display='none'; $('#reqText').focus(); };
+  $('#reqSave').onclick=async ()=>{
+    const t=$('#reqText').value.trim();
+    if(!t){ toast('Write the rule first', true); return; }
+    $('#reqSave').textContent='Saving…'; $('#reqSave').disabled=true;
+    items.push({t, ts:Date.now()});
+    const ok=await fbSaveReqs(key, items);
+    toast(ok?'Saved — everyone will see it on this hunt ✓':'Save failed — check your connection', !ok);
+    renderReqs(sec, h, key, items, false);
+  };
+}
 let sheetId=null, sheetHSel='avg';
 function openDetail(id, keepSel){
   if(!keepSel) sheetHSel='avg';
@@ -1038,6 +1209,7 @@ function openDetail(id, keepSel){
   const se=seasonOf(h);
   html+=`<div class="sec"><h3>The basics</h3>
     <p class="plain">A ${wLabel(h.weapon).toLowerCase()} ${h.species} hunt. In ${S.selectedYear}, ODFW gave out <strong>${fmt(h.tags)} tags</strong> and <strong>${fmt(h.residentApps)} Oregon residents</strong> put it as a choice. ${h.resOdds!=null?`Overall, about ${fmtP(h.resOdds)} of resident applicants drew it.`:''}</p>
+    <button class="btn" id="unitMapBtn" style="width:100%;margin-bottom:12px;border-color:var(--gold);color:var(--gold)">🗺 View this unit on the map</button>
     ${se?`<div class="kvg">
       <div class="kv" style="grid-column:1/-1"><div class="k">Season dates (${S.selectedYear})</div><div class="v" style="font-size:1.05rem">${esc(se.s)}</div></div>
       ${se.b?`<div class="kv" style="grid-column:1/-1"><div class="k">Bag limit</div><div class="v" style="font-size:.95rem;font-weight:600">${esc(se.b)}</div></div>`:''}
@@ -1083,6 +1255,13 @@ function openDetail(id, keepSel){
         <div class="kv"><div class="k">Days hunted per hunter (avg)</div><div class="v">${days??'—'}</div></div>
       </div>
       <p class="plain" style="margin-bottom:14px"><strong>${fmtP(succ)} success</strong> — about ${succ>=100?'every':Math.round(succ/10)+' in 10'} hunter${succ>=100?'':'s'} who held this ${h.species} tag ${succ>=100?'filled it':'brought a '+(h.species==='elk'?'bull or cow':'buck')+' home'}.</p>`;
+    // flag thin reporting — success rates from a fraction of tag holders skew high
+    {
+      const repN = b ? b.repN : hunters, tagsN = b ? b.tagN : (tagsIssued ?? 0);
+      if (tagsN > 0 && repN / tagsN < LOW_REPORT) {
+        html+=`<p class="plain" style="background:var(--warnbg);color:var(--warn);padding:11px 13px;border-radius:10px;font-size:.9rem;margin-bottom:14px">⚠ <strong>Take this success rate with a grain of salt.</strong> Only ${fmt(repN)} of the ${fmt(tagsN)} tags given out${b?' over these seasons':''} were reported (${Math.round(repN/tagsN*100)}%). Hunters who fill their tag are more likely to report, so the real success rate is probably lower than shown.</p>`;
+      }
+    }
     // antler sizes as fractions (animals of that class ÷ total antlered animals)
     let counts=null, denom=0, denomLbl='';
     if(b){
@@ -1119,11 +1298,20 @@ function openDetail(id, keepSel){
     if(t.sentence) html+=`<p class="plain" style="${t.dir==='harder'?'color:var(--warn)':t.dir==='easier'?'color:var(--good)':''}">${esc(t.sentence)}</p>`;
     if(pr.length>=2){
       const mx=Math.max(...pr.map(r=>r.pts100),1);
-      html+=`<p class="help">Points needed for a sure tag, by year:</p><div class="trendline">${pr.map(r=>
-        `<div class="tcol"><span class="tval">${r.pts100}</span><div class="tbar" style="height:${Math.max(6,r.pts100/mx*46)}px"></div><span class="tyr">${r.year}</span></div>`).join('')}</div>`;
+      const pred=predictPts(h);
+      const mx2=pred?Math.max(mx,pred.pts,1):mx;
+      html+=`<p class="help">Points needed for a sure tag, by year${pred?' (dashed = next year\'s guess)':''}:</p><div class="trendline">${pr.map(r=>
+        `<div class="tcol"><span class="tval">${r.pts100}</span><div class="tbar" style="height:${Math.max(6,r.pts100/mx2*46)}px"></div><span class="tyr">${r.year}</span></div>`).join('')}${pred?`<div class="tcol"><span class="tval" style="color:var(--gold)">~${pred.pts}</span><div class="tbar pred" style="height:${Math.max(6,pred.pts/mx2*46)}px"></div><span class="tyr">${pred.year}</span></div>`:''}</div>`;
+      if(pred){
+        const my=ptsFor(h);
+        let extra='';
+        if(my!==null&&h.pts100!==null&&my<h.pts100&&my+1>=pred.pts) extra=' With the point you earn this year, that would put a sure tag within reach.';
+        else if(my!==null&&my>=h.pts100&&pred.pts>h.pts100) extra=' If you\'re thinking about this hunt, sooner may be better than later.';
+        html+=`<p class="plain" style="font-size:.92rem">Best guess for ${pred.year}: <strong style="color:var(--gold)">about ${pred.pts} points</strong> for a sure tag — based on the trend, not a promise.${extra}</p>`;
+      }
     }
     html+=`<table class="simple"><thead><tr><th>Year</th><th>Sure-tag pts</th><th>Reported / Filled</th><th>Success</th><th>Tags</th></tr></thead><tbody>
-      ${t.rows.map(r=>`<tr><td>${r.year}</td><td>${r.pts100===null?'Luck':r.pts100}</td><td>${r.hunters==null?'—':fmt(r.hunters)+' / '+fmt(r.harvested)}</td><td>${r.success==null?'—':fmtP(r.success)}</td><td>${fmt(r.tags)}</td></tr>`).join('')}
+      ${t.rows.map(r=>`<tr><td>${r.year}</td><td>${r.pts100===null?'Luck':r.pts100}</td><td>${r.hunters==null?'—':fmt(r.hunters)+' / '+fmt(r.harvested)}</td><td>${r.success==null?'—':fmtP(r.success)+(r.hunters!=null&&r.tags>0&&r.hunters/r.tags<LOW_REPORT?' ⚠':'')}</td><td>${fmt(r.tags)}</td></tr>`).join('')}
     </tbody></table></div>`;
   }
 
@@ -1141,7 +1329,10 @@ function openDetail(id, keepSel){
       </tbody></table></div>`;
   }
 
+  html+=`<div class="sec" id="reqsSec"><h3>Requirements &amp; special rules</h3><p class="help">Checking…</p></div>`;
   $('#shBody').innerHTML=html;
+  const umb=$('#unitMapBtn'); if(umb) umb.onclick=()=>showUnitMap(h);
+  loadReqsInto(h);
   $('#shBody').querySelectorAll('[data-hsel]').forEach(b=>b.onclick=()=>{
     sheetHSel=b.dataset.hsel; const keep=$('#sheet').scrollTop;
     openDetail(sheetId,true); $('#sheet').scrollTop=keep;
@@ -1315,6 +1506,7 @@ function wire(){
   $('#adminLink2').onclick=gate;
   $('#adminBack').onclick=()=>showPage('hunts');
   $('#shClose').onclick=closeDetail;
+  $('#mapClose').onclick=()=>{ $('#mapSheet').classList.remove('open'); document.body.style.overflow='hidden'; };
   $('#shStar').onclick=()=>{ if(!sheetId)return; const [n,s]=sheetId.split('_'); toggleFav(n,s);
     $('#shStar').textContent=isFav(n,s)?'★':'☆'; renderCards(); renderMyList(); };
   // filters
@@ -1400,6 +1592,25 @@ async function init(firstRun){
   }
 }
 function firstRunEmpty(before){ return Object.keys(before).length===0; }
+
+// Application deadline countdown (controlled hunt apps due May 15)
+function renderDeadline(){
+  const el=$('#deadline'); if(!el) return;
+  const now=new Date(), y=now.getFullYear();
+  const dl=new Date(y,4,15,23,59,59);
+  let show=null, urgent=false;
+  if(now<=dl){
+    const days=Math.ceil((dl-now)/86400000);
+    if(days<=75){ show=`⏰ Controlled hunt applications are due May 15 — ${days} day${days===1?'':'s'} left to put in.`; urgent=days<=14; }
+  } else {
+    const results=new Date(y,5,20);
+    if(now<results) show=`Applications for ${y} are closed. Draw results usually post around June 20 — good luck!`;
+  }
+  if(show){ el.style.display='block'; el.textContent=show;
+    if(urgent){ el.style.background='var(--badbg)'; el.style.color='var(--bad)'; } }
+  else el.style.display='none';
+}
+renderDeadline();
 
 wire();
 init(true);
