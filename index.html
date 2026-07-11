@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Oregon Hunt Planner</title>
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Hunt Planner">
+<meta name="theme-color" content="#20362a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-startup-image" href="icon-512.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
@@ -180,7 +189,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v4.8</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v4.9</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -1334,14 +1343,16 @@ async function showUnitMap(h){
   const gj=await loadGeo(herd?'areas':'units');
   const links=`<a class="srcbtn" style="margin-bottom:10px" href="${herd?'https://myodfw.com/articles/eastern-oregon-deer-hunt-areas-2026':'https://www.eregulations.com/oregon/hunting/western-oregon-unit-map'}" target="_blank" rel="noopener">${herd?'ODFW Deer Hunt Area maps ↗':'Official unit maps &amp; boundary descriptions ↗'}</a>
     <a class="srcbtn" href="https://www.oregonhuntingmap.com" target="_blank" rel="noopener">ODFW interactive hunting map ↗</a>`;
-  // ODFW's official map image for this hunt type (the familiar reference map)
-  const offImg=herd
-    ? `<p class="plain" style="margin-top:14px">ODFW's official 2026 Deer Hunt Areas map:</p>
+  // ODFW's official map image(s). Eastern deer hunts get BOTH the Deer Hunt
+  // Area map AND the standard WMU map (elk shares the same ground; hunters
+  // cross-reference unit names against the new deer-area boundaries).
+  const deerBlock=`<p class="plain" style="margin-top:14px">ODFW's official 2026 Eastern Oregon Deer Hunt Areas map:</p>
        <div style="overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff;margin-bottom:12px">
-       <img src="https://myodfw.com/sites/default/files/2025-09/EasternORDeerHuntAreas%20updated%20Sept%2015%202025.jpg" onerror="this.onerror=null;this.src='https://myodfw.com/sites/default/files/styles/380_max_width/public/2025-09/EasternORDeerHuntAreas%20updated%20Sept%2015%202025.jpg?itok=eVl42pp8'" alt="Eastern Oregon Deer Hunt Areas map" style="width:100%;display:block" loading="lazy"></div>`
-    : `<p class="plain" style="margin-top:14px">ODFW's official unit map:</p>
+       <img src="https://myodfw.com/sites/default/files/2025-09/EasternORDeerHuntAreas%20updated%20Sept%2015%202025.jpg" onerror="this.onerror=null;this.src='https://myodfw.com/sites/default/files/styles/380_max_width/public/2025-09/EasternORDeerHuntAreas%20updated%20Sept%2015%202025.jpg?itok=eVl42pp8'" alt="Eastern Oregon Deer Hunt Areas map" style="width:100%;display:block" loading="lazy"></div>`;
+  const wmuBlock=`<p class="plain" style="margin-top:14px">Standard Wildlife Management Unit map${herd?' (elk &amp; general reference)':''}:</p>
        <div style="overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff;margin-bottom:12px">
        <img src="https://myodfw.com/sites/default/files/2017-09/WMU_Map.PNG" onerror="this.onerror=null;this.src='https://myodfw.com/sites/default/files/styles/380_max_width/public/2017-09/WMU_Map.PNG?itok=LCpSXD0T'" alt="Oregon Wildlife Management Units map" style="width:100%;display:block" loading="lazy"></div>`;
+  const offImg=herd ? (deerBlock+wmuBlock) : wmuBlock;
   if(!gj){
     $('#mapBody').innerHTML=`${offImg}<p class="help">The zoom-to-your-unit view appears after the next automatic data update.</p>${links}`;
     return;
