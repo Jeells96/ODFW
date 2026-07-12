@@ -18,19 +18,23 @@ import pdfplumber
 
 
 def is_yellow(color):
-    """True for yellow-ish fills in RGB (3-tuple) or CMYK (4-tuple)."""
+    """True for yellow-ish fills in RGB (3-tuple) or CMYK (4-tuple).
+    Yellow = high red, high green, low blue. Kept distinct from the salmon/
+    orange 'private lands' bars (those have lower green relative to red)."""
     if color is None:
         return False
     try:
         c = tuple(float(x) for x in color)
     except (TypeError, ValueError):
         return False
+    if len(c) == 1:  # grayscale can't be yellow
+        return False
     if len(c) == 3:
         r, g, b = c
-        return r > 0.82 and g > 0.72 and b < 0.55 and ((r + g) / 2 - b) > 0.28
+        return r > 0.80 and g > 0.68 and b < 0.60 and (g - b) > 0.20 and (r - b) > 0.20
     if len(c) == 4:
         cy, m, y, k = c
-        return cy < 0.25 and m < 0.3 and y > 0.5 and k < 0.2
+        return cy < 0.30 and m < 0.38 and y > 0.45 and k < 0.25
     return False
 
 
@@ -108,25 +112,43 @@ def line_in_column(line, col_x0, col_x1):
 BULLET_RE = re.compile(r"^(\(cid:\d+\)|[•●▪·>-])\s|^[A-Z][a-z]+.*:$")
 
 
-def extract(pdf_path):
+def extract(pdf_path, debug=False):
     out = []
     with pdfplumber.open(pdf_path) as pdf:
         for pno, page in enumerate(pdf.pages, 1):
-            # candidate yellow rects, filtered to text-highlight geometry
+            # Yellow highlights show up in different PDF primitives depending on
+            # how the layout tool drew them: rectangles, filled curves/paths, or
+            # (rarely) highlight annotations. Gather candidates from all three.
+            shapes = list(page.rects) + list(page.curves)
             yrects = []
-            for r in page.rects:
-                if not is_yellow(r.get("non_stroking_color")):
+            for r in shapes:
+                col = r.get("non_stroking_color")
+                if col is None:
+                    col = r.get("fill") if isinstance(r.get("fill"), (list, tuple)) else None
+                if not is_yellow(col):
                     continue
                 h = r["bottom"] - r["top"]; wdt = r["x1"] - r["x0"]
-                if not (5 <= h <= 34 and 8 <= wdt <= page.width * 0.7):
+                if not (3 <= h <= 40 and 6 <= wdt <= page.width * 0.85):
                     continue  # graphics / ad blocks / page bands
-                yrects.append(r)
+                yrects.append({"x0": r["x0"], "x1": r["x1"], "top": r["top"], "bottom": r["bottom"]})
+            # highlight annotations (subtype 'Highlight') carry a quadpoint rect
+            for a in (page.annots or []):
+                sub = (a.get("data", {}) or {}).get("Subtype")
+                sub = getattr(sub, "name", sub)
+                if str(sub) == "Highlight":
+                    yrects.append({"x0": a["x0"], "x1": a["x1"], "top": a["top"], "bottom": a["bottom"]})
+
+            n_raw = len(yrects)
             if not yrects:
+                if debug:
+                    ny = sum(1 for r in shapes if is_yellow(r.get("non_stroking_color")))
+                    print(f"[dbg] pg {pno}: 0 highlight rects (shapes={len(shapes)}, yellow-but-filtered={ny})", file=sys.stderr)
                 continue
             words = page.extract_words(extra_attrs=["fontname", "size"])
             body_words = [w for w in words if 5.5 <= w.get("size", 10) <= 18]
-            # keep only rects that actually cover body text
             yrects = [r for r in yrects if rect_words(r, body_words)]
+            if debug:
+                print(f"[dbg] pg {pno}: {n_raw} raw -> {len(yrects)} over-text highlight rects", file=sys.stderr)
             if not yrects:
                 continue
             lines = group_lines(body_words)
@@ -207,7 +229,9 @@ def extract(pdf_path):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("usage: scrape-synopsis.py <pdf>", file=sys.stderr)
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    debug = "--debug" in sys.argv
+    if len(args) != 1:
+        print("usage: scrape-synopsis.py [--debug] <pdf>", file=sys.stderr)
         sys.exit(1)
-    print(json.dumps(extract(sys.argv[1])))
+    print(json.dumps(extract(args[0], debug=debug)))
