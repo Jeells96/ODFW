@@ -193,7 +193,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v5.3</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v5.4</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -234,6 +234,24 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
   <div class="count" id="rcount"></div>
   <div id="cards"></div>
+</div>
+
+<!-- ═══ PREMIUM ═══ -->
+<div class="page" data-page="premium">
+  <div class="panel"><div class="pbody">
+    <p class="ptitle">Premium hunts</p>
+    <p class="plain" style="font-size:.95rem">A separate draw for one bonus deer, elk, or pronghorn tag with a <strong>4-month season (Aug 1 – Nov 30)</strong>, either-sex, any weapon. <strong>No points involved</strong> — everyone has the same random shot. One tag per unit, and it's an extra tag on top of your regular one.</p>
+    <p class="help">Odds below are from the most recent premium drawing's applicant counts. Apply by May 15 — $8 per species.</p>
+  </div></div>
+  <div style="padding:0 2px 10px">
+    <div class="hselrow" id="premSpeciesRow">
+      <button class="hsel on" data-premsp="deer">Deer (L)</button>
+      <button class="hsel" data-premsp="elk">Elk (M)</button>
+      <button class="hsel" data-premsp="pronghorn">Pronghorn (N)</button>
+    </div>
+    <input type="search" id="premSearch" placeholder="Search unit name or number" style="margin-bottom:4px">
+  </div>
+  <div id="premCards"></div>
 </div>
 
 <!-- ═══ MY LIST ═══ -->
@@ -364,7 +382,8 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 <!-- tab bar -->
 <nav class="tabbar">
   <button class="tab on" data-tab="hunts"><span class="ic">◎</span>Hunts</button>
-  <button class="tab" data-tab="mylist"><span class="ic">★</span>My List</button>
+  <button class="tab" data-tab="premium"><span class="ic">★</span>Premium</button>
+  <button class="tab" data-tab="mylist"><span class="ic">♥</span>My List</button>
   <button class="tab" data-tab="about"><span class="ic">?</span>About</button>
 </nav>
 
@@ -509,9 +528,11 @@ async function fbLoad() {
       const hd = await db.collection('years').doc(year).collection('harvest').doc('all').get();
       const sd = await db.collection('years').doc(year).collection('seasons').doc('all').get();
       const cd2 = await db.collection('years').doc(year).collection('choices').doc('all').get();
+      const pd = await db.collection('years').doc(year).collection('premium').doc('all').get();
       out[year] = { hunts, harvestData: hd.exists ? JSON.parse(hd.data().data || '{}') : {},
         seasons: sd.exists ? JSON.parse(sd.data().data || '{}') : {},
-        choices: cd2.exists ? JSON.parse(cd2.data().data || '{}') : {}, files: {} };
+        choices: cd2.exists ? JSON.parse(cd2.data().data || '{}') : {},
+        premium: pd.exists ? JSON.parse(pd.data().data || '{}') : {}, files: {} };
     }
     return out;
   } catch(e) { console.warn('[FB] Load error:', e); return null; }
@@ -1077,7 +1098,7 @@ async function handleFile(target, file) {
   if (!file) return;
   if (!S.pendingYear) { toast('Pick a year first (Step 1)', true); return; }
   const year = S.pendingYear;
-  if (!S.years[year]) S.years[year] = {hunts:[],files:{},harvestData:{},choices:{},seasons:{}};
+  if (!S.years[year]) S.years[year] = {hunts:[],files:{},harvestData:{},choices:{},seasons:{},premium:{}};
   const yd = S.years[year];
   try {
     const buf = await readBuf(file);
@@ -1646,6 +1667,120 @@ function openDetail(id, keepSel){
 function closeDetail(){ $('#sheet').classList.remove('open'); document.body.style.overflow=''; sheetId=null; }
 
 // ─── RENDER: My List ──────────────────────────────────────────────────────────
+// ─── PREMIUM HUNTS (L/M/N series, separate random draw) ─────────────────────
+let premSpecies = 'deer';
+const PREM_LETTER = { deer:'L', elk:'M', pronghorn:'N' };
+// Premium data for the selected year, most-recent fallback if this year is empty
+function premData(){
+  const cur = curYD()?.premium;
+  if(cur && Object.keys(cur).length) return { data:cur, year:S.selectedYear, current:true };
+  for(const y of yList()){
+    const p = S.years[y].premium;
+    if(p && Object.keys(p).length) return { data:p, year:y, current:false };
+  }
+  return { data:{}, year:null, current:false };
+}
+// Map a premium hunt number (L28) to the matching regular unit hunt, to borrow
+// that unit's name, harvest, and map. Premium unit number = the digits after the letter.
+function premUnitInfo(premId){
+  const digits = premId.replace(/^[LMN]/,'').replace(/[A-Z]\d*$/,''); // L28 -> 28, L101-1 -> 101
+  // regular deer/elk hunts encode unit differently; match by the trailing unit number
+  // in the hunt name via the draw data we already have
+  const species = premId[0]==='M' ? 'elk' : premId[0]==='L' ? 'deer' : 'pronghorn';
+  return { digits, species };
+}
+// Random-draw odds: premium is 1 tag per unit, awarded randomly among 1st-choice
+// applicants. So 1st-choice odds ≈ 1/c1; 2nd-choice only matters on no-1st-draw.
+function premOdds(ch){
+  const c1 = ch.c1||0;
+  const o1 = c1>0 ? Math.min(100, 1/c1*100) : (ch.tot>0?0:100);
+  return { c1, o1 };
+}
+function renderPremium(){
+  const box=$('#premCards'); if(!box) return;
+  const { data, year, current } = premData();
+  const letter = PREM_LETTER[premSpecies];
+  const q=($('#premSearch')?.value||'').trim().toLowerCase();
+  const hunts = Object.keys(data).filter(id=>id[0]===letter)
+    .map(id=>({ id, ch:data[id] }))
+    .filter(x=>!q || x.id.toLowerCase().includes(q) || (premName(x.id)||'').toLowerCase().includes(q))
+    .sort((a,b)=>String(a.id).localeCompare(String(b.id),undefined,{numeric:true}));
+  if(!year || !hunts.length){
+    box.innerHTML=`<div class="empty">No premium ${premSpecies} data loaded yet.<br><br>${year?'Try another species tab.':'It loads automatically on the next data update.'}</div>`;
+    return;
+  }
+  const banner = current ? '' : `<div class="syncnote ok" style="border-radius:12px;margin-bottom:12px">Showing ${year} premium results — the newest available.</div>`;
+  box.innerHTML = banner + hunts.map(({id,ch})=>{
+    const o=premOdds(ch);
+    const nm=premName(id);
+    const oddsColor = o.o1>=5?'var(--good)':o.o1>=1.5?'var(--gold)':'var(--dim)';
+    const oddsTxt = o.c1===0 ? 'No competition' : (o.o1>=1 ? '~'+o.o1.toFixed(1)+'%' : 'under 1%');
+    return `<div class="card v-luck" data-premopen="${esc(id)}">
+      <div class="crow1"><span class="cid">${esc(id)}</span><span class="cname">${esc(nm||'Unit '+id.replace(/^[LMN]/,''))}</span></div>
+      <div class="chips"><span class="chip sp">Premium ${premSpecies}</span><span class="chip">Aug 1 – Nov 30</span></div>
+      <div class="stats">
+        <div class="stat"><div class="n" style="color:${oddsColor}">${oddsTxt}</div><div class="l">Your draw odds</div></div>
+        <div class="stat"><div class="n">${fmt(ch.c1)}</div><div class="l">Put it 1st choice</div></div>
+        <div class="stat"><div class="n">${fmt(ch.tot)}</div><div class="l">Total applicants</div></div>
+      </div>
+    </div>`;
+  }).join('');
+  box.querySelectorAll('[data-premopen]').forEach(c=>c.onclick=()=>openPremDetail(c.dataset.premopen));
+}
+// Borrow the unit name from a regular hunt that shares this unit number
+function premName(premId){
+  const digits = premId.replace(/^[LMN]/,'').replace(/[A-Z]\d*$/,'');
+  const species = premId[0]==='M' ? 'elk' : premId[0]==='L' ? 'deer' : null;
+  if(!species) return null; // pronghorn: no regular hunts loaded to borrow from
+  // regular hunt numbers: deer 100s, elk 200s. Unit N -> deer 1NN-ish is not
+  // reliable, so match by unit number appearing in a hunt name is unreliable too.
+  // Best effort: find a hunt whose base number's unit digits match.
+  const all=getAllHunts();
+  const hit=all.find(h=>{
+    if(h.species!==species) return false;
+    const n=String(h.huntNum).replace(/[A-Z]\d*$/,'');
+    // elk 253 -> unit 53; deer varies. compare last two digits.
+    return n.slice(-2)===digits.padStart(2,'0').slice(-2) || n===digits;
+  });
+  return hit ? hit.huntName.replace(/\s*(No\.?\s*\d+|Unit).*/i,'').trim() || hit.huntName : null;
+}
+function getAllHunts(){ const d=curYD(); return d?d.hunts:[]; }
+function openPremDetail(id){
+  const { data } = premData();
+  const ch = data[id]; if(!ch) return;
+  const o = premOdds(ch);
+  const nm = premName(id) || 'Unit '+id.replace(/^[LMN]/,'');
+  const sp = id[0]==='M'?'elk':id[0]==='L'?'deer':'pronghorn';
+  $('#shTitle').textContent = id+' — '+nm;
+  $('#shSub').textContent = `Premium ${sp} · one tag, random draw`;
+  let html = `<div class="callout v-luck">Premium ${sp} tag — a bonus tag with a 4-month either-sex season, drawn purely at random. Your points don't matter here.</div>`;
+  html += `<div class="sec"><h3>Your odds</h3>
+    <div class="kvg" style="margin-bottom:10px">
+      <div class="kv"><div class="k">Put it 1st choice</div><div class="v">${fmt(ch.c1)}</div></div>
+      <div class="kv"><div class="k">Draw odds (1 tag)</div><div class="v" style="color:var(--good)">${o.c1===0?'—':(o.o1>=1?o.o1.toFixed(1)+'%':'<1%')}</div></div>
+    </div>
+    <p class="plain">${o.c1===0?`Nobody listed this unit 1st choice in the counted year — a tag may have gone unclaimed.`:`One tag, drawn at random among the ${fmt(ch.c1)} who put it first. Everyone has the same chance regardless of points.`}</p>
+    ${ch.c2?`<p class="help">${fmt(ch.c2)} listed it as a 2nd choice. Second choice only comes into play if the tag isn't awarded in the first round, so list one as a backup.</p>`:''}
+  </div>`;
+  html += `<div class="sec"><h3>The hunt</h3>
+    <div class="kvg">
+      <div class="kv" style="grid-column:1/-1"><div class="k">Season</div><div class="v">Aug 1 – Nov 30</div></div>
+      <div class="kv"><div class="k">Bag limit</div><div class="v" style="font-size:.95rem">Either sex</div></div>
+      <div class="kv"><div class="k">Weapon</div><div class="v" style="font-size:.95rem">Any legal</div></div>
+    </div>
+    <p class="help">This is an additional tag on top of your controlled or general-season tag, valid across the whole ${sp==='pronghorn'?'hunt area':'unit'}. See the regulations for exact boundaries.</p>
+  </div>`;
+  // borrow harvest/size from the matching regular unit if we found one
+  const regHunt = getAllHunts().find(h=>h.species===sp && h.huntName && premName(id) && h.huntName.startsWith(premName(id)));
+  if(regHunt){
+    const b=blendHarvest(regHunt,3);
+    if(b&&b.top) html+=`<div class="sec"><h3>What this unit produces</h3><p class="plain">In the regular ${sp} hunts here, typical size taken is <strong>${esc(b.top.label)}</strong> (${fmt(b.top.cnt)} of ${fmt(b.top.den)}). Premium hunters get the same ground for four months during the rut.</p></div>`;
+  }
+  $('#shBody').innerHTML=html;
+  $('#sheet').classList.add('open'); $('#sheet').scrollTop=0;
+  document.body.style.overflow='hidden';
+}
+
 function renderMyList(){
   const box=$('#mylistCards'); if(!box) return;
   const favs=loadFavs();
@@ -1807,6 +1942,7 @@ function showPage(name){
   $$('.page').forEach(p=>p.classList.toggle('active',p.dataset.page===name));
   $$('.tab').forEach(t=>t.classList.toggle('on',t.dataset.tab===name));
   if(name==='mylist') renderMyList();
+  if(name==='premium') renderPremium();
   if(name==='admin') renderAdmin();
   window.scrollTo(0,0);
 }
@@ -1821,6 +1957,13 @@ function renderAll(){ renderPts(); renderYearSelect(); renderCards(); renderMyLi
 // ─── WIRING ───────────────────────────────────────────────────────────────────
 function wire(){
   $$('.tab').forEach(t=>t.onclick=()=>showPage(t.dataset.tab));
+  // premium species selector + search
+  $$('#premSpeciesRow [data-premsp]').forEach(b=>b.onclick=()=>{
+    premSpecies=b.dataset.premsp;
+    $$('#premSpeciesRow [data-premsp]').forEach(x=>x.classList.toggle('on',x===b));
+    renderPremium();
+  });
+  const ps=$('#premSearch'); if(ps) ps.oninput=()=>renderPremium();
   const ADMIN_PIN='2325';
   let pinOk=false;
   function openAdmin(){ showPage('admin'); }
@@ -1931,7 +2074,7 @@ async function init(firstRun){
   if(data && Object.keys(data).length){
     for(const y of Object.keys(data)){
       const localFiles=S.years[y]?.files||{};
-      S.years[y]={hunts:data[y].hunts,harvestData:data[y].harvestData,seasons:data[y].seasons||{},choices:data[y].choices||{},files:localFiles};
+      S.years[y]={hunts:data[y].hunts,harvestData:data[y].harvestData,seasons:data[y].seasons||{},choices:data[y].choices||{},premium:data[y].premium||{},files:localFiles};
       applyHarvest(y);
     }
     if(!S.selectedYear||!S.years[S.selectedYear]) S.selectedYear=yList()[0];
