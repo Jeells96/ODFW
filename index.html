@@ -195,7 +195,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.3</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.4</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -502,27 +502,37 @@ async function fbLoadAutoMeta() {
   try { const d = await db.collection('meta').doc('autoUpdate').get(); return d.exists ? d.data() : null; }
   catch(e) { return null; }
 }
-async function fbLoad() {
+async function fbLoad(onYear) {
   if (!db) return null;
   try {
     const snap = await db.collection('years').get();
     const out = {};
-    for (const yd of snap.docs) {
+    // Load every year in parallel, and within each year fetch all its docs
+    // (chunks, harvest, seasons, choices, premium) in parallel too — instead of
+    // one sequential round-trip at a time. Cuts cold-start load dramatically.
+    await Promise.all(snap.docs.map(async yd => {
       const meta = yd.data(), year = meta.year;
-      let hunts = [];
-      for (let ci = 0; ci < (meta.chunkCount || 1); ci++) {
-        const cd = await db.collection('years').doc(year).collection('chunks').doc(String(ci)).get();
-        if (cd.exists) hunts = hunts.concat(JSON.parse(cd.data().hunts || '[]'));
+      const chunkCount = meta.chunkCount || 1;
+      const chunkPromises = [];
+      for (let ci = 0; ci < chunkCount; ci++) {
+        chunkPromises.push(db.collection('years').doc(year).collection('chunks').doc(String(ci)).get());
       }
-      const hd = await db.collection('years').doc(year).collection('harvest').doc('all').get();
-      const sd = await db.collection('years').doc(year).collection('seasons').doc('all').get();
-      const cd2 = await db.collection('years').doc(year).collection('choices').doc('all').get();
-      const pd = await db.collection('years').doc(year).collection('premium').doc('all').get();
+      const [chunkDocs, hd, sd, cd2, pd] = await Promise.all([
+        Promise.all(chunkPromises),
+        db.collection('years').doc(year).collection('harvest').doc('all').get(),
+        db.collection('years').doc(year).collection('seasons').doc('all').get(),
+        db.collection('years').doc(year).collection('choices').doc('all').get(),
+        db.collection('years').doc(year).collection('premium').doc('all').get()
+      ]);
+      let hunts = [];
+      for (const cd of chunkDocs) if (cd.exists) hunts = hunts.concat(JSON.parse(cd.data().hunts || '[]'));
       out[year] = { hunts, harvestData: hd.exists ? JSON.parse(hd.data().data || '{}') : {},
         seasons: sd.exists ? JSON.parse(sd.data().data || '{}') : {},
         choices: cd2.exists ? JSON.parse(cd2.data().data || '{}') : {},
         premium: pd.exists ? JSON.parse(pd.data().data || '{}') : {}, files: {} };
-    }
+      // Let the caller render this year as soon as it lands (progressive load)
+      if (onYear) { try { onYear(year, out[year]); } catch(e){} }
+    }));
     return out;
   } catch(e) { console.warn('[FB] Load error:', e); return null; }
 }
@@ -2595,7 +2605,17 @@ async function init(firstRun){
   const before=snapshot();
   fbLoadPublicLand().then(()=>renderCards());
   setSyncNote('','Checking the cloud for new hunt data…');
-  const data=await fbLoad();
+  // Progressive: as each year's data arrives, drop it in and render — so a
+  // first-time visitor (no cached copy) sees hunts appear as soon as the first
+  // year loads, rather than waiting for every year to finish.
+  let shownEarly=false;
+  const data=await fbLoad((year, yd)=>{
+    S.years[year]={hunts:yd.hunts,harvestData:yd.harvestData,seasons:yd.seasons||{},choices:yd.choices||{},premium:yd.premium||{},files:S.years[year]?.files||{}};
+    applyHarvest(year);
+    if(!S.selectedYear){ S.selectedYear=yList()[0]; S.pendingYear=S.selectedYear; }
+    // only auto-render early if the user had nothing to look at yet
+    if(firstRunEmpty(before)){ shownEarly=true; renderAll(); }
+  });
   if(data && Object.keys(data).length){
     for(const y of Object.keys(data)){
       const localFiles=S.years[y]?.files||{};
