@@ -195,7 +195,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v6.7</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v6.8</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -2094,6 +2094,48 @@ function parseTableText(txt){
                              : l.split(/\t|\s{2,}/).map(c=>c.trim()).filter(Boolean))
     .filter(r=>r.length);
 }
+// Smart parser for ODFW controlled-hunt tables copied straight from the PDF,
+// where columns are separated only by single spaces (so a dumb splitter fails).
+// Uses structural anchors: hunt-# at line start, a date-range for the season,
+// "One/Two…" for the bag limit, and a trailing "tags applicants" pair. Rejoins
+// rows the PDF wrapped across lines. Falls back to [] if it doesn't look like
+// one of these tables, so callers can try the simple parser instead.
+function parseOdfwTable(txt){
+  const HUNT_RE=/^([A-Z]{0,3}\d{1,3}[A-Z]?(?:-\d)?)\s/;
+  const SEASON_RE=/((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+\d+.*?-\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+\d+(?:,\s*\d{4})?)/;
+  const TAIL_RE=/^([\d,]+)\s+(NEW|[\d,]+)$/;
+  const BAG_RE=/\b(One\b.*|Two\b.*)/;
+  const lines=txt.split('\n');
+  const rowsRaw=[]; let buf='';
+  for(const ln of lines){
+    if(/HUNT\s*#/i.test(ln)||ln.trim().toUpperCase()==='APPLICANTS'||!ln.trim()) continue;
+    if(HUNT_RE.test(ln)){ if(buf) rowsRaw.push(buf); buf=ln.trim(); }
+    else if(buf) buf+=' '+ln.trim();
+  }
+  if(buf) rowsRaw.push(buf);
+  const parsed=[];
+  for(const r of rowsRaw){
+    const hm=r.match(HUNT_RE); if(!hm) continue;
+    const hunt=hm[1]; const rest=r.slice(hunt.length).trim();
+    const sm=rest.match(SEASON_RE);
+    const season=sm?sm[1].trim():'';
+    const before=sm?rest.slice(0,sm.index).trim():rest;
+    const after=sm?rest.slice(sm.index+sm[0].length).trim():'';
+    const tm=after.match(TAIL_RE);
+    const tags=tm?tm[1]:after; const apps=tm?tm[2]:'';
+    const bm=before.match(BAG_RE);
+    const name=bm?before.slice(0,bm.index).trim():before;
+    const bag=bm?bm[1].trim():'';
+    parsed.push([hunt,name,bag,season,tags,apps]);
+  }
+  // Only claim success if it really parsed like a hunt table (most rows have a
+  // hunt code AND either a season or a tags value).
+  const good=parsed.filter(r=>r[0]&&(r[3]||r[4])).length;
+  if(parsed.length>=2 && good>=parsed.length*0.6){
+    return [['HUNT #','HUNT NAME','BAG LIMIT','OPEN SEASON','2026 TAGS','2025 1ST CHOICE APPLICANTS'], ...parsed];
+  }
+  return [];
+}
 async function renderSynopsis(){
   const box = $('#synBody'); if(!box) return;
   const s = await fetchSynopsis();
@@ -2196,8 +2238,9 @@ function openManualEditor(m){
         <textarea id="manTextIn" style="width:100%;min-height:110px;font-size:.9rem;padding:10px;border-radius:10px" placeholder="Type the change in your own words.">${esc(m.text||'')}</textarea>
       </div>
       <div id="manTableWrap" style="${m.table?'':'display:none'}">
-        <p class="help">One row per line, columns split by 2+ spaces, a tab, or a | bar. First row is the header.</p>
-        <textarea id="manTableIn" style="width:100%;min-height:140px;font-size:.85rem;padding:10px;border-radius:10px;font-family:monospace" placeholder="Hunt #  |  Hunt Name  |  Tags\nAD101  |  Aldrich 01  |  1,100">${esc(curTable)}</textarea>
+        <p class="help">Paste rows here. From the PDF (single-space columns)? Tap <b>Auto-split</b>. Or separate columns yourself with a | bar.</p>
+        <textarea id="manTableIn" style="width:100%;min-height:140px;font-size:.85rem;padding:10px;border-radius:10px;font-family:monospace" placeholder="Paste rows from the PDF, then tap Auto-split below.">${esc(curTable)}</textarea>
+        <button class="btn" id="manAutoSplit" style="width:100%;margin-top:8px;font-size:.85rem;min-height:44px">⚡ Auto-split ODFW table</button>
         <div id="manTablePreview" style="margin-top:10px"></div>
       </div>
     </div>
@@ -2234,6 +2277,14 @@ function openManualEditor(m){
   const tIn=$('#manTableIn'), prev=$('#manTablePreview');
   const renderPrev=()=>{ const rows=parseTableText(tIn.value); prev.innerHTML= rows.length?('<p class="help">Preview:</p>'+synTableHtml(rows)):''; };
   if(tIn){ tIn.oninput=renderPrev; renderPrev(); }
+  const autoBtn=$('#manAutoSplit');
+  if(autoBtn) autoBtn.onclick=()=>{
+    const rows=parseOdfwTable(tIn.value);
+    if(!rows.length){ toast("Couldn't auto-detect columns — separate them with | bars instead",true); return; }
+    tIn.value=rows.map(r=>r.join(' | ')).join('\n');
+    renderPrev();
+    toast('Split into '+(rows.length-1)+' rows ✓');
+  };
 
   $('#manSave').onclick=async()=>{
     const mode=(modeRow.querySelector('[data-manmode].on')||{dataset:{}}).dataset.manmode||'text';
@@ -2279,8 +2330,9 @@ function openSynEditor(id, e){
         <textarea id="synTextIn" style="width:100%;min-height:100px;font-size:.9rem;padding:10px;border-radius:10px" placeholder="e.g. Thermal and other night-vision optics are prohibited for hunting or scouting (trail cameras are still allowed).">${esc(curText)}</textarea>
       </div>
       <div id="synTableWrap" style="${ov.table?'':'display:none'}">
-        <p class="help">Paste the table — one row per line, columns separated by 2+ spaces, a tab, or a | bar. First row is the header.</p>
-        <textarea id="synTableIn" style="width:100%;min-height:140px;font-size:.85rem;padding:10px;border-radius:10px;font-family:monospace" placeholder="Hunt #  |  Hunt Name  |  Tags\nAD101  |  Aldrich 01  |  1,100\nCR101  |  Crooked River 01  |  851">${esc(curTable)}</textarea>
+        <p class="help">Paste the table rows here. If you paste straight from the PDF (columns look like single spaces), tap <b>Auto-split ODFW table</b> and it figures out the columns. Or separate columns yourself with a | bar.</p>
+        <textarea id="synTableIn" style="width:100%;min-height:140px;font-size:.85rem;padding:10px;border-radius:10px;font-family:monospace" placeholder="Paste rows from the PDF, e.g.\nAD101 Aldrich 01 One buck with visible antler Oct. 3 - Oct. 14 1,100 NEW\n\n…then tap Auto-split ODFW table below.">${esc(curTable)}</textarea>
+        <button class="btn" id="synAutoSplit" style="width:100%;margin-top:8px;font-size:.85rem;min-height:44px">⚡ Auto-split ODFW table</button>
         <div id="synTablePreview" style="margin-top:10px"></div>
       </div>
     </div>
@@ -2303,6 +2355,16 @@ function openSynEditor(id, e){
   const tIn=$('#synTableIn'), prev=$('#synTablePreview');
   const renderPrev=()=>{ const rows=parseTableText(tIn.value); prev.innerHTML= rows.length?('<p class="help">Preview:</p>'+synTableHtml(rows)):''; };
   if(tIn){ tIn.oninput=renderPrev; renderPrev(); }
+  // Auto-split: run the smart ODFW parser and replace the textarea with clean
+  // bar-delimited rows the user can still eyeball/tweak before saving.
+  const autoBtn=$('#synAutoSplit');
+  if(autoBtn) autoBtn.onclick=()=>{
+    const rows=parseOdfwTable(tIn.value);
+    if(!rows.length){ toast("Couldn't auto-detect columns — separate them with | bars instead",true); return; }
+    tIn.value=rows.map(r=>r.join(' | ')).join('\n');
+    renderPrev();
+    toast('Split into '+(rows.length-1)+' rows ✓');
+  };
 
   $('#synSave').onclick=async()=>{
     const mode=(modeRow.querySelector('[data-synmode].on')||{dataset:{}}).dataset.synmode||'text';
