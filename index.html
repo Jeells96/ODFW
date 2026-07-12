@@ -195,7 +195,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.6</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.8</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -339,7 +339,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
   <div class="panel"><div class="pbody">
     <div class="steph"><span class="stepnum">3</span> Put the file in the matching box</div>
-    <p class="help" style="margin-bottom:12px">Tap the box that matches your file, choose the file, and wait for the green check. It saves to the cloud by itself — everyone in the family gets it.</p>
+    <p class="help" style="margin-bottom:12px">Tap the box that matches your file, choose the file, and wait for the green check. It saves to the cloud by itself — everyone gets it.</p>
     <label class="upzone" data-key="deerPoints"><input type="file" accept=".xlsx,.xls" data-target="deerPoints"><div class="uzl">Deer — Draw Report</div><div class="uzh">Preference Point Draw Report (XLSX)</div><div class="uzf" data-file="deerPoints"></div></label>
     <label class="upzone" data-key="elkPoints"><input type="file" accept=".xlsx,.xls" data-target="elkPoints"><div class="uzl">Elk — Draw Report</div><div class="uzh">Preference Point Draw Report (XLSX)</div><div class="uzf" data-file="elkPoints"></div></label>
     <label class="upzone" data-key="deerChoices"><input type="file" accept=".xlsx,.xls" data-target="deerChoices"><div class="uzl">Deer — Hunt Choice Report</div><div class="uzh">"Applicants by Hunt Choice" (XLSX)</div><div class="uzf" data-file="deerChoices"></div></label>
@@ -1162,7 +1162,7 @@ async function handleFile(target, file) {
     saveLocal(); renderAll();
     banner('', 'Saving to cloud…', true);
     const ok = await fbSave(year, yd.hunts, yd.harvestData);
-    banner(ok?'ok':'err', ok?'Saved to cloud ✓ — the whole family will see this data':'Cloud save failed — data is only on this device', false);
+    banner(ok?'ok':'err', ok?'Saved to cloud ✓ — everyone will see this data':'Cloud save failed — data is only on this device', false);
   } catch(e) { console.error(e); toast('Problem with that file: '+e.message, true); }
 }
 
@@ -1497,12 +1497,12 @@ function renderReqs(sec, h, key, items, offline){
     <button class="bmini dan" data-delreq="${i}" style="min-height:34px;padding:2px 8px;flex-shrink:0">✕</button></div>`).join('');
   sec.innerHTML=`<h3>Requirements &amp; special rules</h3>
     ${auto.length||items.length?autoHtml+manHtml:'<p class="help">No special requirements on record for this hunt.</p>'}
-    ${offline?'<p class="help">Couldn\'t reach the cloud — family-added rules may be missing.</p>':''}
+    ${offline?'<p class="help">Couldn\'t reach the cloud — saved rules may be missing.</p>':''}
     <p class="help" style="margin-top:10px">Always double-check the current Oregon Big Game Regulations and land-manager rules (Forest Service / BLM) before your hunt.</p>
     <button class="linkbtn" id="reqAddBtn" style="padding-left:0">+ Add a rule everyone should know</button>
     <div id="reqAddBox" style="display:none">
       <textarea id="reqText" placeholder="e.g. Eagle Cap Wilderness — certified weed-free feed required for stock; pack out all waste" style="width:100%;min-height:74px;font-size:1rem;font-family:inherit;background:var(--card2);color:var(--text);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px"></textarea>
-      <button class="btn primary" id="reqSave" style="width:100%;margin-top:8px">Save for the whole family</button>
+      <button class="btn primary" id="reqSave" style="width:100%;margin-top:8px">Save for everyone</button>
     </div>`;
   sec.querySelectorAll('[data-delreq]').forEach(b=>b.onclick=()=>{
     confirm2('Remove this rule for everyone?', async ()=>{
@@ -2193,56 +2193,47 @@ function parseOdfwTable(txt){
   }
   return [];
 }
-// ── Data sources view: links to every ODFW table the app pulls from, exactly
-// what the scraper is fed. A year picker builds the direct report links so you
-// can hand-verify any number. Draw + harvest reports are year-specific PDFs
-// hosted by ODFW; the season/regs tables and synopsis are single live pages.
-window._dataYear = null;
+// ── Data sources view: links to the exact ODFW pages the scraper reads from.
+// The scraper (fetch-odfw.mjs) never hardcodes a PDF URL — it opens ODFW's
+// stable landing pages and follows whatever links are listed there, so it keeps
+// working even when ODFW moves files. This tab uses the SAME landing pages, so
+// it's just as reliable: every year's report is one tap away on ODFW's page,
+// and nothing here goes stale. (These URLs mirror the scraper's HARVEST_PAGE /
+// DRAW_PAGE / SEASON_PAGES — kept in sync by hand, not imported.)
+const SRC_HARVEST_PAGE = 'https://myodfw.com/articles/big-game-hunting-harvest-statistics';
+const SRC_DRAW_PAGE    = 'https://myodfw.com/articles/point-summary-reports';
+const SRC_DEER_SEASONS = 'https://www.eregulations.com/oregon/hunting/buck-deer-seasons';
+const SRC_ELK_SEASONS  = 'https://www.eregulations.com/oregon/hunting/elk-seasons';
 function renderDataSources(){
   const box = $('#dataSourcesBody'); if(!box) return;
-  const years = yList();
-  if(!window._dataYear) window._dataYear = years[0] || String(new Date().getFullYear());
-  const y = window._dataYear;
-  // ODFW's year-specific report URLs (the auto-updater discovers these off the
-  // landing pages; here we link both the landing page AND the direct file so
-  // you land exactly on the table).
-  const drawLanding = 'https://myodfw.com/articles/point-summary-reports';
-  const harvestLanding = 'https://myodfw.com/articles/big-game-hunting-harvest-statistics';
-  const deerHarvest = `https://dfw.state.or.us/resources/hunting/big_game/controlled_hunts/docs/hunts_summary_reports/${y}/Buck_Deer_Any_Legal_Weapon_Harvest_Summary.pdf`;
-  const elkHarvest = `https://dfw.state.or.us/resources/hunting/big_game/controlled_hunts/docs/hunts_summary_reports/${y}/Elk_Any_Legal_Weapon_Harvest_Summary.pdf`;
   const synUrl = (SYN && SYN.url) || 'https://www.eregulations.com/oregon/hunting';
-
-  const yearBtns = years.map(yr=>`<button class="hsel ${yr===y?'on':''}" data-dyear="${yr}" style="min-width:74px">${yr}</button>`).join('');
 
   const card = (title, desc, links) => `
     <div class="sec" style="margin-bottom:14px">
       <h3>${title}</h3>
       <p class="help" style="margin-bottom:10px">${desc}</p>
-      ${links.map(l=>`<a class="srcbtn" style="margin-bottom:8px" href="${l.url}" target="_blank" rel="noopener">${l.label} ↗</a>`).join('')}
+      ${links.filter(l=>l.url).map(l=>`<a class="srcbtn" style="margin-bottom:8px" href="${l.url}" target="_blank" rel="noopener">${l.label} ↗</a>`).join('')}
     </div>`;
 
   box.innerHTML = `
-    <p class="help" style="margin-bottom:8px">Showing report links for:</p>
-    <div class="hselrow" style="flex-wrap:wrap;gap:6px;margin-bottom:16px">${yearBtns}</div>
+    <p class="help" style="margin-bottom:14px">These are the exact ODFW pages the app pulls its data from — the same pages the auto-updater reads. Each page lists every year's report, so tap through and pick the year you want to verify. Because these are ODFW's own index pages (not direct file links), they don't break when ODFW moves files around.</p>
 
     ${card('Harvest statistics',
-      `Hunters, deer/elk taken, antler-class breakdown, and success %. This is the "how hunters did" data. ODFW posts a PDF per species per year — these links go straight to the ${y} tables.`,
-      [ {label:`${y} Buck Deer harvest summary (PDF)`, url:deerHarvest},
-        {label:`${y} Elk harvest summary (PDF)`, url:elkHarvest},
-        {label:'All harvest statistics (landing page)', url:harvestLanding} ])}
+      `Hunters, deer/elk taken, antler-class breakdown, and success % — the "how hunters did" data. This page lists every report: Any Legal Weapon, Archery, and Muzzleloader, for both deer and elk, by year.`,
+      [ {label:'ODFW harvest statistics — all years &amp; weapon types', url:SRC_HARVEST_PAGE} ])}
 
     ${card('Draw &amp; point summaries',
-      `Applicants, tags, draw odds, and points-to-draw by point level. This is the "your odds" and "draw results" data. ODFW lists each year's report on the landing page — open it and pick the ${y} deer/elk/pronghorn summary.`,
-      [ {label:`Point summary reports (find ${y})`, url:drawLanding} ])}
+      `Applicants, tags, draw odds, and points-to-draw by point level — the "your odds" and "draw results" data. Lists the Preference Point Draw Report and Applicants by Hunt Choice for each year and series.`,
+      [ {label:'ODFW point summary reports — all years', url:SRC_DRAW_PAGE} ])}
 
     ${card('Season dates, bag limits &amp; tags',
-      `The regulations tables that power season dates, bag limits, the controlled-tag counts, and the Spike-only / Whitetail labels. These are live pages (current edition).`,
-      [ {label:'Buck deer seasons &amp; controlled hunt tables', url:'https://www.eregulations.com/oregon/hunting/buck-deer-seasons'},
-        {label:'Elk seasons &amp; controlled hunt tables', url:'https://www.eregulations.com/oregon/hunting/elk-seasons'},
+      `The regulations tables behind season dates, bag limits, controlled-tag counts, and the Spike-only / Whitetail labels. Live pages for the current edition.`,
+      [ {label:'Buck deer seasons &amp; controlled hunt tables', url:SRC_DEER_SEASONS},
+        {label:'Elk seasons &amp; controlled hunt tables', url:SRC_ELK_SEASONS},
         {label:'All Oregon hunting regulations', url:'https://www.eregulations.com/oregon/hunting'} ])}
 
     ${card('Big Game Synopsis (year-over-year changes)',
-      `The full regulations synopsis PDF. Yellow-highlighted text marks what changed from last year — this is the source for the Synopsis view's change list.`,
+      `The full regulations synopsis PDF. Yellow-highlighted text marks what changed from last year — the source for the Synopsis view's change list.`,
       [ {label:'Open the Big Game Synopsis (PDF)', url:esc(synUrl)} ])}
 
     ${card('Unit &amp; hunt-area boundary maps',
@@ -2251,9 +2242,7 @@ function renderDataSources(){
         {label:'Eastern Oregon unit map', url:'https://www.eregulations.com/oregon/hunting/eastern-oregon-unit-map'},
         {label:'ODFW interactive hunting map', url:'https://www.oregonhuntingmap.com'} ])}
 
-    <p class="help" style="margin-top:4px">Direct harvest-PDF links follow ODFW's file naming and usually work for recent seasons. If a year's file 404s, ODFW hasn't posted it yet (or renamed it) — use the landing-page link and pick the year there.</p>`;
-
-  box.querySelectorAll('[data-dyear]').forEach(b=>b.onclick=()=>{ window._dataYear=b.dataset.dyear; renderDataSources(); });
+    <p class="help" style="margin-top:4px">Every link points to an ODFW index page that lists all available years. This is the same approach the auto-updater uses to find data, so these links stay reliable year over year.</p>`;
 }
 
 async function renderSynopsis(){
