@@ -195,7 +195,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.1</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.2</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -1410,33 +1410,46 @@ async function showUnitMap(h){
   $('#mapSheet').classList.add('open');
   $('#mapSheet').scrollTop=0;
   document.body.style.overflow='hidden';
-  // Elk hunts: the elk unit map. Deer hunts: the deer map, with an optional
-  // low-opacity elk-map overlay so you can see which old WMU a deer area was.
-  const baseMap = sp==='elk' ? 'map-elk.png' : 'map-deer.png';
-  const overlayToggle = sp==='deer'
-    ? `<button class="btn" id="elkOverlayBtn" style="width:100%;margin-bottom:12px;border-color:var(--gold);color:var(--gold)">👁 Overlay old elk units</button>`
-    : '';
+  // Two ways to compare deer vs elk units:
+  //  • Swap: flip the whole map between deer and elk (same frame, clean, sharp)
+  //  • Overlay: faint red elk unit LINES over the deer map (boundaries only)
+  // State starts on the hunt's own species. Overlay only offered on deer hunts.
   $('#mapBody').innerHTML = `
-    ${sp==='deer' ? '<p class="help" style="margin-bottom:10px">Oregon deer hunt map. Tap the button to fade the old elk-unit map on top and see what unit this area used to be.</p>' : '<p class="help" style="margin-bottom:10px">Oregon elk unit map.</p>'}
-    ${overlayToggle}
-    <div id="mapStack" style="position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;line-height:0">
-      <img src="${baseMap}" alt="${sp} map" style="width:100%;display:block">
-      <img id="elkOverlayImg" src="map-elk.png" alt="elk unit overlay" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;transition:opacity .2s;pointer-events:none">
+    <p class="help" style="margin-bottom:10px">Pinch to zoom. ${sp==='deer'?'Swap to the elk map, or fade elk unit lines on top, to see what unit this area used to be.':'Swap to the deer map to compare.'}</p>
+    <div class="hselrow" id="mapSwapRow" style="margin-bottom:8px">
+      <button class="hsel ${sp==='deer'?'on':''}" data-mapshow="deer">Deer units</button>
+      <button class="hsel ${sp==='elk'?'on':''}" data-mapshow="elk">Elk units</button>
     </div>
-    <p class="help" style="margin-top:10px">Official ODFW ${sp} map. For planning — the regulations' written boundary descriptions are the legal boundary.</p>
+    <button class="btn" id="elkLineBtn" style="width:100%;margin-bottom:12px;border-color:var(--gold);color:var(--gold)">✏️ Fade elk unit lines on top</button>
+    <div id="mapStack" style="position:relative;border:1px solid var(--line);border-radius:12px;overflow:auto;background:#fff;line-height:0;-webkit-overflow-scrolling:touch">
+      <img id="mapBase" src="map-${sp}.png" alt="${sp} unit map" style="width:100%;display:block">
+      <img id="elkLineOverlay" src="map-elk-lines.png" alt="elk unit lines" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;transition:opacity .2s;pointer-events:none">
+    </div>
+    <p class="help" style="margin-top:10px">Official ODFW maps, redrawn for clarity. For planning — the regulations' written boundary descriptions are the legal boundary.</p>
     <a class="srcbtn" style="margin-top:10px" href="https://www.oregonhuntingmap.com" target="_blank" rel="noopener">ODFW interactive hunting map ↗</a>`;
-  const btn=$('#elkOverlayBtn'), ov=$('#elkOverlayImg');
-  if(btn&&ov){
-    let on=false;
-    btn.onclick=()=>{
-      on=!on;
-      ov.style.opacity = on ? '0.45' : '0';
-      btn.style.background = on ? 'var(--gold)' : '';
-      btn.style.color = on ? '#1c2418' : 'var(--gold)';
-      btn.style.fontWeight = on ? '700' : '';
-      btn.textContent = on ? '👁 Hide elk-unit overlay' : '👁 Overlay old elk units';
-    };
+  const base=$('#mapBase'), ov=$('#elkLineOverlay'), lineBtn=$('#elkLineBtn');
+  const swapRow=$('#mapSwapRow');
+  // swap between deer/elk full maps
+  swapRow.querySelectorAll('[data-mapshow]').forEach(b=>b.onclick=()=>{
+    swapRow.querySelectorAll('[data-mapshow]').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+    const show=b.dataset.mapshow;
+    base.src=`map-${show}.png`;
+    // elk-line overlay only makes sense over the deer map; auto-hide on elk
+    if(show==='elk'){ ov.style.opacity='0'; setLineBtn(false); lineBtn.style.display='none'; }
+    else lineBtn.style.display='';
+  });
+  // faint elk-line overlay toggle
+  let lineOn=false;
+  function setLineBtn(on){
+    lineOn=on;
+    ov.style.opacity = on ? '0.7' : '0';
+    lineBtn.style.background = on ? 'var(--gold)' : '';
+    lineBtn.style.color = on ? '#1c2418' : 'var(--gold)';
+    lineBtn.style.fontWeight = on ? '700' : '';
+    lineBtn.textContent = on ? '✏️ Hide elk unit lines' : '✏️ Fade elk unit lines on top';
   }
+  lineBtn.onclick=()=>setLineBtn(!lineOn);
+  if(sp==='elk') lineBtn.style.display='none';
 }
 
 // Requirements & special rules — ODFW's fine print from the regs tables,
