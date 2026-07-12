@@ -195,7 +195,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v6.5</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v6.6</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -2176,11 +2176,11 @@ function openManualEditor(m){
   $('#shBody').innerHTML = `
     <div class="sec">
       <h3>Where is it?</h3>
-      <p class="help">PDF page number (so the card can link to it). Optional but handy.</p>
+      <p class="help">PDF page number — enables the link to that page.</p>
       <input id="manPage" type="tel" inputmode="numeric" value="${esc(String(m.p||''))}" placeholder="e.g. 21" style="width:100%;font-size:1rem;padding:10px;border-radius:10px">
+      <div id="manPdfLinkWrap" style="margin-top:8px"></div>
       <p class="help" style="margin-top:10px">Section heading (optional — groups it in the list).</p>
       <input id="manHead" value="${esc(m.h||'')}" placeholder="e.g. Prohibited Methods" style="width:100%;font-size:1rem;padding:10px;border-radius:10px">
-      ${m.p?`<button class="srcbtn" id="manOpenPdf" style="margin-top:8px">Open pg ${esc(String(m.p))} in the PDF ↗</button>`:''}
     </div>
     <div class="sec">
       <h3>What changed?</h3>
@@ -2204,12 +2204,22 @@ function openManualEditor(m){
   $('#sheet').classList.add('open'); $('#sheet').scrollTop=0;
   document.body.style.overflow='hidden';
 
-  const openPdf=$('#manOpenPdf');
-  if(openPdf) openPdf.onclick=()=>{
-    const base=(SYN&&SYN.url)||''; if(!base){ toast('No synopsis PDF link yet',true); return; }
-    const a=document.createElement('a'); a.href=base+'#page='+m.p; a.target='odfwSynPdf'; a.rel='noopener';
-    document.body.appendChild(a); a.click(); a.remove();
+  // Live PDF link that updates as you type the page number — a real anchor
+  // (native tab handling, reliable on iOS) rather than a scripted click.
+  const pageIn=$('#manPage'), linkWrap=$('#manPdfLinkWrap');
+  const renderPdfLink=()=>{
+    const base=(SYN&&SYN.url)||'';
+    const pg=parseInt(pageIn.value,10);
+    if(base && pg>0){
+      linkWrap.innerHTML=`<a class="srcbtn" href="${esc(base)}#page=${pg}" target="_blank" rel="noopener">Open pg ${pg} in the PDF ↗</a>`;
+    } else if(!base){
+      linkWrap.innerHTML=`<p class="help" style="color:var(--bad)">No synopsis PDF stored yet — run the data update once to enable page links.</p>`;
+    } else {
+      linkWrap.innerHTML=`<p class="help">Enter a page number above to get a link to it.</p>`;
+    }
   };
+  if(pageIn){ pageIn.oninput=renderPdfLink; renderPdfLink(); }
+
   const modeRow=$('#manModeRow');
   modeRow.querySelectorAll('[data-manmode]').forEach(b=>b.onclick=()=>{
     modeRow.querySelectorAll('[data-manmode]').forEach(x=>x.classList.remove('on')); b.classList.add('on');
@@ -2250,8 +2260,9 @@ function openSynEditor(id, e){
     <div class="sec">
       <h3>Original (from the PDF)</h3>
       <p class="plain" style="font-size:.82rem;line-height:1.5;opacity:.75">${esc(orig)}</p>
-      <button class="srcbtn" id="synOpenPdf" style="margin-top:8px">Open pg ${e.p} in the PDF ↗</button>
-      <p class="help" style="margin-top:6px">Opens in a second tab you can flip back and forth to. Copy the real text, switch back here, and paste it below.</p>
+      ${(SYN&&SYN.url) ? `<a class="srcbtn" style="margin-top:8px" href="${esc(SYN.url)}#page=${e.p||1}" target="_blank" rel="noopener">Open pg ${e.p||'?'} in the PDF ↗</a>
+      <p class="help" style="margin-top:6px">Opens in a new tab — copy the real text there, switch back, and paste below.</p>`
+      : `<p class="help" style="margin-top:8px;color:var(--bad)">No synopsis PDF link is stored yet, so I can't link to the page. Run the data update once, then this will work.</p>`}
     </div>
     <div class="sec">
       <h3>Show this change as…</h3>
@@ -2276,20 +2287,6 @@ function openSynEditor(id, e){
     </div>`;
   $('#sheet').classList.add('open'); $('#sheet').scrollTop=0;
   document.body.style.overflow='hidden';
-
-  // Open the PDF page. Reusing a named tab with only a changing #fragment can
-  // make Safari treat it as a same-page jump and not navigate, and a stale
-  // window handle can silently no-op — so we click a fresh anchor each time,
-  // with the page in the fragment. Opens/reuses the 'odfwSynPdf' tab.
-  const pdfBtn=$('#synOpenPdf');
-  if(pdfBtn) pdfBtn.onclick=()=>{
-    const base=(SYN&&SYN.url)||'';
-    if(!base){ toast('No synopsis PDF link yet',true); return; }
-    const url=base+'#page='+e.p;
-    const a=document.createElement('a');
-    a.href=url; a.target='odfwSynPdf'; a.rel='noopener';
-    document.body.appendChild(a); a.click(); a.remove();
-  };
 
   const modeRow=$('#synModeRow');
   modeRow.querySelectorAll('[data-synmode]').forEach(b=>b.onclick=()=>{
