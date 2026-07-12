@@ -195,7 +195,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v6.3</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v6.4</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -2156,7 +2156,8 @@ function openSynEditor(id, e){
     <div class="sec">
       <h3>Original (from the PDF)</h3>
       <p class="plain" style="font-size:.82rem;line-height:1.5;opacity:.75">${esc(orig)}</p>
-      <a class="srcbtn" style="margin-top:8px" href="${esc((SYN&&SYN.url)||'')}#page=${e.p}" target="_blank" rel="noopener">Open pg ${e.p} in the PDF to copy the real text ↗</a>
+      <button class="srcbtn" id="synOpenPdf" style="margin-top:8px">Open pg ${e.p} in the PDF ↗</button>
+      <p class="help" style="margin-top:6px">Opens in a second tab you can flip back and forth to. Copy the real text, switch back here, and paste it below.</p>
     </div>
     <div class="sec">
       <h3>Show this change as…</h3>
@@ -2181,6 +2182,16 @@ function openSynEditor(id, e){
     </div>`;
   $('#sheet').classList.add('open'); $('#sheet').scrollTop=0;
   document.body.style.overflow='hidden';
+
+  // Open the PDF in ONE persistent tab (named 'odfwSynPdf') so flipping
+  // between cards reuses the same tab and re-navigates it to the new page,
+  // instead of piling up tabs and re-downloading each time.
+  const pdfBtn=$('#synOpenPdf');
+  if(pdfBtn) pdfBtn.onclick=()=>{
+    const url=((SYN&&SYN.url)||'')+'#page='+e.p;
+    const w=window.open(url,'odfwSynPdf');
+    try{ if(w) w.focus(); }catch(_){}
+  };
 
   const modeRow=$('#synModeRow');
   modeRow.querySelectorAll('[data-synmode]').forEach(b=>b.onclick=()=>{
