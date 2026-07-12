@@ -537,25 +537,48 @@ async function setMeta(year, key, fileName, huntCount) {
 // synopsis link on eregulations.com changes (i.e., a new edition), so the
 // heavy PDF work happens about once a year.
 const REGS_HUB = 'https://www.eregulations.com/oregon/hunting';
+// Known-good direct URL as a last resort if link discovery fails (updated each
+// year — see the "latest edition link" log line to refresh).
+const SYNOPSIS_FALLBACK = 'https://www.eregulations.com/assets/docs/resources/OR/26ORHD_LR3.pdf';
 async function updateSynopsis(details) {
   const res = await fetchRetry(REGS_HUB, { headers: UA });
   if (!res.ok) throw new Error(`regs hub HTTP ${res.status}`);
   const html = await res.text();
-  // the synopsis PDF lives under /assets/docs/resources/OR/, e.g. 26ORHD_LR3.pdf
+
+  // Collect every PDF URL on the page — from anchors AND from raw text/JSON,
+  // since eRegulations often loads the synopsis link via embedded data rather
+  // than a plain <a>. Absolute-ise relative paths against the hub origin.
+  const origin = 'https://www.eregulations.com';
+  const urls = new Set();
+  for (const a of anchors(html, REGS_HUB)) if (/\.pdf(\?|$)/i.test(a.url)) urls.add(a.url);
+  for (const m of html.matchAll(/https?:\\?\/\\?\/[^"'\s\\)]+?\.pdf/gi)) urls.add(m[0].replace(/\\/g, ''));
+  for (const m of html.matchAll(/["'](\/[^"'\s]+?\.pdf)["']/gi)) urls.add(origin + m[1]);
+  for (const m of html.matchAll(/(\/assets\/docs\/resources\/OR\/[^"'\s\\]+?\.pdf)/gi)) urls.add(origin + m[1].replace(/\\/g, ''));
+
+  const all = [...urls];
+  console.log(`[synopsis] ${all.length} PDF link(s) on hub: ${all.slice(0, 12).map(u => u.split('/').pop()).join(', ') || 'none'}`);
+
+  // Prefer big-game synopsis PDFs: filename like NNORHD… (HD = Hunting Digest)
+  // or containing big-game/synopsis hints. Pick the newest 2-digit year.
   let best = null;
-  for (const a of anchors(html, REGS_HUB)) {
-    const m = a.url.match(/\/assets\/docs\/resources\/OR\/(\d{2})ORHD[^"'?]*\.pdf/i);
-    if (m) { const yr = 2000 + parseInt(m[1], 10); if (!best || yr > best.year) best = { url: a.url, year: yr }; }
+  const scoreYear = fn => { const m = fn.match(/(\d{2})OR/i) || fn.match(/20(\d{2})/); return m ? 2000 + parseInt(m[1].length === 4 ? m[1].slice(2) : m[1], 10) : 0; };
+  for (const u of all) {
+    const fn = decodeURIComponent(u.split('/').pop() || '');
+    const isBigGame = /OR?HD/i.test(fn) || /big.?game|synopsis|hunting/i.test(fn) || /\/OR\//.test(u);
+    const isFishing = /fish|angl|shellfish|crab/i.test(fn);
+    if (!isBigGame || isFishing) continue;
+    const yr = scoreYear(fn);
+    if (!best || yr > best.year) best = { url: u, year: yr || null };
   }
+  // Last resort: if nothing matched but there's exactly one PDF, or use the
+  // hardcoded known URL so a first run still works.
+  if (!best && all.length === 1) best = { url: all[0], year: scoreYear(all[0].split('/').pop()) || null };
   if (!best) {
-    // fall back: any OR resources pdf mentioning synopsis-ish text
-    for (const a of anchors(html, REGS_HUB)) {
-      if (/\/assets\/docs\/resources\/OR\/[^"']*\.pdf/i.test(a.url) && /synopsis|regulation|big game/i.test(a.text)) { best = { url: a.url, year: null }; break; }
-    }
+    console.log('[synopsis] no synopsis PDF link matched — using known fallback URL');
+    best = { url: SYNOPSIS_FALLBACK, year: 2026 };
   }
-  if (!best) { console.log('[synopsis] no synopsis PDF link found on regs hub'); details.push('synopsis link not found'); return 0; }
   const fname = decodeURIComponent(best.url.split('/').pop() || '');
-  console.log(`[synopsis] latest edition link: ${fname}`);
+  console.log(`[synopsis] latest edition link: ${fname}  (${best.url})`);
 
   const meta = await fs_('GET', 'meta/synopsis');
   const prevName = meta ? gv(meta.fields?.fileName) : null;
