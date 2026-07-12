@@ -294,7 +294,7 @@ async function updateSeasons(details, getYear) {
 }
 
 // ═══ Applicants by Hunt Choice (2nd/3rd-choice demand) ════════════════════════
-function parseChoices(buf) {
+function parseChoices(buf, minRows = 20) {
   const wb = XLSX.read(buf, { type: 'buffer' });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
@@ -315,11 +315,11 @@ function parseChoices(buf) {
       continue;
     }
     const id = cells[idx.id];
-    if (!id || !/^(\d{3}[A-Z]?\d{0,2}|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/.test(id)) continue;
+    if (!id || !/^(\d{3}[A-Z]?\d{0,2}|[LMN]\d{1,3}[A-Z]?\d{0,2}|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/.test(id)) continue;
     const num = i => i >= 0 ? (Number(r[i]) || 0) : 0;
     out[id] = { c1: num(idx.c1), c2: num(idx.c2), c3: num(idx.c3), c4: num(idx.c4), c5: num(idx.c5), lop: num(idx.lop), tot: num(idx.tot) };
   }
-  if (Object.keys(out).length < 20) throw new Error('too few hunts parsed from choice report');
+  if (Object.keys(out).length < minRows) throw new Error('too few hunts parsed from choice report');
   return out;
 }
 
@@ -566,6 +566,26 @@ function findDrawReports(html, pageUrl) {
   return Object.values(best);
 }
 
+function findPremiumReports(html, pageUrl) {
+  const found = [];
+  for (const a of anchors(html, pageUrl)) {
+    if (!/\.xlsx/i.test(a.url)) continue;
+    const fname = decodeURIComponent(a.url.split('/').pop() || '');
+    if (!/premium/i.test(fname)) continue;
+    if (!/applicants[\s_-]*by[\s_-]*hunt[\s_-]*choice/i.test(fname)) continue; // choice files only
+    const ym = fname.match(/(20\d{2})/); if (!ym) continue;
+    let series = null;
+    if (/elk/i.test(fname)) series = 'elk';
+    else if (/pronghorn|antelope/i.test(fname)) series = 'pronghorn';
+    else if (/deer/i.test(fname)) series = 'deer';
+    if (!series) continue;
+    found.push({ url: a.url, fname, year: ym[1], series });
+  }
+  const best = {};
+  for (const f of found) if (!best[f.series + f.year]) best[f.series + f.year] = f;
+  return Object.values(best);
+}
+
 function findHarvestReports(html, pageUrl) {
   const found = [];
   for (const a of anchors(html, pageUrl)) {
@@ -671,16 +691,6 @@ async function main() {
     const res = await fetch(DRAW_PAGE, { headers: UA });
     if (res.ok) {
       const drawPageHtml = await res.text();
-      // PREMIUM DIAGNOSTIC: list every XLSX link on the point-summary page so we
-      // can see whether premium (L/M/N series) reports are published separately.
-      const allXlsx = [];
-      for (const a of anchors(drawPageHtml, DRAW_PAGE)) {
-        if (/\.xlsx/i.test(a.url)) allXlsx.push(decodeURIComponent(a.url.split('/').pop() || ''));
-      }
-      console.log(`[premium:diag] ${allXlsx.length} XLSX links on point-summary page:`);
-      allXlsx.forEach(f => console.log(`[premium:diag]   ${f}`));
-      const premiumFiles = allXlsx.filter(f => /premium|\bL\s*series|\bM\s*series|\bN\s*series/i.test(f));
-      console.log(`[premium:diag] files matching "premium/L/M/N series": ${premiumFiles.length ? premiumFiles.join(', ') : 'NONE — premium likely inside the regular files or on a separate page'}`);
 
       const reports = findChoiceReports(drawPageHtml, DRAW_PAGE);
       console.log(`[choices] found ${reports.length} choice report link(s)`);
@@ -693,24 +703,7 @@ async function main() {
           if (meta && meta.fileName === r.fname) { console.log(`[skip] ${r.year} ${key} current`); continue; }
           const fres = await fetch(r.url, { headers: UA });
           if (!fres.ok) throw new Error(`download ${fres.status}`);
-          const buf = Buffer.from(await fres.arrayBuffer());
-          // PREMIUM DIAGNOSTIC: scan raw rows for L/M/N-series hunt numbers,
-          // ignoring the normal 3-digit filter, to see if they live in this file.
-          try {
-            const wb = XLSX.read(buf, { type: 'buffer' });
-            const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null });
-            const lmn = [];
-            for (const row of rows) {
-              if (!row) continue;
-              for (const cell of row) {
-                const s = String(cell ?? '').trim();
-                if (/^[LMN]\d{1,3}[A-Z]?\d{0,2}$/.test(s)) { lmn.push(s); break; }
-              }
-            }
-            console.log(`[premium:diag] ${r.year} ${r.species} choice file: ${lmn.length} L/M/N rows${lmn.length ? ' — e.g. ' + lmn.slice(0, 8).join(', ') : ''}`);
-          } catch (e) { console.log(`[premium:diag] raw scan failed: ${e.message}`); }
-
-          const parsed = parseChoices(buf);
+          const parsed = parseChoices(Buffer.from(await fres.arrayBuffer()));
           console.log(`[parse] ${r.year} ${key}: ${Object.keys(parsed).length} hunts`);
           if (DRY) { details.push(`${r.year} ${key}: would load`); continue; }
           const doc = await fs_('GET', `years/${r.year}/choices/all`);
@@ -722,24 +715,36 @@ async function main() {
           updated++;
         } catch (e) { console.error(`[err] choices ${r.year}:`, e.message); details.push(`${r.year} ${r.species} choices FAILED: ${e.message}`); failed++; }
       }
+
+      // ── Premium hunts (L/M/N series) — separate files, same choice format ──
+      const premReports = findPremiumReports(drawPageHtml, DRAW_PAGE);
+      console.log(`[premium] found ${premReports.length} premium report link(s)`);
+      for (const r of premReports) {
+        const key = `premium_${r.series}`; // premium_deer / premium_elk / premium_pronghorn
+        try {
+          const meta = await getMeta(r.year, key);
+          if (meta && meta.fileName === r.fname) { console.log(`[skip] ${r.year} ${key} current`); continue; }
+          const fres = await fetch(r.url, { headers: UA });
+          if (!fres.ok) throw new Error(`download ${fres.status}`);
+          const parsed = parseChoices(Buffer.from(await fres.arrayBuffer()), 5);
+          const ids = Object.keys(parsed);
+          const seriesLetter = { deer: 'L', elk: 'M', pronghorn: 'N' }[r.series];
+          const kept = {};
+          for (const id of ids) if (id[0] === seriesLetter) kept[id] = parsed[id];
+          console.log(`[premium] ${r.year} ${r.series}: ${Object.keys(kept).length} ${seriesLetter}-series hunts (of ${ids.length} rows)`);
+          if (!Object.keys(kept).length) { console.log(`[premium] ${r.year} ${r.series}: no ${seriesLetter}-series rows, skipping`); continue; }
+          if (DRY) { details.push(`${r.year} ${key}: would load ${Object.keys(kept).length}`); continue; }
+          const doc = await fs_('GET', `years/${r.year}/premium/all`);
+          const all = doc ? JSON.parse(gv(doc.fields?.data) || '{}') : {};
+          Object.assign(all, kept);
+          await fs_('PATCH', `years/${r.year}/premium/all`, { fields: { data: V.s(JSON.stringify(all)), updatedAt: V.t(new Date()) } });
+          await setMeta(r.year, key, r.fname, Object.keys(kept).length);
+          details.push(`${r.year} premium ${r.series}: ${Object.keys(kept).length} hunts`);
+          updated++;
+        } catch (e) { console.error(`[err] premium ${r.year} ${r.series}:`, e.message); details.push(`${r.year} premium ${r.series} FAILED: ${e.message}`); failed++; }
+      }
     }
   } catch (e) { details.push('choice reports unreachable: ' + e.message); }
-
-  // PREMIUM DIAGNOSTIC: check the eRegulations premium-hunts page for the L/M/N tables
-  try {
-    const pres = await fetchRetry('https://www.eregulations.com/oregon/hunting/premium-hunts', { headers: UA });
-    console.log(`[premium:diag] premium-hunts page HTTP ${pres.status}`);
-    if (pres.ok) {
-      const ph = await pres.text();
-      const tables = (ph.match(/<table/gi) || []).length;
-      const lHits = (ph.match(/\bL\d{1,3}\b/g) || []).length;
-      const mHits = (ph.match(/\bM\d{1,3}\b/g) || []).length;
-      const nHits = (ph.match(/\bN\d{1,3}\b/g) || []).length;
-      console.log(`[premium:diag] premium page: ${ph.length} chars | <table>:${tables} | L-series:${lHits} | M-series:${mHits} | N-series:${nHits}`);
-      const li = ph.search(/\bL\d{1,3}\b/);
-      if (li >= 0) console.log(`[premium:sample] ...${ph.slice(Math.max(0, li - 60), li + 200).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')}...`);
-    }
-  } catch (e) { console.log(`[premium:diag] premium page error: ${e.message}`); }
 
   // ── Public land % ──
   try { updated += await updatePublicLand(details); }
