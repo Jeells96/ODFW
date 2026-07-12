@@ -529,6 +529,67 @@ async function getMeta(year, key) {
 async function setMeta(year, key, fileName, huntCount) {
   await fs_('PATCH', `years/${year}/pdfMeta/${key}`, { fields: { fileName: V.s(fileName), huntCount: V.i(huntCount), uploadedAt: V.t(new Date()), source: V.s('auto') } });
 }
+
+// ═══ Synopsis: latest PDF link + yellow-highlight change extraction ══════════
+// ODFW marks year-over-year changes in the printed synopsis with yellow
+// highlighting. scripts/scrape-synopsis.py finds those yellow fill rects and
+// returns each highlight with its surrounding paragraph. Runs only when the
+// synopsis link on eregulations.com changes (i.e., a new edition), so the
+// heavy PDF work happens about once a year.
+const REGS_HUB = 'https://www.eregulations.com/oregon/hunting';
+async function updateSynopsis(details) {
+  const res = await fetchRetry(REGS_HUB, { headers: UA });
+  if (!res.ok) throw new Error(`regs hub HTTP ${res.status}`);
+  const html = await res.text();
+  // the synopsis PDF lives under /assets/docs/resources/OR/, e.g. 26ORHD_LR3.pdf
+  let best = null;
+  for (const a of anchors(html, REGS_HUB)) {
+    const m = a.url.match(/\/assets\/docs\/resources\/OR\/(\d{2})ORHD[^"'?]*\.pdf/i);
+    if (m) { const yr = 2000 + parseInt(m[1], 10); if (!best || yr > best.year) best = { url: a.url, year: yr }; }
+  }
+  if (!best) {
+    // fall back: any OR resources pdf mentioning synopsis-ish text
+    for (const a of anchors(html, REGS_HUB)) {
+      if (/\/assets\/docs\/resources\/OR\/[^"']*\.pdf/i.test(a.url) && /synopsis|regulation|big game/i.test(a.text)) { best = { url: a.url, year: null }; break; }
+    }
+  }
+  if (!best) { console.log('[synopsis] no synopsis PDF link found on regs hub'); details.push('synopsis link not found'); return 0; }
+  const fname = decodeURIComponent(best.url.split('/').pop() || '');
+  console.log(`[synopsis] latest edition link: ${fname}`);
+
+  const meta = await fs_('GET', 'meta/synopsis');
+  const prevName = meta ? gv(meta.fields?.fileName) : null;
+  if (prevName === fname) { console.log('[synopsis] current — skipping'); return 0; }
+  console.log(`[synopsis] NEW edition (was: ${prevName || 'none'}) — downloading + scanning for highlights`);
+
+  const pres = await fetchRetry(best.url, { headers: UA });
+  if (!pres.ok) throw new Error(`synopsis download HTTP ${pres.status}`);
+  const buf = Buffer.from(await pres.arrayBuffer());
+  const { writeFileSync: wfs } = await import('fs');
+  const tmp = '/tmp/synopsis.pdf';
+  wfs(tmp, buf);
+  console.log(`[synopsis] downloaded ${(buf.length / 1048576).toFixed(1)} MB — extracting yellow highlights`);
+
+  const { execFileSync } = await import('child_process');
+  let changes;
+  try {
+    const raw = execFileSync('python3', ['scripts/scrape-synopsis.py', tmp], { maxBuffer: 64 * 1024 * 1024, timeout: 600000 }).toString();
+    changes = JSON.parse(raw);
+  } catch (e) { throw new Error('highlight extraction failed: ' + (e.message || e).slice(0, 300)); }
+  console.log(`[synopsis] found ${changes.length} highlighted change(s)`);
+
+  // Firestore doc cap: keep payload under ~900KB
+  let json = JSON.stringify(changes); let truncated = false;
+  while (json.length > 900000 && changes.length) { changes.pop(); truncated = true; json = JSON.stringify(changes); }
+  await fs_('PATCH', 'meta/synopsis', { fields: {
+    fileName: V.s(fname), url: V.s(best.url), year: V.i(best.year || 0),
+    count: V.i(changes.length), truncated: { booleanValue: truncated },
+    data: V.s(json), scrapedAt: V.t(new Date())
+  } });
+  details.push(`synopsis ${best.year || fname}: ${changes.length} highlighted changes`);
+  return 1;
+}
+
 async function setStatus(summary, details) {
   await fs_('PATCH', `meta/autoUpdate`, { fields: {
     lastRun: V.t(new Date()), lastRunStr: V.s(new Date().toLocaleDateString('en-US')),
@@ -763,6 +824,10 @@ async function main() {
   // ── Season dates + bag limits ──
   try { updated += await updateSeasons(details, getYear); }
   catch (e) { console.error('[err] seasons:', e.message); details.push('season dates unreachable: ' + e.message); failed++; }
+
+  // ── Synopsis: link + yellow-highlight change detection ──
+  try { updated += await updateSynopsis(details); }
+  catch (e) { console.error('[err] synopsis:', e.message); details.push('synopsis check failed: ' + e.message); failed++; }
 
   let summary;
   if (updated) summary = `loaded ${updated} new report(s)` + (failed ? `, ${failed} need attention` : '');
