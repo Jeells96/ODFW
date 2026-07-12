@@ -670,7 +670,19 @@ async function main() {
   try {
     const res = await fetch(DRAW_PAGE, { headers: UA });
     if (res.ok) {
-      const reports = findChoiceReports(await res.text(), DRAW_PAGE);
+      const drawPageHtml = await res.text();
+      // PREMIUM DIAGNOSTIC: list every XLSX link on the point-summary page so we
+      // can see whether premium (L/M/N series) reports are published separately.
+      const allXlsx = [];
+      for (const a of anchors(drawPageHtml, DRAW_PAGE)) {
+        if (/\.xlsx/i.test(a.url)) allXlsx.push(decodeURIComponent(a.url.split('/').pop() || ''));
+      }
+      console.log(`[premium:diag] ${allXlsx.length} XLSX links on point-summary page:`);
+      allXlsx.forEach(f => console.log(`[premium:diag]   ${f}`));
+      const premiumFiles = allXlsx.filter(f => /premium|\bL\s*series|\bM\s*series|\bN\s*series/i.test(f));
+      console.log(`[premium:diag] files matching "premium/L/M/N series": ${premiumFiles.length ? premiumFiles.join(', ') : 'NONE — premium likely inside the regular files or on a separate page'}`);
+
+      const reports = findChoiceReports(drawPageHtml, DRAW_PAGE);
       console.log(`[choices] found ${reports.length} choice report link(s)`);
       for (const r of reports) {
         const key = r.species === 'elk' ? 'elkChoices' : 'deerChoices';
@@ -681,7 +693,24 @@ async function main() {
           if (meta && meta.fileName === r.fname) { console.log(`[skip] ${r.year} ${key} current`); continue; }
           const fres = await fetch(r.url, { headers: UA });
           if (!fres.ok) throw new Error(`download ${fres.status}`);
-          const parsed = parseChoices(Buffer.from(await fres.arrayBuffer()));
+          const buf = Buffer.from(await fres.arrayBuffer());
+          // PREMIUM DIAGNOSTIC: scan raw rows for L/M/N-series hunt numbers,
+          // ignoring the normal 3-digit filter, to see if they live in this file.
+          try {
+            const wb = XLSX.read(buf, { type: 'buffer' });
+            const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null });
+            const lmn = [];
+            for (const row of rows) {
+              if (!row) continue;
+              for (const cell of row) {
+                const s = String(cell ?? '').trim();
+                if (/^[LMN]\d{1,3}[A-Z]?\d{0,2}$/.test(s)) { lmn.push(s); break; }
+              }
+            }
+            console.log(`[premium:diag] ${r.year} ${r.species} choice file: ${lmn.length} L/M/N rows${lmn.length ? ' — e.g. ' + lmn.slice(0, 8).join(', ') : ''}`);
+          } catch (e) { console.log(`[premium:diag] raw scan failed: ${e.message}`); }
+
+          const parsed = parseChoices(buf);
           console.log(`[parse] ${r.year} ${key}: ${Object.keys(parsed).length} hunts`);
           if (DRY) { details.push(`${r.year} ${key}: would load`); continue; }
           const doc = await fs_('GET', `years/${r.year}/choices/all`);
@@ -695,6 +724,22 @@ async function main() {
       }
     }
   } catch (e) { details.push('choice reports unreachable: ' + e.message); }
+
+  // PREMIUM DIAGNOSTIC: check the eRegulations premium-hunts page for the L/M/N tables
+  try {
+    const pres = await fetchRetry('https://www.eregulations.com/oregon/hunting/premium-hunts', { headers: UA });
+    console.log(`[premium:diag] premium-hunts page HTTP ${pres.status}`);
+    if (pres.ok) {
+      const ph = await pres.text();
+      const tables = (ph.match(/<table/gi) || []).length;
+      const lHits = (ph.match(/\bL\d{1,3}\b/g) || []).length;
+      const mHits = (ph.match(/\bM\d{1,3}\b/g) || []).length;
+      const nHits = (ph.match(/\bN\d{1,3}\b/g) || []).length;
+      console.log(`[premium:diag] premium page: ${ph.length} chars | <table>:${tables} | L-series:${lHits} | M-series:${mHits} | N-series:${nHits}`);
+      const li = ph.search(/\bL\d{1,3}\b/);
+      if (li >= 0) console.log(`[premium:sample] ...${ph.slice(Math.max(0, li - 60), li + 200).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')}...`);
+    }
+  } catch (e) { console.log(`[premium:diag] premium page error: ${e.message}`); }
 
   // ── Public land % ──
   try { updated += await updatePublicLand(details); }
