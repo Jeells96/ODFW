@@ -84,6 +84,8 @@ select,input[type=search],input[type=number]{width:100%;min-height:54px;font-siz
 
 /* hunt cards */
 .card{width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-left:7px solid var(--line);border-radius:12px;padding:15px 15px 13px;margin-bottom:12px;display:block}
+.synchg{border-left-color:var(--gold);transition:background .12s}
+.synchg:active{background:#243528}
 .card.v-yes{border-left-color:var(--good)} .card.v-soon{border-left-color:var(--warn)}
 .card.v-luck{border-left-color:var(--luck)} .card.v-no{border-left-color:var(--bad)}
 .crow1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
@@ -193,7 +195,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v6.1</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v6.2</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -2055,16 +2057,18 @@ async function renderSynopsis(){
     return;
   }
   const yr = s.year && s.year > 2000 ? s.year : '';
-  let html = `<a class="srcbtn" style="margin-bottom:8px" href="${esc(s.url)}" target="_blank" rel="noopener">Open the ${yr} Big Game Synopsis (PDF) ↗</a>${hubLink}`;
+  const pdfUrl = esc(s.url);
+  let html = `<a class="srcbtn" style="margin-bottom:8px" href="${pdfUrl}" target="_blank" rel="noopener">Open the ${yr} Big Game Synopsis (PDF) ↗</a>${hubLink}`;
   const ch = s.changes || [];
   html += `<div class="sechead" style="margin-top:18px">What changed this year</div>
-    <p class="help" style="margin-bottom:10px">${ch.length ? `Every yellow-highlighted change in the ${yr} book — ${fmt(ch.length)} found${s.truncated ? ' (list capped for size)' : ''}. Highlighted text is <mark style="background:rgba(240,199,80,.32);color:inherit;padding:0 2px;border-radius:3px">marked</mark>; the rest is surrounding context.` : 'No highlighted changes were detected in this edition.'}</p>`;
+    <p class="help" style="margin-bottom:10px">${ch.length ? `Every yellow-highlighted change in the ${yr} book — ${fmt(ch.length)} found${s.truncated ? ' (list capped for size)' : ''}. Tap any change to open that page in the PDF; use your back button to return here.` : 'No highlighted changes were detected in this edition.'}</p>`;
   // group by heading where present, else by page
   let lastKey = null;
   for(const e of ch){
     const key = e.h || ('Page ' + e.p);
     if(key !== lastKey){ html += `<div class="sechead" style="font-size:.8rem;margin-top:14px">${esc(key)}</div>`; lastKey = key; }
-    html += `<div class="card" style="cursor:default"><p class="plain" style="font-size:.87rem;line-height:1.55;margin:0">${markHl(e.ctx, e.hl)}</p><p class="help" style="margin:6px 0 0">pg ${e.p}</p></div>`;
+    const href = `${pdfUrl}#page=${e.p}`;
+    html += `<a class="card synchg" href="${href}" target="_blank" rel="noopener" style="display:block;text-decoration:none;color:inherit"><p class="plain" style="font-size:.87rem;line-height:1.55;margin:0">${markHl(e.ctx, e.hl)}</p><p class="help" style="margin:6px 0 0;display:flex;justify-content:space-between"><span>pg ${e.p}</span><span style="opacity:.7">Open in PDF ↗</span></p></a>`;
   }
   html += `<p class="help" style="margin-top:14px">Detection is automatic and based on the book's own highlighting — always confirm details in the official synopsis before you apply or hunt.</p>`;
   box.innerHTML = html;
