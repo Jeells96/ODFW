@@ -193,7 +193,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v5.4</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v5.6</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -240,8 +240,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 <div class="page" data-page="premium">
   <div class="panel"><div class="pbody">
     <p class="ptitle">Premium hunts</p>
-    <p class="plain" style="font-size:.95rem">A separate draw for one bonus deer, elk, or pronghorn tag with a <strong>4-month season (Aug 1 – Nov 30)</strong>, either-sex, any weapon. <strong>No points involved</strong> — everyone has the same random shot. One tag per unit, and it's an extra tag on top of your regular one.</p>
-    <p class="help">Odds below are from the most recent premium drawing's applicant counts. Apply by May 15 — $8 per species.</p>
+    <p class="plain" style="font-size:.95rem">A bonus tag drawn purely at random — <strong>points don't matter</strong>. One tag per unit, extra on top of your regular tag. Apply by May 15.</p>
   </div></div>
   <div style="padding:0 2px 10px">
     <div class="hselrow" id="premSpeciesRow">
@@ -257,32 +256,6 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 <!-- ═══ MY LIST ═══ -->
 <div class="page" data-page="mylist">
   <div id="mylistCards"></div>
-</div>
-
-<!-- ═══ ABOUT ═══ -->
-<div class="page" data-page="about">
-  <div class="panel"><div class="pbody">
-    <p class="ptitle">What this app does</p>
-    <p class="plain">It takes Oregon's official controlled-hunt numbers and answers one question in plain English: <strong>which deer or elk hunts can you realistically draw, and are they worth your points?</strong></p>
-    <p class="plain">Enter your preference points on the Hunts page, and every hunt gets a color-coded answer. Tap any hunt to see the full story — your odds, hunter success rates, antler sizes, and how the hunt has changed over the years.</p>
-  </div></div>
-  <div class="panel"><div class="pbody">
-    <p class="ptitle">Where the numbers come from</p>
-    <p class="plain">Everything comes from the Oregon Department of Fish &amp; Wildlife's public reports. A helper program checks ODFW's website on the 1st of every month and loads any new reports automatically — nobody has to do anything.</p>
-    <p class="plain">Draw reports for a season are published in the fall, after the June drawing. Harvest results are published the following spring.</p>
-  </div></div>
-  <div class="panel"><div class="pbody">
-    <p class="ptitle">Words you'll see</p>
-    <p class="plain"><strong>Preference points</strong> — Every year you apply and don't draw, ODFW gives you a point. More points = better odds next year. Your points are on your ODFW account.</p>
-    <p class="plain"><strong>Points for a sure tag</strong> — Hunters who had this many points all drew a tag. If you have this many or more, the tag is yours if you apply.</p>
-    <p class="plain"><strong>Success rate</strong> — Of the hunters who held this tag, the share who brought an animal home.</p>
-    <p class="plain"><strong>Luck-of-the-draw</strong> — Some hunts never fill up with point-holders, so 25% of tags go out by pure random luck. Anyone can win one.</p>
-    <p class="plain"><strong>⚠ next to a success rate</strong> — Fewer than 6 in 10 tag holders reported their hunt, so the rate is based on a small slice of hunters and probably reads higher than reality.</p>
-  </div></div>
-  <div class="panel"><div class="pbody">
-    <p class="plain" style="font-size:.85rem;color:var(--dim)">Personal reference tool. Not affiliated with ODFW. Always verify hunt numbers, dates, and boundaries in the current Oregon Big Game Regulations before applying. Application deadline is May 15 each year.</p>
-    <button class="linkbtn" id="adminLink" style="font-size:.85rem">Admin tools</button>
-  </div></div>
 </div>
 
 <!-- ═══ ADMIN (hidden) ═══ -->
@@ -384,7 +357,6 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
   <button class="tab on" data-tab="hunts"><span class="ic">◎</span>Hunts</button>
   <button class="tab" data-tab="premium"><span class="ic">★</span>Premium</button>
   <button class="tab" data-tab="mylist"><span class="ic">♥</span>My List</button>
-  <button class="tab" data-tab="about"><span class="ic">?</span>About</button>
 </nav>
 
 <!-- detail sheet -->
@@ -1753,8 +1725,7 @@ function openPremDetail(id){
   const sp = id[0]==='M'?'elk':id[0]==='L'?'deer':'pronghorn';
   $('#shTitle').textContent = id+' — '+nm;
   $('#shSub').textContent = `Premium ${sp} · one tag, random draw`;
-  let html = `<div class="callout v-luck">Premium ${sp} tag — a bonus tag with a 4-month either-sex season, drawn purely at random. Your points don't matter here.</div>`;
-  html += `<div class="sec"><h3>Your odds</h3>
+  let html = `<div class="sec"><h3>Your odds</h3>
     <div class="kvg" style="margin-bottom:10px">
       <div class="kv"><div class="k">Put it 1st choice</div><div class="v">${fmt(ch.c1)}</div></div>
       <div class="kv"><div class="k">Draw odds (1 tag)</div><div class="v" style="color:var(--good)">${o.c1===0?'—':(o.o1>=1?o.o1.toFixed(1)+'%':'<1%')}</div></div>
@@ -1866,7 +1837,9 @@ async function renderAdmin(){
     list.innerHTML=yrs.map(y=>{
       const yd=S.years[y];
       const hc=yd.harvestData?Object.values(yd.harvestData).reduce((s,h)=>s+Object.keys(h||{}).length,0):0;
-      return `<div class="yrow"><div><div class="yrl">${y}</div><div class="yrm">${yd.hunts.length} hunts · ${hc} harvest records · ${Object.keys(yd.seasons||{}).length} season/bag entries · ${Object.keys(yd.choices||{}).length} choice entries</div></div>
+      const pk=Object.keys(yd.premium||{});
+      const pl=pk.filter(k=>k[0]==='L').length, pm=pk.filter(k=>k[0]==='M').length, pn=pk.filter(k=>k[0]==='N').length;
+      return `<div class="yrow"><div><div class="yrl">${y}</div><div class="yrm">${yd.hunts.length} hunts · ${hc} harvest records · ${Object.keys(yd.seasons||{}).length} season/bag entries · ${Object.keys(yd.choices||{}).length} choice entries · ${pk.length} premium (L${pl}/M${pm}/N${pn})</div></div>
         <div style="display:flex;gap:6px"><button class="bmini dan" data-fby="${y}">Delete from cloud</button></div></div>`;
     }).join('');
     list.querySelectorAll('[data-fby]').forEach(b=>b.addEventListener('click',()=>{
@@ -1975,8 +1948,7 @@ function wire(){
     });
   }
   $('#gearBtn').onclick=gate;
-  $('#adminLink').onclick=gate;
-  $('#adminLink2').onclick=gate;
+  const al2=$('#adminLink2'); if(al2) al2.onclick=gate;
   $('#adminBack').onclick=()=>showPage('hunts');
   $('#shClose').onclick=closeDetail;
   $('#mapClose').onclick=()=>{ $('#mapSheet').classList.remove('open'); document.body.style.overflow='hidden'; };
