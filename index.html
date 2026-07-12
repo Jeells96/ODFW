@@ -41,7 +41,9 @@ h1{font-size:1.35rem;margin:0;font-weight:700}
 .ver{font-size:.65rem;color:var(--dim);border:1px solid var(--line);padding:1px 6px;border-radius:4px;vertical-align:middle;margin-left:6px}
 
 /* sync note */
-.syncnote{font-size:.85rem;padding:10px 14px;background:var(--card);border-bottom:1px solid var(--line);color:var(--dim)}
+.syncnote{font-size:.85rem;padding:10px 14px;background:var(--card);border-bottom:1px solid var(--line);color:var(--dim);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.refreshbtn{flex-shrink:0;min-height:38px;padding:6px 14px;font-size:.85rem;font-weight:700;background:var(--card2);border:1.5px solid var(--gold);border-radius:9px;color:var(--gold);white-space:nowrap}
+.refreshbtn:active{background:var(--gold);color:#1c2418}
 .syncnote.ok{color:var(--good)} .syncnote.new{color:var(--gold)} .syncnote.err{color:var(--bad)}
 
 /* generic */
@@ -191,7 +193,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v5.2</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v5.3</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -1764,7 +1766,35 @@ async function renderAdmin(){
 }
 
 // ─── SYNC NOTE ────────────────────────────────────────────────────────────────
-function setSyncNote(cls,msg){ const el=$('#syncNote'); el.className='syncnote '+(cls||''); el.textContent=msg; }
+function setSyncNote(cls,msg,withRefresh){
+  const el=$('#syncNote'); el.className='syncnote '+(cls||'');
+  el.innerHTML=`<span>${esc(msg)}</span>`+(withRefresh?` <button id="refreshBtn" class="refreshbtn">↻ Refresh data</button>`:'');
+  if(withRefresh){
+    const b=$('#refreshBtn');
+    if(b) b.onclick=()=>refreshData();
+  }
+}
+// Manual refresh: re-run the cloud sync right now (catches an already-run
+// workflow). If nothing new, offer the one-tap link to kick ODFW's fetch.
+let refreshBusy=false;
+async function refreshData(){
+  if(refreshBusy) return; refreshBusy=true;
+  const before=snapshot();
+  await init(false);                 // re-read Firestore, updates the status line
+  const changed=diffSnapshot(before);
+  if(!changed.length) showRefreshSheet();
+  refreshBusy=false;
+}
+function showRefreshSheet(){
+  const box=$('#confirmBox');
+  $('#confirmMsg').innerHTML='Nothing new in the cloud yet.<br><br>ODFW data is fetched automatically on the 1st of each month. To pull the very latest from ODFW right now, tap below to start the update on GitHub (sign in once, then tap “Run workflow”). It takes about a minute, then Refresh again here.';
+  const yes=$('#confirmYes'), no=$('#confirmNo');
+  yes.textContent='Open GitHub updater'; no.textContent='Not now';
+  box.classList.add('open');
+  const close=()=>{ box.classList.remove('open'); yes.onclick=no.onclick=null; yes.textContent='Yes, do it'; };
+  yes.onclick=()=>{ window.open('https://github.com/Jeells96/ODFW/actions/workflows/odfw-fetch.yml','_blank','noopener'); close(); };
+  no.onclick=close;
+}
 function snapshot(){ const o={}; yList().forEach(y=>{ const yd=S.years[y]; o[y]=yd.hunts.length+':'+Object.values(yd.harvestData||{}).reduce((s,h)=>s+Object.keys(h||{}).length,0)+':'+Object.keys(yd.seasons||{}).length+':'+Object.keys(yd.choices||{}).length; }); return o; }
 function diffSnapshot(prev){
   const now=snapshot(); const changed=[];
@@ -1912,13 +1942,13 @@ async function init(firstRun){
     const m=await fbLoadAutoMeta();
     const checkStr=m&&(m.lastRun?.toDate?m.lastRun.toDate().toLocaleDateString():m.lastRunStr)||null;
     if(changed.length && !firstRunEmpty(before)){
-      setSyncNote('new',`✓ New data was added for ${changed.join(', ')} — you're seeing the latest.`);
+      setSyncNote('new',`✓ New data was added for ${changed.join(', ')} — you're seeing the latest.`,true);
     } else {
       const extra=m&&/no new data/.test(m.summary||'')?` ODFW checked ${checkStr}: no new reports yet.`:(checkStr?` Last ODFW check: ${checkStr}.`:'');
-      setSyncNote('ok',`✓ You have the latest data (newest season: ${yList()[0]}).${extra}`);
+      setSyncNote('ok',`✓ You have the latest data (newest season: ${yList()[0]}).${extra}`,true);
     }
   } else if(yList().length){
-    setSyncNote('err','Couldn\'t reach the cloud — showing this device\'s saved copy.');
+    setSyncNote('err','Couldn\'t reach the cloud — showing this device\'s saved copy.',true);
   } else {
     setSyncNote('err','Couldn\'t load hunt data. Check your connection and reopen the app.');
     banner('err','Cloud unreachable',false);
