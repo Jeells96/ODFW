@@ -195,7 +195,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v6.4</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v6.5</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -2033,18 +2033,26 @@ function diffSnapshot(prev){
 // prior year) with surrounding context. Fetched lazily on first tab open.
 let SYN = undefined; // undefined = not fetched, null = fetch failed / none
 let SYN_EDITS = {};   // per-change overrides, keyed by stable change id
-async function fetchSynopsis(){
-  if(SYN !== undefined) return SYN;
+let SYN_MANUAL = [];  // manually-added changes (not from the scraper)
+async function fetchSynopsis(force){
+  if(SYN !== undefined && !force) { await loadSynEdits(); return SYN; }
   try{
     const d = await db.collection('meta').doc('synopsis').get();
     SYN = d.exists ? d.data() : null;
     if(SYN && typeof SYN.data === 'string') SYN.changes = JSON.parse(SYN.data);
   }catch(e){ SYN = null; }
+  await loadSynEdits();
+  return SYN;
+}
+// Edits + manual additions live in their own doc, re-read every render so a
+// save on one device shows up for everyone else.
+async function loadSynEdits(){
   try{
     const e = await db.collection('meta').doc('synopsisEdits').get();
-    SYN_EDITS = e.exists ? (e.data().edits ? JSON.parse(e.data().edits) : {}) : {};
-  }catch(e){ SYN_EDITS = {}; }
-  return SYN;
+    const dd = e.exists ? e.data() : {};
+    SYN_EDITS = dd.edits ? JSON.parse(dd.edits) : {};
+    SYN_MANUAL = dd.manual ? JSON.parse(dd.manual) : [];
+  }catch(e){ SYN_EDITS = SYN_EDITS || {}; SYN_MANUAL = SYN_MANUAL || []; }
 }
 // Stable id for a change so manual edits survive re-scrapes: page + short hash
 // of the highlighted text. Independent of ordering or context tweaks.
@@ -2057,6 +2065,7 @@ async function saveSynEdits(){
   try{
     await db.collection('meta').doc('synopsisEdits').set({
       edits: JSON.stringify(SYN_EDITS),
+      manual: JSON.stringify(SYN_MANUAL),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     return true;
@@ -2096,35 +2105,42 @@ async function renderSynopsis(){
   let html = `<a class="srcbtn" style="margin-bottom:8px" href="${pdfUrl}" target="_blank" rel="noopener">Open the ${yr} Big Game Synopsis (PDF) ↗</a>${hubLink}`;
   // edit-mode toggle (only meaningful once unlocked; tap prompts for PIN)
   html += `<button class="srcbtn" id="synEditToggle" style="margin-top:8px;${editing?'background:var(--gold);color:#1c2418;font-weight:700':''}">${editing?'✓ Done editing':'✎ Edit changes'}</button>`;
-  const ch = s.changes || [];
-  const hiddenCount = ch.filter(e=>SYN_EDITS[synId(e)]?.hide).length;
+  if(editing) html += `<button class="srcbtn" id="synAddBtn" style="margin-top:8px">＋ Add a change the scanner missed</button>`;
+  const scraped = (s.changes || []).map(e=>({...e, _id:synId(e), _manual:false}));
+  const manual = (SYN_MANUAL || []).map(m=>({...m, _id:m.id, _manual:true}));
+  // merge + sort by page so manual additions slot in where they belong
+  const all = [...scraped, ...manual].sort((a,b)=>(a.p||0)-(b.p||0));
+  const hiddenCount = scraped.filter(e=>SYN_EDITS[e._id]?.hide).length;
   html += `<div class="sechead" style="margin-top:18px">What changed this year</div>
-    <p class="help" style="margin-bottom:10px">${ch.length ? `Every yellow-highlighted change in the ${yr} book — ${fmt(ch.length)} found${hiddenCount&&!editing?`, ${hiddenCount} hidden`:''}${s.truncated ? ' (list capped for size)' : ''}. ${editing?'Tap a card to hide it or replace its text. Your edits are saved and survive future updates.':'Tap any change to open that page in the PDF; use your back button to return here.'}` : 'No highlighted changes were detected in this edition.'}</p>`;
+    <p class="help" style="margin-bottom:10px">${all.length ? `${fmt(scraped.length)} highlighted change${scraped.length===1?'':'s'} found${manual.length?` + ${manual.length} you added`:''}${hiddenCount&&!editing?`, ${hiddenCount} hidden`:''}${s.truncated ? ' (list capped for size)' : ''}. ${editing?'Tap a card to hide it, replace its text, or format it as a table. Edits are saved and survive future updates.':'Tap any change to open that page in the PDF; use your back button to return here.'}` : 'No highlighted changes were detected in this edition.'}</p>`;
   let lastKey = null;
-  for(const e of ch){
-    const id = synId(e);
-    const ov = SYN_EDITS[id] || {};
-    if(ov.hide && !editing) continue; // hidden cards vanish for normal viewing
-    const key = ov.heading || e.h || ('Page ' + e.p);
+  for(const e of all){
+    const id = e._id;
+    const ov = e._manual ? {} : (SYN_EDITS[id] || {});
+    if(!e._manual && ov.hide && !editing) continue; // hidden cards vanish for normal viewing
+    const key = (e._manual ? e.h : (ov.heading || e.h)) || ('Page ' + e.p);
     if(key !== lastKey){ html += `<div class="sechead" style="font-size:.8rem;margin-top:14px">${esc(key)}</div>`; lastKey = key; }
     const href = `${pdfUrl}#page=${e.p}`;
-    // body: user override (table or text) wins over scraped context
+    // body: manual text/table, or user override, or scraped context
     let body;
-    if(ov.table) body = synTableHtml(ov.table);
+    if(e._manual && e.table) body = synTableHtml(e.table);
+    else if(e._manual) body = `<p class="plain" style="font-size:.87rem;line-height:1.55;margin:0">${esc(e.text||'')}</p>`;
+    else if(ov.table) body = synTableHtml(ov.table);
     else if(ov.text!=null) body = `<p class="plain" style="font-size:.87rem;line-height:1.55;margin:0">${esc(ov.text)}</p>`;
     else body = `<p class="plain" style="font-size:.87rem;line-height:1.55;margin:0">${markHl(e.ctx, e.hl)}</p>`;
-    const editedBadge = (ov.text!=null||ov.table) ? '<span style="opacity:.7">✎ edited</span>' : '<span style="opacity:.7">Open in PDF ↗</span>';
+    const tag = e._manual ? '<span style="opacity:.7">＋ added</span>' : ((ov.text!=null||ov.table) ? '<span style="opacity:.7">✎ edited</span>' : '<span style="opacity:.7">Open in PDF ↗</span>');
     if(editing){
-      html += `<div class="card synchg" data-synedit="${id}" style="${ov.hide?'opacity:.4':''}">
+      const attr = e._manual ? `data-synmanual="${id}"` : `data-synedit="${id}"`;
+      html += `<div class="card synchg" ${attr} style="${ov.hide?'opacity:.4':''}">
         ${body}
         <div class="help" style="margin:8px 0 0;display:flex;justify-content:space-between;align-items:center">
-          <span>pg ${e.p}${ov.hide?' · hidden':''}</span>
+          <span>pg ${e.p||'—'}${ov.hide?' · hidden':''}${e._manual?' · added':''}</span>
           <span style="color:var(--gold)">Tap to edit ▸</span>
         </div></div>`;
     } else {
       html += `<a class="card synchg" href="${href}" target="_blank" rel="noopener" style="display:block;text-decoration:none;color:inherit">
         ${body}
-        <p class="help" style="margin:6px 0 0;display:flex;justify-content:space-between"><span>pg ${e.p}</span>${editedBadge}</p></a>`;
+        <p class="help" style="margin:6px 0 0;display:flex;justify-content:space-between"><span>pg ${e.p||'—'}</span>${tag}</p></a>`;
     }
   }
   html += `<p class="help" style="margin-top:14px">Detection is automatic and based on the book's own highlighting — always confirm details in the official synopsis before you apply or hunt.</p>`;
@@ -2137,10 +2153,88 @@ async function renderSynopsis(){
     if(window.pinOk){ window.synEdit=true; renderSynopsis(); return; }
     pinPrompt(pin=>{ if(pin===window.ADMIN_PIN){ window.pinOk=true; window.synEdit=true; renderSynopsis(); } else toast('Wrong PIN',true); });
   };
-  // wire per-card editors
+  // wire per-card editors (scraped changes)
   if(editing) box.querySelectorAll('[data-synedit]').forEach(card=>{
-    card.onclick = ()=>openSynEditor(card.dataset.synedit, ch.find(e=>synId(e)===card.dataset.synedit));
+    card.onclick = ()=>openSynEditor(card.dataset.synedit, scraped.find(e=>e._id===card.dataset.synedit));
   });
+  // wire manual card editors
+  if(editing) box.querySelectorAll('[data-synmanual]').forEach(card=>{
+    card.onclick = ()=>openManualEditor(SYN_MANUAL.find(m=>m.id===card.dataset.synmanual));
+  });
+  // wire add button
+  const addBtn = $('#synAddBtn');
+  if(addBtn) addBtn.onclick = ()=>openManualEditor(null);
+}
+
+// Editor for a manually-added change (page + heading + text/table)
+function openManualEditor(m){
+  const isNew = !m;
+  m = m || { id: 'm'+Date.now().toString(36), p:'', h:'', text:'', table:null };
+  $('#shTitle').textContent = isNew ? 'Add a change' : 'Edit added change';
+  $('#shSub').textContent = 'Something the scanner missed — you fill it in';
+  const curTable = m.table ? m.table.map(r=>r.join('  |  ')).join('\n') : '';
+  $('#shBody').innerHTML = `
+    <div class="sec">
+      <h3>Where is it?</h3>
+      <p class="help">PDF page number (so the card can link to it). Optional but handy.</p>
+      <input id="manPage" type="tel" inputmode="numeric" value="${esc(String(m.p||''))}" placeholder="e.g. 21" style="width:100%;font-size:1rem;padding:10px;border-radius:10px">
+      <p class="help" style="margin-top:10px">Section heading (optional — groups it in the list).</p>
+      <input id="manHead" value="${esc(m.h||'')}" placeholder="e.g. Prohibited Methods" style="width:100%;font-size:1rem;padding:10px;border-radius:10px">
+      ${m.p?`<button class="srcbtn" id="manOpenPdf" style="margin-top:8px">Open pg ${esc(String(m.p))} in the PDF ↗</button>`:''}
+    </div>
+    <div class="sec">
+      <h3>What changed?</h3>
+      <div class="hselrow" id="manModeRow">
+        <button class="hsel ${!m.table?'on':''}" data-manmode="text">Text</button>
+        <button class="hsel ${m.table?'on':''}" data-manmode="table">Table</button>
+      </div>
+      <div id="manTextWrap" style="${m.table?'display:none':''}">
+        <textarea id="manTextIn" style="width:100%;min-height:110px;font-size:.9rem;padding:10px;border-radius:10px" placeholder="Type the change in your own words.">${esc(m.text||'')}</textarea>
+      </div>
+      <div id="manTableWrap" style="${m.table?'':'display:none'}">
+        <p class="help">One row per line, columns split by 2+ spaces, a tab, or a | bar. First row is the header.</p>
+        <textarea id="manTableIn" style="width:100%;min-height:140px;font-size:.85rem;padding:10px;border-radius:10px;font-family:monospace" placeholder="Hunt #  |  Hunt Name  |  Tags\nAD101  |  Aldrich 01  |  1,100">${esc(curTable)}</textarea>
+        <div id="manTablePreview" style="margin-top:10px"></div>
+      </div>
+    </div>
+    <div class="sec">
+      <button class="btn primary" id="manSave" style="width:100%">${isNew?'Add change':'Save'}</button>
+      ${isNew?'':'<button class="btn" id="manDelete" style="width:100%;margin-top:8px;border-color:var(--bad);color:var(--bad)">Delete this change</button>'}
+    </div>`;
+  $('#sheet').classList.add('open'); $('#sheet').scrollTop=0;
+  document.body.style.overflow='hidden';
+
+  const openPdf=$('#manOpenPdf');
+  if(openPdf) openPdf.onclick=()=>{
+    const base=(SYN&&SYN.url)||''; if(!base){ toast('No synopsis PDF link yet',true); return; }
+    const a=document.createElement('a'); a.href=base+'#page='+m.p; a.target='odfwSynPdf'; a.rel='noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+  const modeRow=$('#manModeRow');
+  modeRow.querySelectorAll('[data-manmode]').forEach(b=>b.onclick=()=>{
+    modeRow.querySelectorAll('[data-manmode]').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+    const t=b.dataset.manmode==='table';
+    $('#manTableWrap').style.display=t?'':'none';
+    $('#manTextWrap').style.display=t?'none':'';
+  });
+  const tIn=$('#manTableIn'), prev=$('#manTablePreview');
+  const renderPrev=()=>{ const rows=parseTableText(tIn.value); prev.innerHTML= rows.length?('<p class="help">Preview:</p>'+synTableHtml(rows)):''; };
+  if(tIn){ tIn.oninput=renderPrev; renderPrev(); }
+
+  $('#manSave').onclick=async()=>{
+    const mode=(modeRow.querySelector('[data-manmode].on')||{dataset:{}}).dataset.manmode||'text';
+    const entry={ id:m.id, p:parseInt($('#manPage').value,10)||'', h:$('#manHead').value.trim() };
+    if(mode==='table'){ const rows=parseTableText($('#manTableIn').value); if(rows.length) entry.table=rows; else { toast('Add at least one table row, or switch to Text',true); return; } }
+    else { const v=$('#manTextIn').value.trim(); if(!v){ toast('Type the change, or switch to Table',true); return; } entry.text=v; }
+    const i=SYN_MANUAL.findIndex(x=>x.id===m.id);
+    if(i>=0) SYN_MANUAL[i]=entry; else SYN_MANUAL.push(entry);
+    if(await saveSynEdits()){ toast(isNew?'Added':'Saved'); closeDetail(); renderSynopsis(); }
+  };
+  const del=$('#manDelete');
+  if(del) del.onclick=async()=>{
+    SYN_MANUAL=SYN_MANUAL.filter(x=>x.id!==m.id);
+    if(await saveSynEdits()){ toast('Deleted'); closeDetail(); renderSynopsis(); }
+  };
 }
 
 // Editor sheet for a single change card
@@ -2183,14 +2277,18 @@ function openSynEditor(id, e){
   $('#sheet').classList.add('open'); $('#sheet').scrollTop=0;
   document.body.style.overflow='hidden';
 
-  // Open the PDF in ONE persistent tab (named 'odfwSynPdf') so flipping
-  // between cards reuses the same tab and re-navigates it to the new page,
-  // instead of piling up tabs and re-downloading each time.
+  // Open the PDF page. Reusing a named tab with only a changing #fragment can
+  // make Safari treat it as a same-page jump and not navigate, and a stale
+  // window handle can silently no-op — so we click a fresh anchor each time,
+  // with the page in the fragment. Opens/reuses the 'odfwSynPdf' tab.
   const pdfBtn=$('#synOpenPdf');
   if(pdfBtn) pdfBtn.onclick=()=>{
-    const url=((SYN&&SYN.url)||'')+'#page='+e.p;
-    const w=window.open(url,'odfwSynPdf');
-    try{ if(w) w.focus(); }catch(_){}
+    const base=(SYN&&SYN.url)||'';
+    if(!base){ toast('No synopsis PDF link yet',true); return; }
+    const url=base+'#page='+e.p;
+    const a=document.createElement('a');
+    a.href=url; a.target='odfwSynPdf'; a.rel='noopener';
+    document.body.appendChild(a); a.click(); a.remove();
   };
 
   const modeRow=$('#synModeRow');
@@ -2205,7 +2303,7 @@ function openSynEditor(id, e){
   if(tIn){ tIn.oninput=renderPrev; renderPrev(); }
 
   $('#synSave').onclick=async()=>{
-    const mode=modeRow.querySelector('.on').dataset.synmode;
+    const mode=(modeRow.querySelector('[data-synmode].on')||{dataset:{}}).dataset.synmode||'text';
     const next={...(SYN_EDITS[id]||{})};
     delete next.text; delete next.table;
     if(mode==='table'){ const rows=parseTableText($('#synTableIn').value); if(rows.length) next.table=rows; }
