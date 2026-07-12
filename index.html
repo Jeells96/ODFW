@@ -195,7 +195,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v6.6</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v6.7</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -2046,7 +2046,10 @@ async function fetchSynopsis(force){
 }
 // Edits + manual additions live in their own doc, re-read every render so a
 // save on one device shows up for everyone else.
-async function loadSynEdits(){
+async function loadSynEdits(force){
+  // Skip re-reading right after a local save (would race the write and could
+  // clobber the in-memory copy). renderSynopsis passes skipReload in that case.
+  if(window._synSkipReload && !force){ window._synSkipReload=false; return; }
   try{
     const e = await db.collection('meta').doc('synopsisEdits').get();
     const dd = e.exists ? e.data() : {};
@@ -2068,6 +2071,7 @@ async function saveSynEdits(){
       manual: JSON.stringify(SYN_MANUAL),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    window._synSkipReload=true; // next render trusts our in-memory copy
     return true;
   }catch(e){ toast('Save failed — check connection',true); return false; }
 }
@@ -2282,7 +2286,8 @@ function openSynEditor(id, e){
     </div>
     <div class="sec">
       <button class="btn primary" id="synSave" style="width:100%">Save</button>
-      <button class="btn" id="synHide" style="width:100%;margin-top:8px;${ov.hide?'border-color:var(--good);color:var(--good)':'border-color:var(--bad);color:var(--bad)'}">${ov.hide?'Un-hide this change':'Hide this change'}</button>
+      <button class="btn" id="synHide" style="width:100%;margin-top:8px;${ov.hide?'border-color:var(--good);color:var(--good)':'border-color:var(--bad);color:var(--bad)'}">${ov.hide?'↩︎ Un-hide (show again)':'🗑 Remove this card from the list'}</button>
+      ${ov.hide?'<p class="help" style="margin-top:6px">Removed cards disappear for everyone viewing. They stay here (dimmed) in edit mode so you can bring them back.</p>':''}
       ${(ov.text!=null||ov.table||ov.hide||ov.heading)?'<button class="linkbtn" id="synReset" style="margin-top:10px">Reset to original</button>':''}
     </div>`;
   $('#sheet').classList.add('open'); $('#sheet').scrollTop=0;
@@ -2303,10 +2308,24 @@ function openSynEditor(id, e){
     const mode=(modeRow.querySelector('[data-synmode].on')||{dataset:{}}).dataset.synmode||'text';
     const next={...(SYN_EDITS[id]||{})};
     delete next.text; delete next.table;
-    if(mode==='table'){ const rows=parseTableText($('#synTableIn').value); if(rows.length) next.table=rows; }
-    else { const v=$('#synTextIn').value.trim(); if(v) next.text=v; }
+    if(mode==='table'){
+      const rows=parseTableText($('#synTableIn').value);
+      if(!rows.length){ toast('No table rows detected — check formatting',true); return; }
+      next.table=rows;
+    } else {
+      const v=$('#synTextIn').value.trim(); if(v) next.text=v;
+    }
     if(Object.keys(next).length) SYN_EDITS[id]=next; else delete SYN_EDITS[id];
-    if(await saveSynEdits()){ toast('Saved'); closeDetail(); renderSynopsis(); }
+    if(await saveSynEdits()){
+      // verify it actually persisted (catches silent write drops)
+      try{
+        const chk=await db.collection('meta').doc('synopsisEdits').get();
+        const saved=chk.exists && chk.data().edits ? JSON.parse(chk.data().edits) : {};
+        const ok = mode==='table' ? (saved[id]&&Array.isArray(saved[id].table)) : (saved[id]&&saved[id].text!=null);
+        toast(ok ? 'Saved ✓' : 'Saved but not stored — tell Claude',!ok);
+      }catch(_){ toast('Saved'); }
+      closeDetail(); renderSynopsis();
+    }
   };
   $('#synHide').onclick=async()=>{
     const next={...(SYN_EDITS[id]||{})}; next.hide=!next.hide;
