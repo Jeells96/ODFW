@@ -195,7 +195,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.4</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.6</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -269,9 +269,20 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 <!-- ═══ ADMIN (hidden) ═══ -->
 <div class="page" data-page="synopsis">
   <div class="wrap">
-    <div class="sechead" style="margin-top:14px">Big Game Synopsis</div>
-    <p class="help" style="margin-bottom:10px">ODFW's official regulations book. Yellow-highlighted text in the book marks changes from the prior year — when a new edition comes out, the app scans it automatically and lists every highlighted change here.</p>
-    <div id="synBody"><div style="display:flex;justify-content:center;padding:30px"><div class="spin" style="width:26px;height:26px"></div></div></div>
+    <div class="hselrow" style="margin-top:14px;margin-bottom:12px">
+      <button class="hsel on" id="synViewSyn">📖 Synopsis</button>
+      <button class="hsel" id="synViewData">🔗 Data sources</button>
+    </div>
+    <div id="synViewSynWrap">
+      <div class="sechead">Big Game Synopsis</div>
+      <p class="help" style="margin-bottom:10px">ODFW's official regulations book. Yellow-highlighted text in the book marks changes from the prior year — when a new edition comes out, the app scans it automatically and lists every highlighted change here.</p>
+      <div id="synBody"><div style="display:flex;justify-content:center;padding:30px"><div class="spin" style="width:26px;height:26px"></div></div></div>
+    </div>
+    <div id="synViewDataWrap" style="display:none">
+      <div class="sechead">Data sources</div>
+      <p class="help" style="margin-bottom:12px">Every table the app pulls its numbers from — the exact ODFW pages fed to the auto-updater. Pick a year and tap through to verify anything by hand.</p>
+      <div id="dataSourcesBody"></div>
+    </div>
   </div>
 </div>
 
@@ -373,7 +384,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
   <button class="tab on" data-tab="hunts"><span class="ic">◎</span>Hunts</button>
   <button class="tab" data-tab="premium"><span class="ic">★</span>Premium</button>
   <button class="tab" data-tab="mylist"><span class="ic">♥</span>My List</button>
-  <button class="tab" data-tab="synopsis"><span class="ic">📖</span>Synopsis</button>
+  <button class="tab" data-tab="synopsis"><span class="ic">📖</span>Synopsis/Data</button>
 </nav>
 
 <!-- detail sheet -->
@@ -728,7 +739,20 @@ function grade(h) {
 // in localStorage, keyed by huntNum_species).
 const BUILTIN_SPECIALS = [
   {k:'youth',     label:'Youth only',        rx:null, auto:h=>h.weapon==='youth'},
-  {k:'spike',     label:'Spike bulls only',  rx:'spike'},
+  // Spike-only: the WHOLE hunt must be spike-restricted. Many hunts mention
+  // "spike" only for a subunit or a partial-season restriction (e.g. 215A:
+  // "Spike or antlerless elk only in Monroe Subunit") while the main hunt takes
+  // any bull — those are NOT spike-only. So we require "spike" AND reject when
+  // it's qualified by subunit / "or antlerless" / date-window conditional text.
+  {k:'spike',     label:'Spike bulls only',  rx:null, auto:h=>{
+    const hay=specialHaystack(h).toLowerCase();
+    if(!/\bspike\b/.test(hay)) return false;
+    // conditional/partial phrasings that mean it's NOT a whole-hunt spike rule
+    if(/sub\s?unit/.test(hay)) return false;              // "...in Monroe Subunit"
+    if(/spike\s+or\s+antlerless/.test(hay)) return false; // mixed bag, not spike-only
+    if(/spike[^.]*\bfrom\b[^.]*\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/.test(hay)) return false; // date-window restriction
+    return true;
+  }},
   {k:'trad',      label:'Traditional bow',   rx:'trad'},
   {k:'whitetail', label:'Whitetail',         rx:'white.?tail'},
   {k:'late',      label:'Late season',       rx:'\\blate\\b'},
@@ -1517,7 +1541,7 @@ function openDetail(id, keepSel){
 
   const se=seasonOf(h);
   html+=`<div class="sec"><h3>The basics</h3>
-    <p class="plain">A ${wLabel(h.weapon).toLowerCase()} ${h.species} hunt. In ${S.selectedYear}, ODFW gave out <strong>${fmt(h.tags)} tags</strong> and <strong>${fmt(h.residentApps)} Oregon residents</strong> put it as a choice. ${h.resOdds!=null?`Overall, about ${fmtP(h.resOdds)} of resident applicants drew it.`:''}</p>
+    <p class="plain">A ${wLabel(h.weapon).toLowerCase()} ${h.species} hunt. In ${S.selectedYear}, ODFW gave out <strong>${fmt(h.tags)} controlled tag${h.tags===1?'':'s'}</strong> and <strong>${fmt(h.residentApps)} Oregon residents</strong> put it as a choice. ${h.resOdds!=null?`Overall, about ${fmtP(h.resOdds)} of resident applicants drew it.`:''}</p>
     <button class="btn" id="unitMapBtn" style="width:100%;margin-bottom:12px;border-color:var(--gold);color:var(--gold)">🗺 View this unit on the map</button>
     ${(()=>{const pl=publicLandOf(h);return pl!=null?`<div class="kvg" style="margin-bottom:9px"><div class="kv" style="grid-column:1/-1"><div class="k">Public land in this unit</div><div class="v">${pl}%</div></div></div>`:'';})()}
     ${se?`<div class="kvg">
@@ -1585,14 +1609,20 @@ function openDetail(id, keepSel){
       tagsIssued = findH(selYr,h.huntNum,h.species)?.tags ?? null;
     }
     const per=b?' per year':'', avgTag=b?' (avg/yr)':'';
+    // When ODFW's harvest survey covers MORE hunters than the controlled tags,
+    // this unit is hunted under multiple tag types (general-season + controlled).
+    // The harvest figures then describe everyone in the unit, not just the
+    // controlled-tag holders — so tags-issued and filled aren't the same pool.
+    const mixedPool = (tagsIssued!=null && hunters!=null && hunters > tagsIssued*1.15);
     html+=`<p class="plain">${b?`Over the ${b.n} most recent seasons with results (${b.years[b.years.length-1]}–${b.years[0]}), on average${per}:`:`In the ${selYr} season:`}</p>
       <div class="kvg" style="margin-bottom:10px">
-        <div class="kv"><div class="k">Tags given out${avgTag}</div><div class="v">${tagsIssued==null?'—':fmt(tagsIssued)}</div></div>
-        <div class="kv"><div class="k">Hunters who reported${avgTag}</div><div class="v">${fmt(hunters)}</div></div>
-        <div class="kv"><div class="k">Filled their tag${avgTag}</div><div class="v" style="color:var(--good)">${fmt(taken)}</div></div>
+        <div class="kv"><div class="k">Controlled tags drawn${avgTag}</div><div class="v">${tagsIssued==null?'—':fmt(tagsIssued)}</div></div>
+        <div class="kv"><div class="k">Hunters in the unit${avgTag}</div><div class="v">${fmt(hunters)}</div></div>
+        <div class="kv"><div class="k">Deer taken${avgTag}</div><div class="v" style="color:var(--good)">${fmt(taken)}</div></div>
         <div class="kv"><div class="k">Days hunted per hunter (avg)</div><div class="v">${days??'—'}</div></div>
       </div>
-      <p class="plain" style="margin-bottom:14px"><strong>${fmtP(succ)} success</strong> — about ${succ>=100?'every':Math.round(succ/10)+' in 10'} hunter${succ>=100?'':'s'} who held this ${h.species} tag ${succ>=100?'filled it':'brought a '+(h.species==='elk'?'bull or cow':'buck')+' home'}.</p>`;
+      ${mixedPool?`<p class="plain" style="background:var(--warnbg);color:var(--warn);padding:11px 13px;border-radius:10px;font-size:.9rem;margin-bottom:12px">ℹ️ More hunters than controlled tags because this ${unitNameFor(h)||'unit'} is also open to general-season and other tags. ODFW's harvest survey counts <strong>everyone who hunted here</strong>, so "deer taken" reflects the whole unit — not just the ${tagsIssued==null?'':fmt(tagsIssued)+' '}controlled-tag holders.</p>`:''}
+      <p class="plain" style="margin-bottom:14px"><strong>${fmtP(succ)} success</strong> — about ${succ>=100?'every':Math.round(succ/10)+' in 10'} hunter${succ>=100?'':'s'} in this ${h.species} unit ${succ>=100?'filled a tag':'brought a '+(h.species==='elk'?'bull or cow':'buck')+' home'}.</p>`;
     // flag thin reporting — success rates from a fraction of tag holders skew high
     {
       const repN = b ? b.repN : hunters, tagsN = b ? b.tagN : (tagsIssued ?? 0);
@@ -1648,7 +1678,7 @@ function openDetail(id, keepSel){
         html+=`<p class="plain" style="font-size:.92rem">Best guess for ${pred.year}: <strong style="color:var(--gold)">about ${pred.pts} points</strong> for a sure tag — based on the trend, not a promise.${extra}</p>`;
       }
     }
-    html+=`<table class="simple"><thead><tr><th>Year</th><th>Sure-tag pts</th><th>Reported / Filled</th><th>Success</th><th>Tags</th></tr></thead><tbody>
+    html+=`<table class="simple"><thead><tr><th>Year</th><th>Sure-tag pts</th><th>Hunters / Taken</th><th>Success</th><th>Ctrl tags</th></tr></thead><tbody>
       ${t.rows.map(r=>`<tr><td>${r.year}</td><td>${r.pts100===null?'Luck':r.pts100}</td><td>${r.hunters==null?'—':fmt(r.hunters)+' / '+fmt(r.harvested)}</td><td>${r.success==null?'—':fmtP(r.success)+(r.hunters!=null&&r.tags>0&&r.hunters/r.tags<LOW_REPORT?' ⚠':'')}</td><td>${fmt(r.tags)}</td></tr>`).join('')}
     </tbody></table></div>`;
   }
@@ -2163,6 +2193,69 @@ function parseOdfwTable(txt){
   }
   return [];
 }
+// ── Data sources view: links to every ODFW table the app pulls from, exactly
+// what the scraper is fed. A year picker builds the direct report links so you
+// can hand-verify any number. Draw + harvest reports are year-specific PDFs
+// hosted by ODFW; the season/regs tables and synopsis are single live pages.
+window._dataYear = null;
+function renderDataSources(){
+  const box = $('#dataSourcesBody'); if(!box) return;
+  const years = yList();
+  if(!window._dataYear) window._dataYear = years[0] || String(new Date().getFullYear());
+  const y = window._dataYear;
+  // ODFW's year-specific report URLs (the auto-updater discovers these off the
+  // landing pages; here we link both the landing page AND the direct file so
+  // you land exactly on the table).
+  const drawLanding = 'https://myodfw.com/articles/point-summary-reports';
+  const harvestLanding = 'https://myodfw.com/articles/big-game-hunting-harvest-statistics';
+  const deerHarvest = `https://dfw.state.or.us/resources/hunting/big_game/controlled_hunts/docs/hunts_summary_reports/${y}/Buck_Deer_Any_Legal_Weapon_Harvest_Summary.pdf`;
+  const elkHarvest = `https://dfw.state.or.us/resources/hunting/big_game/controlled_hunts/docs/hunts_summary_reports/${y}/Elk_Any_Legal_Weapon_Harvest_Summary.pdf`;
+  const synUrl = (SYN && SYN.url) || 'https://www.eregulations.com/oregon/hunting';
+
+  const yearBtns = years.map(yr=>`<button class="hsel ${yr===y?'on':''}" data-dyear="${yr}" style="min-width:74px">${yr}</button>`).join('');
+
+  const card = (title, desc, links) => `
+    <div class="sec" style="margin-bottom:14px">
+      <h3>${title}</h3>
+      <p class="help" style="margin-bottom:10px">${desc}</p>
+      ${links.map(l=>`<a class="srcbtn" style="margin-bottom:8px" href="${l.url}" target="_blank" rel="noopener">${l.label} ↗</a>`).join('')}
+    </div>`;
+
+  box.innerHTML = `
+    <p class="help" style="margin-bottom:8px">Showing report links for:</p>
+    <div class="hselrow" style="flex-wrap:wrap;gap:6px;margin-bottom:16px">${yearBtns}</div>
+
+    ${card('Harvest statistics',
+      `Hunters, deer/elk taken, antler-class breakdown, and success %. This is the "how hunters did" data. ODFW posts a PDF per species per year — these links go straight to the ${y} tables.`,
+      [ {label:`${y} Buck Deer harvest summary (PDF)`, url:deerHarvest},
+        {label:`${y} Elk harvest summary (PDF)`, url:elkHarvest},
+        {label:'All harvest statistics (landing page)', url:harvestLanding} ])}
+
+    ${card('Draw &amp; point summaries',
+      `Applicants, tags, draw odds, and points-to-draw by point level. This is the "your odds" and "draw results" data. ODFW lists each year's report on the landing page — open it and pick the ${y} deer/elk/pronghorn summary.`,
+      [ {label:`Point summary reports (find ${y})`, url:drawLanding} ])}
+
+    ${card('Season dates, bag limits &amp; tags',
+      `The regulations tables that power season dates, bag limits, the controlled-tag counts, and the Spike-only / Whitetail labels. These are live pages (current edition).`,
+      [ {label:'Buck deer seasons &amp; controlled hunt tables', url:'https://www.eregulations.com/oregon/hunting/buck-deer-seasons'},
+        {label:'Elk seasons &amp; controlled hunt tables', url:'https://www.eregulations.com/oregon/hunting/elk-seasons'},
+        {label:'All Oregon hunting regulations', url:'https://www.eregulations.com/oregon/hunting'} ])}
+
+    ${card('Big Game Synopsis (year-over-year changes)',
+      `The full regulations synopsis PDF. Yellow-highlighted text marks what changed from last year — this is the source for the Synopsis view's change list.`,
+      [ {label:'Open the Big Game Synopsis (PDF)', url:esc(synUrl)} ])}
+
+    ${card('Unit &amp; hunt-area boundary maps',
+      `The unit boundary descriptions and hunt-area maps behind the map view and public-land figures.`,
+      [ {label:'Western Oregon unit map', url:'https://www.eregulations.com/oregon/hunting/western-oregon-unit-map'},
+        {label:'Eastern Oregon unit map', url:'https://www.eregulations.com/oregon/hunting/eastern-oregon-unit-map'},
+        {label:'ODFW interactive hunting map', url:'https://www.oregonhuntingmap.com'} ])}
+
+    <p class="help" style="margin-top:4px">Direct harvest-PDF links follow ODFW's file naming and usually work for recent seasons. If a year's file 404s, ODFW hasn't posted it yet (or renamed it) — use the landing-page link and pick the year there.</p>`;
+
+  box.querySelectorAll('[data-dyear]').forEach(b=>b.onclick=()=>{ window._dataYear=b.dataset.dyear; renderDataSources(); });
+}
+
 async function renderSynopsis(){
   const box = $('#synBody'); if(!box) return;
   const s = await fetchSynopsis();
@@ -2472,7 +2565,7 @@ function showPage(name){
   if(name==='mylist') renderMyList();
   if(name==='premium') renderPremium();
   if(name==='admin') renderAdmin();
-  if(name==='synopsis') renderSynopsis();
+  if(name==='synopsis'){ if(window._synSub==='data') renderDataSources(); else renderSynopsis(); }
   window.scrollTo(0,0);
 }
 
@@ -2492,6 +2585,17 @@ function renderAll(){
 // ─── WIRING ───────────────────────────────────────────────────────────────────
 function wire(){
   $$('.tab').forEach(t=>t.onclick=()=>showPage(t.dataset.tab));
+  // Synopsis ↔ Data sources sub-toggle within the Synopsis/Data tab
+  {
+    const bSyn=$('#synViewSyn'), bData=$('#synViewData');
+    const wSyn=$('#synViewSynWrap'), wData=$('#synViewDataWrap');
+    if(bSyn&&bData){
+      bSyn.onclick=()=>{ window._synSub='syn'; bSyn.classList.add('on'); bData.classList.remove('on');
+        wSyn.style.display=''; wData.style.display='none'; renderSynopsis(); };
+      bData.onclick=()=>{ window._synSub='data'; bData.classList.add('on'); bSyn.classList.remove('on');
+        wData.style.display=''; wSyn.style.display='none'; renderDataSources(); };
+    }
+  }
   // premium species selector + search
   $$('#premSpeciesRow [data-premsp]').forEach(b=>b.onclick=()=>{
     premSpecies=b.dataset.premsp;
