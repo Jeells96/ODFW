@@ -329,6 +329,7 @@ function findChoiceReports(html, pageUrl) {
     if (!/\.xlsx/i.test(a.url)) continue;
     const fname = decodeURIComponent(a.url.split('/').pop() || '');
     if (!/applicants[\s_-]*by[\s_-]*hunt[\s_-]*choice/i.test(fname)) continue;
+    if (/premium/i.test(fname)) continue; // premium files handled separately (findPremiumReports)
     const ym = fname.match(/(20\d{2})/); if (!ym) continue;
     let species = null;
     if (/elk/i.test(fname)) species = 'elk';
@@ -704,10 +705,15 @@ async function main() {
           const fres = await fetch(r.url, { headers: UA });
           if (!fres.ok) throw new Error(`download ${fres.status}`);
           const parsed = parseChoices(Buffer.from(await fres.arrayBuffer()));
+          // Regular choices are 3-digit / herd-area IDs only. Drop any L/M/N
+          // premium hunts that may have leaked in from a mis-matched file.
+          for (const id of Object.keys(parsed)) if (/^[LMN]\d/.test(id)) delete parsed[id];
           console.log(`[parse] ${r.year} ${key}: ${Object.keys(parsed).length} hunts`);
           if (DRY) { details.push(`${r.year} ${key}: would load`); continue; }
           const doc = await fs_('GET', `years/${r.year}/choices/all`);
-          const all = doc ? JSON.parse(gv(doc.fields?.data) || '{}') : {};
+          let all = doc ? JSON.parse(gv(doc.fields?.data) || '{}') : {};
+          // one-time cleanup: remove previously-leaked premium keys from the cloud
+          for (const id of Object.keys(all)) if (/^[LMN]\d/.test(id)) delete all[id];
           Object.assign(all, parsed); // deer 1xx and elk 2xx hunt numbers never collide
           await fs_('PATCH', `years/${r.year}/choices/all`, { fields: { data: V.s(JSON.stringify(all)), updatedAt: V.t(new Date()) } });
           await setMeta(r.year, key, r.fname, Object.keys(parsed).length);
@@ -718,7 +724,7 @@ async function main() {
 
       // ── Premium hunts (L/M/N series) — separate files, same choice format ──
       const premReports = findPremiumReports(drawPageHtml, DRAW_PAGE);
-      console.log(`[premium] found ${premReports.length} premium report link(s)`);
+      console.log(`[premium] found ${premReports.length} premium report link(s): ${premReports.map(r => r.year + ' ' + r.series).join(', ') || 'NONE'}`);
       for (const r of premReports) {
         const key = `premium_${r.series}`; // premium_deer / premium_elk / premium_pronghorn
         try {
