@@ -195,7 +195,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v6.2</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v6.3</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -2032,6 +2032,7 @@ function diffSnapshot(prev){
 // eregulations.com: the PDF's yellow-highlighted text (= changes from the
 // prior year) with surrounding context. Fetched lazily on first tab open.
 let SYN = undefined; // undefined = not fetched, null = fetch failed / none
+let SYN_EDITS = {};   // per-change overrides, keyed by stable change id
 async function fetchSynopsis(){
   if(SYN !== undefined) return SYN;
   try{
@@ -2039,13 +2040,46 @@ async function fetchSynopsis(){
     SYN = d.exists ? d.data() : null;
     if(SYN && typeof SYN.data === 'string') SYN.changes = JSON.parse(SYN.data);
   }catch(e){ SYN = null; }
+  try{
+    const e = await db.collection('meta').doc('synopsisEdits').get();
+    SYN_EDITS = e.exists ? (e.data().edits ? JSON.parse(e.data().edits) : {}) : {};
+  }catch(e){ SYN_EDITS = {}; }
   return SYN;
 }
+// Stable id for a change so manual edits survive re-scrapes: page + short hash
+// of the highlighted text. Independent of ordering or context tweaks.
+function synId(e){
+  const str = e.p + '|' + (e.hl||'');
+  let h = 0; for(let i=0;i<str.length;i++){ h = (h*31 + str.charCodeAt(i)) | 0; }
+  return 'c' + e.p + '_' + (h>>>0).toString(36);
+}
+async function saveSynEdits(){
+  try{
+    await db.collection('meta').doc('synopsisEdits').set({
+      edits: JSON.stringify(SYN_EDITS),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    return true;
+  }catch(e){ toast('Save failed — check connection',true); return false; }
+}
 function markHl(ctx, hl){
-  // bold the highlighted words inside the context sentence
   const c = esc(ctx), h = esc(hl);
   if(h && h.length > 2 && c.includes(h)) return c.replace(h, '<mark style="background:rgba(240,199,80,.32);color:inherit;padding:0 2px;border-radius:3px">'+h+'</mark>');
   return c;
+}
+// Render a user-supplied table (rows of cells) as an HTML table
+function synTableHtml(rows){
+  if(!rows||!rows.length) return '';
+  return '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.82rem">'+
+    rows.map((r,i)=>'<tr>'+r.map(c=>`<${i===0?'th':'td'} style="border:1px solid var(--line);padding:5px 7px;text-align:left;${i===0?'background:#243528;font-weight:700':''}">${esc(c)}</${i===0?'th':'td'}>`).join('')+'</tr>').join('')+
+    '</table></div>';
+}
+// Parse pasted table text: lines = rows, split cells on 2+ spaces, tabs, or | 
+function parseTableText(txt){
+  return txt.split('\n').map(l=>l.trim()).filter(Boolean)
+    .map(l=> l.includes('|') ? l.split('|').map(c=>c.trim()).filter(Boolean)
+                             : l.split(/\t|\s{2,}/).map(c=>c.trim()).filter(Boolean))
+    .filter(r=>r.length);
 }
 async function renderSynopsis(){
   const box = $('#synBody'); if(!box) return;
@@ -2058,23 +2092,127 @@ async function renderSynopsis(){
   }
   const yr = s.year && s.year > 2000 ? s.year : '';
   const pdfUrl = esc(s.url);
+  const editing = !!window.synEdit;
   let html = `<a class="srcbtn" style="margin-bottom:8px" href="${pdfUrl}" target="_blank" rel="noopener">Open the ${yr} Big Game Synopsis (PDF) ↗</a>${hubLink}`;
+  // edit-mode toggle (only meaningful once unlocked; tap prompts for PIN)
+  html += `<button class="srcbtn" id="synEditToggle" style="margin-top:8px;${editing?'background:var(--gold);color:#1c2418;font-weight:700':''}">${editing?'✓ Done editing':'✎ Edit changes'}</button>`;
   const ch = s.changes || [];
+  const hiddenCount = ch.filter(e=>SYN_EDITS[synId(e)]?.hide).length;
   html += `<div class="sechead" style="margin-top:18px">What changed this year</div>
-    <p class="help" style="margin-bottom:10px">${ch.length ? `Every yellow-highlighted change in the ${yr} book — ${fmt(ch.length)} found${s.truncated ? ' (list capped for size)' : ''}. Tap any change to open that page in the PDF; use your back button to return here.` : 'No highlighted changes were detected in this edition.'}</p>`;
-  // group by heading where present, else by page
+    <p class="help" style="margin-bottom:10px">${ch.length ? `Every yellow-highlighted change in the ${yr} book — ${fmt(ch.length)} found${hiddenCount&&!editing?`, ${hiddenCount} hidden`:''}${s.truncated ? ' (list capped for size)' : ''}. ${editing?'Tap a card to hide it or replace its text. Your edits are saved and survive future updates.':'Tap any change to open that page in the PDF; use your back button to return here.'}` : 'No highlighted changes were detected in this edition.'}</p>`;
   let lastKey = null;
   for(const e of ch){
-    const key = e.h || ('Page ' + e.p);
+    const id = synId(e);
+    const ov = SYN_EDITS[id] || {};
+    if(ov.hide && !editing) continue; // hidden cards vanish for normal viewing
+    const key = ov.heading || e.h || ('Page ' + e.p);
     if(key !== lastKey){ html += `<div class="sechead" style="font-size:.8rem;margin-top:14px">${esc(key)}</div>`; lastKey = key; }
     const href = `${pdfUrl}#page=${e.p}`;
-    html += `<a class="card synchg" href="${href}" target="_blank" rel="noopener" style="display:block;text-decoration:none;color:inherit"><p class="plain" style="font-size:.87rem;line-height:1.55;margin:0">${markHl(e.ctx, e.hl)}</p><p class="help" style="margin:6px 0 0;display:flex;justify-content:space-between"><span>pg ${e.p}</span><span style="opacity:.7">Open in PDF ↗</span></p></a>`;
+    // body: user override (table or text) wins over scraped context
+    let body;
+    if(ov.table) body = synTableHtml(ov.table);
+    else if(ov.text!=null) body = `<p class="plain" style="font-size:.87rem;line-height:1.55;margin:0">${esc(ov.text)}</p>`;
+    else body = `<p class="plain" style="font-size:.87rem;line-height:1.55;margin:0">${markHl(e.ctx, e.hl)}</p>`;
+    const editedBadge = (ov.text!=null||ov.table) ? '<span style="opacity:.7">✎ edited</span>' : '<span style="opacity:.7">Open in PDF ↗</span>';
+    if(editing){
+      html += `<div class="card synchg" data-synedit="${id}" style="${ov.hide?'opacity:.4':''}">
+        ${body}
+        <div class="help" style="margin:8px 0 0;display:flex;justify-content:space-between;align-items:center">
+          <span>pg ${e.p}${ov.hide?' · hidden':''}</span>
+          <span style="color:var(--gold)">Tap to edit ▸</span>
+        </div></div>`;
+    } else {
+      html += `<a class="card synchg" href="${href}" target="_blank" rel="noopener" style="display:block;text-decoration:none;color:inherit">
+        ${body}
+        <p class="help" style="margin:6px 0 0;display:flex;justify-content:space-between"><span>pg ${e.p}</span>${editedBadge}</p></a>`;
+    }
   }
   html += `<p class="help" style="margin-top:14px">Detection is automatic and based on the book's own highlighting — always confirm details in the official synopsis before you apply or hunt.</p>`;
   box.innerHTML = html;
+
+  // wire edit toggle (PIN-gated)
+  const tog = $('#synEditToggle');
+  if(tog) tog.onclick = ()=>{
+    if(window.synEdit){ window.synEdit=false; renderSynopsis(); return; }
+    if(window.pinOk){ window.synEdit=true; renderSynopsis(); return; }
+    pinPrompt(pin=>{ if(pin===window.ADMIN_PIN){ window.pinOk=true; window.synEdit=true; renderSynopsis(); } else toast('Wrong PIN',true); });
+  };
+  // wire per-card editors
+  if(editing) box.querySelectorAll('[data-synedit]').forEach(card=>{
+    card.onclick = ()=>openSynEditor(card.dataset.synedit, ch.find(e=>synId(e)===card.dataset.synedit));
+  });
+}
+
+// Editor sheet for a single change card
+function openSynEditor(id, e){
+  if(!e) return;
+  const ov = SYN_EDITS[id] || {};
+  const orig = e.ctx || '';
+  $('#shTitle').textContent = 'Edit change · pg ' + e.p;
+  $('#shSub').textContent = 'Fix how this highlighted change is shown';
+  const curText = ov.text!=null ? ov.text : '';
+  const curTable = ov.table ? ov.table.map(r=>r.join('  |  ')).join('\n') : '';
+  $('#shBody').innerHTML = `
+    <div class="sec">
+      <h3>Original (from the PDF)</h3>
+      <p class="plain" style="font-size:.82rem;line-height:1.5;opacity:.75">${esc(orig)}</p>
+      <a class="srcbtn" style="margin-top:8px" href="${esc((SYN&&SYN.url)||'')}#page=${e.p}" target="_blank" rel="noopener">Open pg ${e.p} in the PDF to copy the real text ↗</a>
+    </div>
+    <div class="sec">
+      <h3>Show this change as…</h3>
+      <div class="hselrow" id="synModeRow">
+        <button class="hsel ${!ov.table?'on':''}" data-synmode="text">Text</button>
+        <button class="hsel ${ov.table?'on':''}" data-synmode="table">Table</button>
+      </div>
+      <div id="synTextWrap" style="${ov.table?'display:none':''}">
+        <p class="help">Paste or type the clean text this card should show. Leave blank to keep the original.</p>
+        <textarea id="synTextIn" style="width:100%;min-height:100px;font-size:.9rem;padding:10px;border-radius:10px" placeholder="e.g. Thermal and other night-vision optics are prohibited for hunting or scouting (trail cameras are still allowed).">${esc(curText)}</textarea>
+      </div>
+      <div id="synTableWrap" style="${ov.table?'':'display:none'}">
+        <p class="help">Paste the table — one row per line, columns separated by 2+ spaces, a tab, or a | bar. First row is the header.</p>
+        <textarea id="synTableIn" style="width:100%;min-height:140px;font-size:.85rem;padding:10px;border-radius:10px;font-family:monospace" placeholder="Hunt #  |  Hunt Name  |  Tags\nAD101  |  Aldrich 01  |  1,100\nCR101  |  Crooked River 01  |  851">${esc(curTable)}</textarea>
+        <div id="synTablePreview" style="margin-top:10px"></div>
+      </div>
+    </div>
+    <div class="sec">
+      <button class="btn primary" id="synSave" style="width:100%">Save</button>
+      <button class="btn" id="synHide" style="width:100%;margin-top:8px;${ov.hide?'border-color:var(--good);color:var(--good)':'border-color:var(--bad);color:var(--bad)'}">${ov.hide?'Un-hide this change':'Hide this change'}</button>
+      ${(ov.text!=null||ov.table||ov.hide||ov.heading)?'<button class="linkbtn" id="synReset" style="margin-top:10px">Reset to original</button>':''}
+    </div>`;
+  $('#sheet').classList.add('open'); $('#sheet').scrollTop=0;
+  document.body.style.overflow='hidden';
+
+  const modeRow=$('#synModeRow');
+  modeRow.querySelectorAll('[data-synmode]').forEach(b=>b.onclick=()=>{
+    modeRow.querySelectorAll('[data-synmode]').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+    const t=b.dataset.synmode==='table';
+    $('#synTableWrap').style.display=t?'':'none';
+    $('#synTextWrap').style.display=t?'none':'';
+  });
+  const tIn=$('#synTableIn'), prev=$('#synTablePreview');
+  const renderPrev=()=>{ const rows=parseTableText(tIn.value); prev.innerHTML= rows.length?('<p class="help">Preview:</p>'+synTableHtml(rows)):''; };
+  if(tIn){ tIn.oninput=renderPrev; renderPrev(); }
+
+  $('#synSave').onclick=async()=>{
+    const mode=modeRow.querySelector('.on').dataset.synmode;
+    const next={...(SYN_EDITS[id]||{})};
+    delete next.text; delete next.table;
+    if(mode==='table'){ const rows=parseTableText($('#synTableIn').value); if(rows.length) next.table=rows; }
+    else { const v=$('#synTextIn').value.trim(); if(v) next.text=v; }
+    if(Object.keys(next).length) SYN_EDITS[id]=next; else delete SYN_EDITS[id];
+    if(await saveSynEdits()){ toast('Saved'); closeDetail(); renderSynopsis(); }
+  };
+  $('#synHide').onclick=async()=>{
+    const next={...(SYN_EDITS[id]||{})}; next.hide=!next.hide;
+    if(!next.hide && Object.keys(next).length===1) delete SYN_EDITS[id]; else SYN_EDITS[id]=next;
+    if(await saveSynEdits()){ toast(next.hide?'Hidden':'Un-hidden'); closeDetail(); renderSynopsis(); }
+  };
+  const rst=$('#synReset');
+  if(rst) rst.onclick=async()=>{ delete SYN_EDITS[id]; if(await saveSynEdits()){ toast('Reset'); closeDetail(); renderSynopsis(); } };
 }
 
 function showPage(name){
+  if(name!=='synopsis') window.synEdit=false;
   $$('.page').forEach(p=>p.classList.toggle('active',p.dataset.page===name));
   $$('.tab').forEach(t=>t.classList.toggle('on',t.dataset.tab===name));
   if(name==='mylist') renderMyList();
@@ -2109,12 +2247,12 @@ function wire(){
   const ps=$('#premSearch'); if(ps) ps.oninput=()=>renderPremium();
   const pso=$('#premSort'); if(pso) pso.onchange=()=>{ premSort=pso.value; renderPremium(); };
   const ADMIN_PIN='2325';
-  let pinOk=false;
+  window.ADMIN_PIN=ADMIN_PIN;
   function openAdmin(){ showPage('admin'); }
   function gate(){
-    if(pinOk){ openAdmin(); return; }
+    if(window.pinOk){ openAdmin(); return; }
     pinPrompt(pin=>{
-      if(pin===ADMIN_PIN){ pinOk=true; openAdmin(); }
+      if(pin===ADMIN_PIN){ window.pinOk=true; openAdmin(); }
       else toast('Wrong PIN',true);
     });
   }
