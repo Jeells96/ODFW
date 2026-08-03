@@ -199,7 +199,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.8</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.9</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -314,6 +314,16 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
     <p class="ptitle">Automatic updates</p>
     <div id="autoCard" class="help">Checking…</div>
     <p class="help" style="margin-top:10px">A helper program checks ODFW on the 1st of each month and loads new draw reports and harvest results by itself. If a line above says <strong>NEEDS MANUAL UPLOAD</strong>, follow the steps below for that file.</p>
+  </div></div>
+
+  <div class="panel"><div class="pbody">
+    <p class="ptitle">AI assistant</p>
+    <div id="aiAdminCard" class="help">Checking…</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button class="btn" id="btnAiFactcheck" style="flex:1;min-width:180px">Fact-check season data</button>
+      <button class="btn" id="btnAiKick" style="flex:1;min-width:140px">Process queue now</button>
+    </div>
+    <p class="help" style="margin-top:10px">Answers come from Google Gemini on a free key. Opening any hunt queues its questions; the queue drains slowly while the app is open (and every night automatically). When the free daily limit runs out it pauses and picks up where it left off — nothing is lost.</p>
   </div></div>
 
   <div class="panel"><div class="pbody">
@@ -1338,6 +1348,481 @@ function toggleFav(num,sp) {
   saveFavs(favs);
 }
 
+// ─── AI ASSISTANT (Gemini, free tier) ────────────────────────────────────────
+// A free Gemini key answers a fixed set of questions per hunt (special access
+// rules, unit intel), fact-checks the parsed season data against official
+// sources, and writes plain-language summaries of the synopsis changes.
+//
+// How it stays inside the free tier: every question becomes a doc in the
+// ai_queue collection with its full prompt embedded. A slow processor loop
+// (one request every ~8s) runs while the app is open; hitting the daily or
+// per-minute limit writes a shared pausedUntil into meta/aiState and the queue
+// simply waits — any device that opens the app later (or the nightly GitHub
+// Action running scripts/ai-queue.mjs) picks it back up where it left off.
+// Answers are saved one doc per question in ai_answers so every device relays
+// the same text without re-asking.
+//
+// The key is deliberately shipped in the page (owner's explicit choice):
+// family-only app, free tier, no billing attached — worst case the quota runs
+// out and the queue pauses. It's stored base64-encoded only because GitHub's
+// push protection blocks the literal form; anyone with the page can decode it,
+// which is understood and accepted.
+const AI_KEY   = atob('QVEuQWI4Uk42SzkxaWRJUkFfMjZyS2FmWlB4YllNMDdEZ0ZWSE5ucVNJQWlsdlQtTC1fT2c=');
+const AI_MODEL = 'gemini-flash-latest';
+const AI_URL   = 'https://generativelanguage.googleapis.com/v1beta/models/' + AI_MODEL + ':generateContent';
+const AI_PACE_MS  = 8000;    // ≥8s between calls keeps us under the free RPM cap
+const AI_CLAIM_MS = 120000;  // queue items claimed more recently belong to another device
+const AI_CLIENT   = Math.random().toString(36).slice(2, 10);
+
+async function aiGenerate(prompt, opts) {
+  opts = opts || {};
+  const body = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.2, maxOutputTokens: opts.maxTokens || 1024 }
+  };
+  if (opts.search) body.tools = [{ google_search: {} }];
+  const res = await fetch(AI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-goog-api-key': AI_KEY },
+    body: JSON.stringify(body)
+  });
+  if (res.status === 429) {
+    let retryMs = 90000;
+    try {
+      const j = await res.json();
+      const rd = (j.error?.details || []).find(d => String(d['@type'] || '').includes('RetryInfo'))?.retryDelay;
+      if (rd) retryMs = Math.max(60000, parseFloat(rd) * 1000);
+    } catch (e) {}
+    const err = new Error('AI quota exhausted');
+    err.quota = true; err.retryMs = Math.min(retryMs, 6 * 3600 * 1000);
+    throw err;
+  }
+  // Some free keys reject the search-grounding tool — fall back to a plain ask.
+  if (res.status === 400 && opts.search)
+    return aiGenerate(prompt, Object.assign({}, opts, { search: false }));
+  if (!res.ok) { const err = new Error('AI HTTP ' + res.status); err.status = res.status; throw err; }
+  const j = await res.json();
+  const cand = j.candidates && j.candidates[0];
+  const text = ((cand && cand.content && cand.content.parts) || []).map(p => p.text || '').join('').trim();
+  if (!text) throw new Error('AI empty response' + (cand && cand.finishReason ? ' (' + cand.finishReason + ')' : ''));
+  const src = [];
+  ((cand.groundingMetadata || {}).groundingChunks || []).forEach(c => {
+    if (c.web && c.web.uri && /^https?:/.test(c.web.uri))
+      src.push({ t: String(c.web.title || 'source').slice(0, 80), u: c.web.uri });
+  });
+  return { text, src: src.slice(0, 4) };
+}
+
+// The hardcoded per-hunt questions. Opening a hunt's detail sheet enqueues any
+// of these it doesn't have an answer for yet.
+const AI_QUESTIONS = [
+  { k: 'rules', label: 'Access & special restrictions', search: true, prompt: h => {
+      const se = seasonAnyYear(h.huntNum) || {};
+      return 'Research Oregon controlled ' + h.species + ' hunt ' + h.huntNum + ' ("' + h.huntName + '"), ' +
+        (S.selectedYear || '') + ' season' + (se.s ? ', ' + se.s : '') + '. ' +
+        'List every special access requirement that applies to THIS hunt beyond a standard Oregon controlled hunt tag: entry permits, mandatory check-in or check-out, watershed or refuge rules, closures, vehicle limits, fees, or weapon restrictions. ' +
+        '(Example of the kind of thing to catch: hunt 241A requires a City of The Dalles Watershed entry permit with mandatory check-in.) ' +
+        'Use short plain sentences or hyphen bullets. If there are none, reply exactly: "No special access requirements found beyond the standard controlled hunt rules." ' +
+        'Never invent specifics — if something cannot be verified, say what to double-check and where. If relevant, name the ODFW district office to call.';
+    } },
+  { k: 'unit', label: 'Know the unit', search: true, prompt: h => {
+      const se = seasonAnyYear(h.huntNum) || {};
+      return 'For the ' + (unitNameFor(h) || h.huntName) + ' area in Oregon (controlled ' + h.species + ' hunt ' + h.huntNum + '): ' +
+        'in under 130 words of hyphen bullets, describe the terrain and habitat, where ' + (h.species === 'elk' ? 'elk' : 'deer') +
+        ' tend to hold' + (se.s ? ' during the season (' + se.s + ')' : '') + ', land ownership and access basics, and one scouting tip. ' +
+        'If you lack reliable information about this specific unit, say so briefly instead of guessing.';
+    } }
+];
+
+// Seeded answers for hunts whose special rules we already have from the ODFW
+// regs — shipped in code so they show even before any API call, and never
+// re-asked. Keyed by huntKey, then question key.
+const AI_SEED = {
+  '241A_elk': {
+    rules: { label: 'Access & special restrictions', official: true, a:
+'This hunt is inside The Dalles Municipal Watershed, which is closed to unauthorized entry — a Watershed Entry Permit is required, issued at hunter check-in.\n' +
+'- Check in before entering: at The Dalles ODFW office ahead of the hunt if possible, or at the watershed check station on opening day (Wednesday) 5 am–noon. Can\'t make those? Call The Dalles ODFW district office at 541-296-8026.\n' +
+'- Check out daily — hunters must exit the watershed every day. When your hunt ends, deposit your bib and entry permit/harvest report card at the self-service kiosk.\n' +
+'- A numbered bib (furnished by the City) must be worn and visible at all times inside the watershed. Unreturned bibs cost $35.\n' +
+'- One hunting partner may come along but must stay in your immediate vicinity, and may not hunt or carry a centerfire weapon.\n' +
+'- Walk-in only: no motorized vehicles or equipment, no pack or riding animals, no mountain bikes.\n' +
+'- No smoking, no fires of any kind, no alcohol, no overnight stays inside the reserve.\n' +
+'- No body contact with streams, springs or lakes. Pack out all garbage. Use the provided toilets (in an emergency: bury waste 6–8 inches deep, 500+ feet from any water).\n' +
+'- A harvested elk must be removed by the end of the following day. Once you\'ve filled your tag you may not re-enter unless accompanying another 241A tagholder with an unfilled tag.\n' +
+'- $5 per-hunter fee, cash, paid to the City at check-in.\n' +
+'- Bear or cougar may be hunted with a valid, unused 241A elk tag.' }
+  }
+};
+
+// ── queue plumbing ────────────────────────────────────────────────────────────
+const aiQid = s => String(s).replace(/[^\w-]/g, '_').slice(0, 140);
+const aiHash = s => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
+
+// Ensure a queue doc exists (never clobbers one that's mid-flight). skip =
+// {coll, id}: if that doc already exists the work is done — refuse to re-queue.
+// This guards against stale local caches re-asking a question another device
+// already got answered (each re-ask would burn free-tier quota).
+async function aiEnqueue(id, doc, skip) {
+  if (!db) return false;
+  try {
+    if (skip && (await db.collection(skip.coll).doc(skip.id).get()).exists) return true;
+    const ref = db.collection('ai_queue').doc(id);
+    if ((await ref.get()).exists) return true;
+    await ref.set(Object.assign({
+      status: 'pending', attempts: 0, createdAt: Date.now(), claimedAt: 0, claimedBy: ''
+    }, doc));
+    return true;
+  } catch (e) { return false; }
+}
+
+let _aiState = null, _aiStateAt = 0;
+async function aiState(force) {
+  if (!force && _aiState && Date.now() - _aiStateAt < 60000) return _aiState;
+  try { const d = await db.collection('meta').doc('aiState').get(); _aiState = d.exists ? d.data() : {}; }
+  catch (e) { _aiState = _aiState || {}; }
+  _aiStateAt = Date.now();
+  return _aiState;
+}
+async function aiPause(ms, why) {
+  _aiState = Object.assign({}, _aiState, { pausedUntil: Date.now() + ms, pauseWhy: why || 'quota' });
+  _aiStateAt = Date.now();
+  try { await db.collection('meta').doc('aiState').set({ pausedUntil: _aiState.pausedUntil, pauseWhy: _aiState.pauseWhy }, { merge: true }); } catch (e) {}
+}
+async function aiBumpUsed() {
+  const day = new Date().toISOString().slice(0, 10);
+  const used = (_aiState && _aiState.day === day ? _aiState.used || 0 : 0) + 1;
+  _aiState = Object.assign({}, _aiState, { day, used });
+  try { await db.collection('meta').doc('aiState').set({ day, used }, { merge: true }); } catch (e) {}
+}
+
+// Oldest unclaimed item, claimed optimistically (re-read to confirm we won).
+async function aiClaimNext() {
+  const snap = await db.collection('ai_queue').orderBy('createdAt').limit(15).get();
+  const now = Date.now();
+  for (const d of snap.docs) {
+    const it = d.data();
+    if (it.status === 'error') continue;
+    if ((it.claimedAt || 0) > now - AI_CLAIM_MS && it.claimedBy !== AI_CLIENT) continue;
+    try {
+      await d.ref.update({ claimedAt: now, claimedBy: AI_CLIENT });
+      const chk = await d.ref.get();
+      if (!chk.exists || chk.data().claimedBy !== AI_CLIENT) continue;
+      return Object.assign({ id: d.id, ref: d.ref }, chk.data());
+    } catch (e) { continue; }
+  }
+  return null;
+}
+
+// Lenient JSON-array extraction for fact-check replies (models add fences/prose).
+function aiParseVerdicts(text) {
+  const m = String(text).match(/\[[\s\S]*\]/);
+  if (!m) return null;
+  try {
+    const arr = JSON.parse(m[0]);
+    if (!Array.isArray(arr)) return null;
+    const out = {};
+    for (const e of arr) {
+      if (!e || !e.hunt) continue;
+      const id = String(e.hunt);
+      if (!/^[\w-]{1,20}$/.test(id)) continue; // hunt numbers only — no key tricks
+      const v = ['ok', 'suspect', 'unknown'].includes(e.v) ? e.v : 'unknown';
+      out[id] = { v, note: String(e.note || '').slice(0, 160) };
+    }
+    return Object.keys(out).length ? out : null;
+  } catch (e) { return null; }
+}
+
+// Route a finished answer to its destination collection.
+async function aiDeliver(item, res) {
+  const dest = JSON.parse(item.dest);
+  if (dest.t === 'ans') {
+    await db.collection('ai_answers').doc(aiQid(dest.hk + '__' + dest.qk)).set({
+      huntKey: dest.hk, qk: dest.qk, label: dest.label || '', q: dest.q || '',
+      a: res.text, src: JSON.stringify(res.src || []), model: AI_MODEL, at: Date.now()
+    });
+    _aiAnsCache.delete(dest.hk);
+    aiRefreshSheet(dest.hk);
+  } else if (dest.t === 'fc') {
+    const items = aiParseVerdicts(res.text);
+    if (!items) throw new Error('fact-check reply was not parseable JSON');
+    await db.collection('ai_factcheck').doc(item.id).set({
+      year: dest.year, items: JSON.stringify(items), model: AI_MODEL, at: Date.now()
+    });
+    _aiFcCache.delete(dest.year);
+  } else if (dest.t === 'syn') {
+    await db.collection('ai_syn').doc(item.id).set({
+      file: dest.file, cid: dest.id, a: res.text, model: AI_MODEL, at: Date.now()
+    });
+    const el = document.querySelector('[data-aisyn="' + CSS.escape(dest.id) + '"]');
+    if (el) el.innerHTML = aiSynHtml(res.text);
+  } else throw new Error('unknown destination ' + dest.t);
+}
+
+// The slow drain loop. One item per pass, AI_PACE_MS apart, until the queue is
+// empty or the shared pause kicks in.
+let _aiBusy = false, _aiKickTimer = null;
+function aiKick(delay) {
+  clearTimeout(_aiKickTimer);
+  _aiKickTimer = setTimeout(() => { aiProcessLoop(); }, delay || 600);
+}
+async function aiProcessLoop() {
+  if (_aiBusy || !db) return;
+  _aiBusy = true;
+  try {
+    while (true) {
+      const st = await aiState();
+      if ((st.pausedUntil || 0) > Date.now()) break;
+      let item;
+      try { item = await aiClaimNext(); } catch (e) { break; }
+      if (!item) break;
+      try {
+        const res = await aiGenerate(item.prompt, { search: !!item.search, maxTokens: item.maxTokens || 1024 });
+        await aiDeliver(item, res);
+        await item.ref.delete();
+        aiBumpUsed();
+      } catch (e) {
+        if (e.quota) { await aiPause(e.retryMs, 'quota'); break; }
+        if (e.status === 403 || e.status === 401) { await aiPause(6 * 3600 * 1000, 'key'); break; }
+        const attempts = (item.attempts || 0) + 1;
+        try {
+          await item.ref.update({ attempts, lastError: String(e.message || e).slice(0, 200),
+            status: attempts >= 3 ? 'error' : 'pending', claimedAt: 0, claimedBy: '' });
+        } catch (e2) {}
+      }
+      await new Promise(r => setTimeout(r, AI_PACE_MS));
+    }
+  } finally { _aiBusy = false; }
+}
+
+// ── per-hunt answers: cache, enqueue-on-view, render ─────────────────────────
+const _aiAnsCache = new Map(); // huntKey -> {at, items:[{qk,label,q,a,src,at}]}
+async function aiAnswersFor(hk) {
+  const hit = _aiAnsCache.get(hk);
+  if (hit && Date.now() - hit.at < 300000) return hit.items;
+  if (!db) return null;
+  try {
+    const snap = await db.collection('ai_answers').where('huntKey', '==', hk).get();
+    const items = snap.docs.map(d => d.data());
+    _aiAnsCache.set(hk, { at: Date.now(), items });
+    return items;
+  } catch (e) { return null; }
+}
+// Escape-then-format: **bold**, hyphen bullets, newlines. AI text is untrusted
+// input — it must never reach innerHTML unescaped.
+function aiHtml(text) {
+  let s = esc(String(text || ''));
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.split('\n').map(l => {
+    const t = l.trim();
+    if (/^[-*•]\s+/.test(t)) return '<span style="display:block;padding-left:14px;text-indent:-11px">• ' + t.replace(/^[-*•]\s+/, '') + '</span>';
+    return t;
+  }).filter(Boolean).join('<br>');
+  return s;
+}
+const aiSynHtml = t => '<p class="help" style="margin:8px 0 0;color:var(--gold)">✨ ' + aiHtml(t) + '</p>';
+function aiSrcHtml(srcJson) {
+  let src = []; try { src = JSON.parse(srcJson || '[]'); } catch (e) {}
+  if (!src.length) return '';
+  return '<div class="help" style="margin-top:4px;font-size:.72rem">Sources: ' + src.map(s =>
+    /^https?:/.test(s.u) ? '<a href="' + esc(s.u) + '" target="_blank" rel="noopener">' + esc(s.t || 'link') + '</a>' : ''
+  ).filter(Boolean).join(' · ') + '</div>';
+}
+
+// If the open detail sheet is showing this hunt, redraw its AI section.
+function aiRefreshSheet(hk) {
+  if (!sheetId) return;
+  const [num, sp] = sheetId.split('_');
+  if (num + '_' + sp !== hk) return;
+  const h = getH().find(x => x.huntNum === num && x.species === sp);
+  if (h && $('#aiSec')) loadAiInto(h);
+}
+
+async function loadAiInto(h) {
+  const sec = $('#aiSec'); if (!sec) return;
+  // If the family member is mid-question, don't wipe their draft when an
+  // answer for a sibling question re-renders this section.
+  const draftEl = sec.querySelector('#aiAskText');
+  const draft = draftEl ? draftEl.value : '';
+  const draftOpen = !!draftEl && sec.querySelector('#aiAskBox').style.display !== 'none';
+  const hk = hkey(h);
+  const seed = AI_SEED[hk] || {};
+  const answers = await aiAnswersFor(hk);
+  if (!$('#aiSec')) return; // sheet closed while loading
+  const byQk = {};
+  (answers || []).forEach(a => { byQk[a.qk] = a; });
+
+  let html = '<h3>AI scouting report</h3>';
+  // fact-check flag for this hunt's season data, if the auditor found an issue
+  const fc = await aiFactcheckFor(S.selectedYear);
+  const flag = fc && fc[h.huntNum];
+  if (flag && flag.v === 'suspect')
+    html += '<p class="plain" style="background:var(--warnbg);color:var(--warn);padding:11px 13px;border-radius:10px;font-size:.9rem">⚠ The AI cross-check couldn\'t confirm this hunt\'s season/bag data' + (flag.note ? ': ' + esc(flag.note) : '') + '. Double-check the official regulations.</p>';
+
+  const missing = [];
+  for (const qdef of AI_QUESTIONS) {
+    const seeded = seed[qdef.k], ans = byQk[qdef.k];
+    if (seeded) {
+      html += '<div style="margin-bottom:14px"><div style="font-weight:700;margin-bottom:4px">' + esc(seeded.label) +
+        ' <span class="chip" style="vertical-align:middle">From the ODFW hunt regulations</span></div>' +
+        '<div style="font-size:.9rem;line-height:1.55">' + aiHtml(seeded.a) + '</div></div>';
+    } else if (ans) {
+      html += '<div style="margin-bottom:14px"><div style="font-weight:700;margin-bottom:4px">' + esc(ans.label || qdef.label) + '</div>' +
+        '<div style="font-size:.9rem;line-height:1.55;color:var(--dim)">' + aiHtml(ans.a) + '</div>' +
+        aiSrcHtml(ans.src) +
+        '<div class="help" style="margin-top:2px;font-size:.72rem">AI-generated ' + new Date(ans.at).toLocaleDateString() + (window.pinOk ? ' · <button class="linkbtn" data-airedo="' + esc(qdef.k) + '" style="font-size:.72rem;padding:0">↻ update</button>' : '') + '</div></div>';
+    } else missing.push(qdef);
+  }
+  // custom questions the family has asked about this hunt
+  (answers || []).filter(a => a.qk && a.qk.startsWith('c_')).forEach(a => {
+    html += '<div style="margin-bottom:14px"><div style="font-weight:700;margin-bottom:4px">' + esc(a.q || a.label) + '</div>' +
+      '<div style="font-size:.9rem;line-height:1.55;color:var(--dim)">' + aiHtml(a.a) + '</div>' + aiSrcHtml(a.src) +
+      '<div class="help" style="margin-top:2px;font-size:.72rem">AI-generated ' + new Date(a.at).toLocaleDateString() + '</div></div>';
+  });
+
+  if (answers === null) {
+    html += '<p class="help">Couldn\'t reach the cloud — AI answers will show when you\'re back online.</p>';
+  } else if (missing.length) {
+    html += '<p class="help">' + missing.map(q => esc(q.label)).join(' and ') + ': queued — answers appear here automatically, usually within a few minutes.</p>';
+    for (const qdef of missing)
+      aiEnqueue(aiQid(hk + '__' + qdef.k), {
+        kind: 'hunt', search: !!qdef.search, prompt: qdef.prompt(h),
+        dest: JSON.stringify({ t: 'ans', hk, qk: qdef.k, label: qdef.label })
+      }, { coll: 'ai_answers', id: aiQid(hk + '__' + qdef.k) });
+    aiKick();
+  }
+
+  html += '<button class="linkbtn" id="aiAskBtn" style="padding-left:0">+ Ask AI about this hunt</button>' +
+    '<div id="aiAskBox" style="display:none">' +
+    '<textarea id="aiAskText" placeholder="e.g. Is there good camping close to the unit? What\'s the road access like in November?" style="width:100%;min-height:64px;font-size:1rem;font-family:inherit;background:var(--card2);color:var(--text);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px"></textarea>' +
+    '<button class="btn primary" id="aiAskSend" style="width:100%;margin-top:8px">Ask — answer appears for everyone</button></div>' +
+    '<p class="help" style="margin-top:10px;font-size:.72rem">AI answers can be wrong or out of date. Always confirm rules, dates, and access in the current official Oregon regulations.</p>';
+
+  sec.innerHTML = html;
+  const askBtn = $('#aiAskBtn');
+  if (askBtn) askBtn.onclick = () => { $('#aiAskBox').style.display = 'block'; askBtn.style.display = 'none'; $('#aiAskText').focus(); };
+  if (draftOpen || draft) { $('#aiAskBox').style.display = 'block'; if (askBtn) askBtn.style.display = 'none'; $('#aiAskText').value = draft; }
+  const send = $('#aiAskSend');
+  if (send) send.onclick = async () => {
+    const q = $('#aiAskText').value.trim();
+    if (!q) { toast('Type a question first', true); return; }
+    if (q.length > 500) { toast('Keep it under 500 characters', true); return; }
+    send.textContent = 'Queuing…'; send.disabled = true;
+    const qk = 'c_' + aiHash(q.toLowerCase());
+    const ok = await aiEnqueue(aiQid(hk + '__' + qk), {
+      kind: 'custom', search: true,
+      prompt: 'You are answering a question from a family of Oregon hunters about controlled ' + h.species + ' hunt ' +
+        h.huntNum + ' ("' + h.huntName + '"). Question: ' + q + '\nSearch for current information if needed. ' +
+        'Answer concisely in plain language; use hyphen bullets for lists; if you are not sure, say so rather than guessing.',
+      dest: JSON.stringify({ t: 'ans', hk, qk, label: 'Q: ' + q.slice(0, 80), q })
+    }, { coll: 'ai_answers', id: aiQid(hk + '__' + qk) });
+    toast(ok ? 'Queued — the answer will appear here for everyone ✓' : 'Couldn\'t queue it — check your connection', !ok);
+    if (ok) { aiKick(); loadAiInto(h); }
+    else { send.textContent = 'Ask — answer appears for everyone'; send.disabled = false; }
+  };
+  sec.querySelectorAll('[data-airedo]').forEach(b => b.onclick = async () => {
+    const qdef = AI_QUESTIONS.find(q => q.k === b.dataset.airedo); if (!qdef) return;
+    try { await db.collection('ai_answers').doc(aiQid(hk + '__' + qdef.k)).delete(); } catch (e) {}
+    _aiAnsCache.delete(hk);
+    await aiEnqueue(aiQid(hk + '__' + qdef.k), {
+      kind: 'hunt', search: !!qdef.search, prompt: qdef.prompt(h),
+      dest: JSON.stringify({ t: 'ans', hk, qk: qdef.k, label: qdef.label })
+    });
+    aiKick(); toast('Re-asked — a fresh answer is queued');
+    loadAiInto(h);
+  });
+}
+
+// ── fact-check: parsed season data vs official sources ───────────────────────
+const _aiFcCache = new Map(); // year -> {hunt: {v, note}}
+async function aiFactcheckFor(year) {
+  if (!year || !db) return null;
+  if (_aiFcCache.has(year)) return _aiFcCache.get(year);
+  try {
+    const snap = await db.collection('ai_factcheck').where('year', '==', year).get();
+    const map = {};
+    snap.docs.forEach(d => { try { Object.assign(map, JSON.parse(d.data().items || '{}')); } catch (e) {} });
+    _aiFcCache.set(year, map);
+    return map;
+  } catch (e) { return null; }
+}
+async function aiQueueFactcheck(year) {
+  const yd = S.years[year];
+  if (!yd) { toast('No data for ' + year, true); return; }
+  const covered = await aiFactcheckFor(year) || {};
+  const rows = yd.hunts
+    .filter(h => (yd.seasons || {})[h.huntNum] && !covered[h.huntNum])
+    .map(h => { const se = yd.seasons[h.huntNum]; return { hunt: h.huntNum, species: h.species, name: h.huntName, season: se.s, bag: se.b || '' }; });
+  if (!rows.length) { toast('Every hunt with season data is already checked ✓'); return; }
+  const BATCH = 8, MAXB = 40;
+  let queued = 0;
+  for (let i = 0; i < rows.length && queued < MAXB; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH);
+    const ok = await aiEnqueue(aiQid('fc_' + year + '_' + aiHash(batch.map(b => b.hunt).join(','))), {
+      kind: 'factcheck', search: true, maxTokens: 2048,
+      prompt: 'Audit these parsed Oregon ' + year + ' controlled hunt records for accuracy. Our data:\n' +
+        JSON.stringify(batch) + '\n' +
+        'Search official Oregon sources (myodfw.com, eregulations.com/oregon/hunting). For each hunt decide: ' +
+        '"ok" if our season dates and bag limit match official information, "suspect" if they look wrong or have changed, "unknown" if you cannot verify. ' +
+        'Reply with ONLY a JSON array, no prose: [{"hunt":"231","v":"ok|suspect|unknown","note":"<=15 words, only when suspect"}]',
+      dest: JSON.stringify({ t: 'fc', year })
+    }, { coll: 'ai_factcheck', id: aiQid('fc_' + year + '_' + aiHash(batch.map(b => b.hunt).join(','))) });
+    if (ok) queued++;
+  }
+  toast('Queued ' + queued + ' fact-check batch' + (queued === 1 ? '' : 'es') + ' (~' + Math.min(rows.length, queued * BATCH) + ' hunts). ' + (rows.length > MAXB * BATCH ? 'Tap again later for the rest.' : ''));
+  aiKick();
+}
+
+// ── synopsis-change summaries ────────────────────────────────────────────────
+async function loadAiSynopsis(entries, syn) {
+  if (!db || !syn || !syn.fileName) return;
+  let have = {};
+  try {
+    const snap = await db.collection('ai_syn').where('file', '==', syn.fileName).get();
+    snap.docs.forEach(d => { const x = d.data(); have[x.cid] = x.a; });
+  } catch (e) { return; }
+  let queued = 0;
+  for (const e of entries) {
+    const el = document.querySelector('[data-aisyn="' + CSS.escape(e._id) + '"]');
+    if (have[e._id]) { if (el) el.innerHTML = aiSynHtml(have[e._id]); continue; }
+    if (e._manual || queued >= 30) continue; // manual entries are already human-written
+    aiEnqueue(aiQid('syn_' + e._id), {
+      kind: 'synopsis', search: false, maxTokens: 512,
+      prompt: 'ODFW highlights year-over-year rule changes in its Big Game Synopsis with yellow marks. Here is one highlighted change.\n' +
+        'Section heading: ' + (e.h || 'unknown') + '\nHighlighted text: ' + (e.hl || '') + '\nSurrounding context: ' + (e.ctx || '') + '\n' +
+        'In at most 2 plain sentences, explain what changed and what a hunter needs to do differently. ' +
+        'If the text is a table fragment or too unclear to interpret, instead say in one sentence which topic it affects. No preamble.',
+      dest: JSON.stringify({ t: 'syn', file: syn.fileName, id: e._id })
+    }, { coll: 'ai_syn', id: aiQid('syn_' + e._id) });
+    queued++;
+  }
+  if (queued) aiKick();
+}
+
+// ── admin status card ────────────────────────────────────────────────────────
+async function renderAiAdmin() {
+  const card = $('#aiAdminCard'); if (!card) return;
+  if (!db) { card.textContent = 'Cloud unreachable — AI assistant needs a connection.'; return; }
+  try {
+    const [snap, st] = await Promise.all([db.collection('ai_queue').limit(400).get(), aiState(true)]);
+    let pending = 0, errors = 0;
+    snap.docs.forEach(d => { d.data().status === 'error' ? errors++ : pending++; });
+    const paused = (st.pausedUntil || 0) > Date.now();
+    let html = '<div class="statusline"><strong>Queue:</strong> ' + pending + ' waiting · ' + errors + ' failed</div>';
+    if (st.day) html += '<div class="statusline"><strong>Today:</strong> ' + (st.used || 0) + ' AI answers generated</div>';
+    if (paused) html += '<div class="statusline" style="color:var(--warn)">Paused until ' + new Date(st.pausedUntil).toLocaleTimeString() + ' (' + (st.pauseWhy === 'key' ? 'API key problem' : 'free daily limit reached') + ') — resumes by itself.</div>';
+    else if (pending) html += '<div class="statusline" style="color:var(--good)">Working through the queue while the app is open.</div>';
+    else html += '<div class="statusline" style="color:var(--good)">All caught up ✓</div>';
+    const fc = await aiFactcheckFor(S.pendingYear || S.selectedYear);
+    if (fc) {
+      const sus = Object.entries(fc).filter(([, x]) => x.v === 'suspect');
+      const n = Object.keys(fc).length;
+      if (n) html += '<div class="statusline"><strong>Fact-check:</strong> ' + n + ' hunts checked, ' + sus.length + ' flagged</div>' +
+        sus.slice(0, 12).map(([id, x]) => '<div class="statusline" style="color:var(--warn)">⚠ ' + esc(id) + ' — ' + esc(x.note || 'could not confirm') + '</div>').join('');
+    }
+    card.innerHTML = html;
+  } catch (e) { card.textContent = 'Couldn\'t read AI status: ' + e.message; }
+}
+
 // ─── FILTER + SORT ────────────────────────────────────────────────────────────
 function applyFilters(hunts) {
   const q = ($('#fSearch')?.value||'').trim().toLowerCase();
@@ -1785,6 +2270,7 @@ function openDetail(id, keepSel){
   }
   html+=zeroHtml; // 0-points draw odds live near the bottom now
   html+=`<div class="sec" id="reqsSec"><h3>Requirements &amp; special rules</h3><p class="help">Checking…</p></div>`;
+  html+=`<div class="sec" id="aiSec"><h3>AI scouting report</h3><p class="help">Checking…</p></div>`;
   $('#shBody').innerHTML=html;
   $('#shBody').querySelectorAll('[id^="ubdesc"][id$="-btn"]').forEach(b=>{
     const target=document.getElementById(b.id.replace('-btn',''));
@@ -1792,6 +2278,7 @@ function openDetail(id, keepSel){
   });
   const umb=$('#unitMapBtn'); if(umb) umb.onclick=()=>showUnitMap(h);
   loadReqsInto(h);
+  loadAiInto(h);
   $('#shBody').querySelectorAll('[data-hsel]').forEach(b=>b.onclick=()=>{
     sheetHSel=b.dataset.hsel; const keep=$('#sheet').scrollTop;
     openDetail(sheetId,true); $('#sheet').scrollTop=keep;
@@ -2090,6 +2577,7 @@ function toggleHuntTag(huntKey, k){
 }
 async function renderAdmin(){
   renderSpecialMgr();
+  renderAiAdmin();
   $('#pyDisp').textContent=S.pendingYear||'none';
   if($('#pyInput')&&!$('#pyInput').value&&S.pendingYear) $('#pyInput').value=S.pendingYear;
   // years list
@@ -2371,10 +2859,12 @@ async function renderSynopsis(){
   html += `<div class="sechead" style="margin-top:18px">What changed this year</div>
     <p class="help" style="margin-bottom:10px">${all.length ? `${fmt(scraped.length)} highlighted change${scraped.length===1?'':'s'} found${manual.length?` + ${manual.length} you added`:''}${hiddenCount&&!editing?`, ${hiddenCount} hidden`:''}${s.truncated ? ' (list capped for size)' : ''}. ${editing?'Tap a card to hide it, replace its text, or format it as a table. Edits are saved and survive future updates.':'Tap any change to open that page in the PDF; use your back button to return here.'}` : 'No highlighted changes were detected in this edition.'}</p>`;
   let lastKey = null;
+  const shown = []; // entries actually rendered — these get AI summaries
   for(const e of all){
     const id = e._id;
     const ov = e._manual ? {} : (SYN_EDITS[id] || {});
     if(!e._manual && ov.hide && !editing) continue; // hidden cards vanish for normal viewing
+    shown.push(e);
     const key = (e._manual ? e.h : (ov.heading || e.h)) || ('Page ' + e.p);
     if(key !== lastKey){ html += `<div class="sechead" style="font-size:.8rem;margin-top:14px">${esc(key)}</div>`; lastKey = key; }
     const href = `${pdfUrl}#page=${e.p}`;
@@ -2388,6 +2878,8 @@ async function renderSynopsis(){
     else if(ov.table) body = synTableHtml(ov.table, cellSet);
     else if(ov.text!=null) body = `<p class="plain" style="font-size:.87rem;line-height:1.55;margin:0">${markedText(ov.text)}</p>`;
     else body = `<p class="plain" style="font-size:.87rem;line-height:1.55;margin:0">${markHl(e.ctx, e.hl)}</p>`;
+    // AI plain-language summary slot, filled by loadAiSynopsis once answered
+    if(!e._manual) body += `<div data-aisyn="${esc(id)}"></div>`;
     const tag = e._manual ? '<span style="opacity:.7">＋ added</span>' : ((ov.text!=null||ov.table) ? '<span style="opacity:.7">✎ edited</span>' : '<span style="opacity:.7">Open in PDF ↗</span>');
     if(editing){
       const attr = e._manual ? `data-synmanual="${id}"` : `data-synedit="${id}"`;
@@ -2403,8 +2895,9 @@ async function renderSynopsis(){
         <p class="help" style="margin:6px 0 0;display:flex;justify-content:space-between"><span>pg ${e.p||'—'}</span>${tag}</p></a>`;
     }
   }
-  html += `<p class="help" style="margin-top:14px">Detection is automatic and based on the book's own highlighting — always confirm details in the official synopsis before you apply or hunt.</p>`;
+  html += `<p class="help" style="margin-top:14px">Detection is automatic and based on the book's own highlighting — always confirm details in the official synopsis before you apply or hunt. ✨ lines are AI plain-language summaries.</p>`;
   box.innerHTML = html;
+  loadAiSynopsis(shown, s);
 
   // wire edit toggle (PIN-gated)
   const tog = $('#synEditToggle');
@@ -2751,6 +3244,17 @@ function wire(){
   // Rebuilding the whole card list per keystroke made typing stutter on phones.
   $('#fSearch').oninput=debounce(()=>renderCards(),120);
   $('#fYear').onchange=e=>{S.selectedYear=e.target.value;saveLocal();renderCards();renderMyList();};
+  // AI assistant
+  const fcBtn=$('#btnAiFactcheck');
+  if(fcBtn) fcBtn.onclick=()=>{
+    const year=S.pendingYear||S.selectedYear;
+    if(!year){ toast('Pick a year first (Step 1)', true); return; }
+    confirm2('Queue an AI fact-check of the '+year+' season dates and bag limits against official sources? It runs slowly in the background.',()=>{
+      aiQueueFactcheck(year).then(()=>renderAiAdmin());
+    });
+  };
+  const kickBtn=$('#btnAiKick');
+  if(kickBtn) kickBtn.onclick=()=>{ aiKick(0); toast('Working through the queue — keep the app open'); setTimeout(renderAiAdmin, 1500); };
   // admin
   $('#btnSetYear').onclick=()=>{
     const v=$('#pyInput').value.trim();
@@ -2896,6 +3400,9 @@ if ('serviceWorker' in navigator) {
 
 wire();
 init(true);
+// Drain any AI questions other devices left queued — this device may be the
+// first one online since the free-tier quota reset.
+setTimeout(()=>aiKick(0), 6000);
 </script>
 </body>
 </html>

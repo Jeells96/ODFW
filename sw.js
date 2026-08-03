@@ -16,7 +16,7 @@
 //                            stale cache; the app has its own offline path.
 //
 // Bump CACHE when the shell changes — old caches are dropped on activate.
-const CACHE = 'ohp-v7.8.1';
+const CACHE = 'ohp-v7.9.0';
 
 const SHELL = [
   './',
@@ -39,7 +39,9 @@ const CDN = [
 ];
 
 // Live data — always straight to the network, never served from cache.
-const NEVER_CACHE = /firestore\.googleapis\.com|firebaseinstallations|googleapis\.com\/identitytoolkit|firebaselogging/;
+// generativelanguage = the Gemini AI calls; caching those would replay stale
+// answers and silently skip the quota bookkeeping.
+const NEVER_CACHE = /firestore\.googleapis\.com|firebaseinstallations|googleapis\.com\/identitytoolkit|firebaselogging|generativelanguage\.googleapis\.com/;
 
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
