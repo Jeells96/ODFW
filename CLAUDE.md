@@ -18,6 +18,11 @@ whatever is on `main` is what the family sees.
 - Bump the version chip in the header (`class="ver"`) and the `CACHE` constant
   in `sw.js` when shipping user-visible changes, so the service worker rolls
   over and the owner can tell at a glance which build they're looking at.
+- **Start each turn by returning to the feature branch**, since the previous
+  turn's merge leaves you on `main`:
+  `git checkout <branch> && git merge --ff-only main`. Editing first and
+  switching later means `git checkout` refuses (or a stash pop conflicts),
+  because the branch tip is behind the merge commit.
 
 ## Layout
 
