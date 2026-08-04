@@ -1,0 +1,26 @@
+name: AI Queue Nightly Drain
+
+on:
+  schedule:
+    # 5:30 AM Pacific daily (12:30 UTC) — right after Gemini's free-tier daily
+    # quota resets (midnight Pacific), so a full day's allowance is available.
+    - cron: '30 12 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    # 150 items × (7s pace + 3-15s of search-grounded Gemini latency) ≈ 45 min
+    # worst case — the timeout must fit the cap or big queues die mid-drain.
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # No dependencies — the processor is plain fetch() against Firestore REST
+      # and the Gemini API.
+      - name: Process queued AI questions
+        run: node scripts/ai-queue.mjs --max 150
