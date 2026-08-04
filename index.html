@@ -199,7 +199,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.10</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.11</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -320,10 +320,11 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
     <p class="ptitle">AI assistant</p>
     <div id="aiAdminCard" class="help">Checking…</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button class="btn primary" id="btnAiBackfill" style="flex:1 1 100%">↻ Reload queue — ask everything unanswered</button>
       <button class="btn" id="btnAiFactcheck" style="flex:1;min-width:180px">Fact-check season data</button>
       <button class="btn" id="btnAiKick" style="flex:1;min-width:140px">Process queue now</button>
     </div>
-    <p class="help" style="margin-top:10px">Answers come from Google Gemini on a free key. Opening any hunt queues its questions; the queue drains slowly while the app is open (and every night automatically). When the free daily limit runs out it pauses and picks up where it left off — nothing is lost.</p>
+    <p class="help" style="margin-top:10px">Answers come from Google Gemini on a free key. <strong>Reload queue</strong> puts every hunt's unanswered questions in line — press it again any time the queue empties or a new season loads. The queue drains a bit at a time while the app is open, and automatically every night. When the day's free limit runs out it pauses and resumes tomorrow where it left off — nothing is lost.</p>
   </div></div>
 
   <div class="panel"><div class="pbody">
@@ -1452,16 +1453,18 @@ async function aiGenerate(prompt, opts) {
 // Whether to ask for search grounding right now. Once a 429 proves the key has
 // no grounding allowance we stop paying that round-trip, but re-probe weekly so
 // the app upgrades itself the day billing is enabled.
-const AI_REPROBE_MS = 7 * 24 * 3600 * 1000;
+const aiToday = () => new Date().toISOString().slice(0, 10);
 function aiWantSearch(st, want) {
   if (!want) return false;
-  const off = st && st.groundingOffAt;
-  return !(off && Date.now() - off < AI_REPROBE_MS);
+  // The key's quota resets every day, so re-probe grounding once per day: only
+  // skip search if we already proved today that it has no allowance. Costs one
+  // extra request a day and turns search back on by itself the moment it works.
+  return !(st && st.groundingOffDay === aiToday());
 }
 async function aiMarkGroundingOff() {
-  _aiState = Object.assign({}, _aiState, { groundingOffAt: Date.now() });
+  _aiState = Object.assign({}, _aiState, { groundingOffDay: aiToday() });
   _aiStateAt = Date.now();
-  try { await db.collection('meta').doc('aiState').set({ groundingOffAt: _aiState.groundingOffAt }, { merge: true }); } catch (e) {}
+  try { await db.collection('meta').doc('aiState').set({ groundingOffDay: _aiState.groundingOffDay }, { merge: true }); } catch (e) {}
 }
 
 // The hardcoded per-hunt questions. Opening a hunt's detail sheet enqueues any
@@ -1626,7 +1629,7 @@ async function aiDeliver(item, res) {
       a: res.text, src: JSON.stringify(res.src || []), grounded: !!res.grounded,
       model: AI_MODEL, at: Date.now()
     });
-    _aiAnsCache.delete(dest.hk);
+    _aiAnsCache.delete(dest.hk); _aiAllAns = null;
     aiRefreshSheet(dest.hk);
   } else if (dest.t === 'fc') {
     const items = aiParseVerdicts(res.text);
@@ -1891,6 +1894,71 @@ async function loadAiInto(h) {
   }
 }
 
+// ── backfill: put EVERY unanswered question in the queue ─────────────────────
+// Questions used to be queued only when someone opened that hunt's sheet, so
+// the queue sat empty and almost nothing ever got answered. This walks every
+// hunt in every season, works out which of the standard questions have no
+// answer and no queue entry yet, and writes them all in batched commits.
+// Safe to run repeatedly — it is also the "reload the queue" action.
+const _AI_BATCH = 400; // Firestore caps a batch at 500 writes
+
+// Every distinct hunt across all seasons, newest season's copy winning.
+function aiAllHunts() {
+  const out = new Map();
+  for (const y of yList())
+    for (const h of (S.years[y].hunts || []))
+      if (!out.has(hkey(h))) out.set(hkey(h), h);
+  return out;
+}
+// All answer docs, cached — powers both the backfill check and the answered list.
+let _aiAllAns = null;
+async function aiAllAnswers(force) {
+  if (_aiAllAns && !force) return _aiAllAns;
+  if (!db) return null;
+  const snap = await db.collection('ai_answers').get();
+  _aiAllAns = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+  return _aiAllAns;
+}
+// What still needs asking: [{id, hunt, qdef}]
+async function aiMissingQuestions() {
+  const answers = await aiAllAnswers(true);
+  if (answers === null) return null;
+  const have = new Set(answers.map(a => a.id));
+  const qsnap = await db.collection('ai_queue').get();
+  qsnap.docs.forEach(d => have.add(d.id.replace(/^syn_/, '')));
+  const queued = new Set(qsnap.docs.map(d => d.id));
+  const out = [];
+  for (const [hk, h] of aiAllHunts()) {
+    if (AI_SEED[hk]) continue;             // shipped answers need no API call
+    for (const qdef of AI_QUESTIONS) {
+      const id = aiQid(hk + '__' + qdef.k);
+      if (have.has(id) || queued.has(id)) continue;
+      out.push({ id, hunt: h, qdef });
+    }
+  }
+  return out;
+}
+async function aiBackfill(onProgress) {
+  const missing = await aiMissingQuestions();
+  if (missing === null) return { error: 'offline' };
+  let written = 0;
+  for (let i = 0; i < missing.length; i += _AI_BATCH) {
+    const slice = missing.slice(i, i + _AI_BATCH);
+    const batch = db.batch();
+    for (const m of slice) {
+      batch.set(db.collection('ai_queue').doc(m.id), {
+        status: 'pending', attempts: 0, createdAt: Date.now() + i, claimedAt: 0, claimedBy: '',
+        kind: 'hunt', search: !!m.qdef.search, prompt: m.qdef.prompt(m.hunt),
+        dest: JSON.stringify({ t: 'ans', hk: hkey(m.hunt), qk: m.qdef.k, label: m.qdef.label })
+      });
+    }
+    await batch.commit();
+    written += slice.length;
+    if (onProgress) onProgress(written, missing.length);
+  }
+  return { written, total: missing.length };
+}
+
 // ── fact-check: parsed season data vs official sources ───────────────────────
 const _aiFcCache = new Map(); // year -> {at, map:{hunt: {v, note}}}
 async function aiFactcheckFor(year) {
@@ -1961,6 +2029,39 @@ async function loadAiSynopsis(entries, syn) {
   if (queued) aiKick();
 }
 
+// ── answered questions: collapsible list of everything the AI has written ────
+let _aiAnsOpen = false;
+const _aiAnsShown = new Set();   // which answers are expanded
+function aiAnsweredHtml(answers) {
+  if (!answers.length) return '<p class="help" style="margin:6px 0 0">Nothing answered yet.</p>';
+  // newest first, grouped under their hunt
+  const byHunt = new Map();
+  for (const a of [...answers].sort((x, y) => (y.at || 0) - (x.at || 0))) {
+    const hk = a.huntKey || a.id.split('__')[0];
+    if (!byHunt.has(hk)) byHunt.set(hk, []);
+    byHunt.get(hk).push(a);
+  }
+  let html = '';
+  for (const [hk, list] of byHunt) {
+    const [num, sp] = hk.split('_');
+    html += '<div class="statusline" style="font-weight:700;color:var(--gold)">' + esc(num) + ' · ' + esc(sp === 'elk' ? 'Elk' : 'Deer') + '</div>';
+    for (const a of list) {
+      const open = _aiAnsShown.has(a.id);
+      html += '<div class="statusline">' +
+        '<div style="display:flex;gap:8px;align-items:baseline">' +
+        '<span style="flex:1;min-width:0;font-size:.86rem">' + esc(a.q || a.label || a.qk) +
+        (a.grounded === false ? ' <span class="chip" style="font-size:.6rem">no web search</span>' : '') + '</span>' +
+        '<button class="bmini" data-aiansshow="' + esc(a.id) + '" style="min-height:30px;padding:2px 8px;flex-shrink:0">' + (open ? 'Hide' : 'Answer') + '</button>' +
+        '<button class="bmini dan" data-aiansdel="' + esc(a.id) + '" style="min-height:30px;padding:2px 8px;flex-shrink:0">✕</button></div>' +
+        (open ? '<div style="font-size:.84rem;line-height:1.5;margin-top:6px;padding:9px 10px;background:var(--card2);border:1px solid var(--line);border-radius:8px">' +
+          aiHtml(a.a) + aiSrcHtml(a.src) +
+          '<div class="help" style="margin-top:6px;font-size:.68rem">' + new Date(a.at || 0).toLocaleString() + '</div></div>' : '') +
+        '</div>';
+    }
+  }
+  return html;
+}
+
 // ── admin status card ────────────────────────────────────────────────────────
 // One queue item -> a human-readable row. Pure so it's testable.
 function aiQueueRowLabel(it) {
@@ -2017,8 +2118,8 @@ async function renderAiAdmin() {
     let html = '<div class="statusline"><strong>Queue:</strong> ' + pending + ' waiting · ' + errors + ' failed</div>';
     const today = new Date().toISOString().slice(0, 10);
     html += '<div class="statusline"><strong>Today:</strong> ' + (st.day === today ? st.used || 0 : 0) + ' AI answers generated</div>';
-    if (st.groundingOffAt && Date.now() - st.groundingOffAt < AI_REPROBE_MS)
-      html += '<div class="statusline" style="color:var(--warn)">Web search is off — this API key has no Google Search grounding quota (grounded requests get rejected). Answers come from the AI\'s own knowledge instead. It re-checks weekly, and turns search back on by itself if the key ever gets grounding quota.</div>';
+    if (st.groundingOffDay === aiToday())
+      html += '<div class="statusline" style="color:var(--warn)">Web search is off for today — this API key\'s grounded requests are being rejected, so answers come from the AI\'s own knowledge. It re-checks once a day and turns search back on by itself the moment grounding works.</div>';
     if (paused) html += '<div class="statusline" style="color:var(--warn)">Paused until ' + new Date(st.pausedUntil).toLocaleTimeString() + ' (' + (st.pauseWhy === 'key' ? 'API key problem' : 'free daily limit reached') + ') — resumes by itself.</div>';
     else if (pending) html += '<div class="statusline" style="color:var(--good)">Working through the queue while the app is open.</div>';
     else html += '<div class="statusline" style="color:var(--good)">All caught up ✓</div>';
@@ -2030,13 +2131,33 @@ async function renderAiAdmin() {
         sus.slice(0, 12).map(([id, x]) => '<div class="statusline" style="color:var(--warn)">⚠ ' + esc(id) + ' — ' + esc(x.note || 'could not confirm') + '</div>').join('');
     }
     // the queue itself, expandable
-    html += '<button class="linkbtn" id="aiQueueToggle" style="padding-left:0;font-size:.85rem">' +
+    html += '<button class="linkbtn" id="aiQueueToggle" style="padding-left:0;font-size:.85rem;display:block">' +
       (_aiQueueOpen ? 'Hide the queue ▴' : 'Show the queue (' + items.length + ') ▾') + '</button>';
     if (_aiQueueOpen) {
       html += '<div id="aiQueueList">' + aiQueueRowsHtml(items) + '</div>';
       if (errors) html += '<button class="bmini" id="aiRetryFailed" style="margin-top:8px">↻ Retry all failed (' + errors + ')</button>';
     }
+    // everything answered so far, expandable
+    const answers = await aiAllAnswers();
+    const nAns = answers ? answers.length : 0;
+    html += '<button class="linkbtn" id="aiAnsToggle" style="padding-left:0;font-size:.85rem;display:block">' +
+      (_aiAnsOpen ? 'Hide answered questions ▴' : 'Show answered questions (' + nAns + ') ▾') + '</button>';
+    if (_aiAnsOpen) html += '<div id="aiAnsList">' + aiAnsweredHtml(answers || []) + '</div>';
     card.innerHTML = html;
+    const at = $('#aiAnsToggle');
+    if (at) at.onclick = () => { _aiAnsOpen = !_aiAnsOpen; renderAiAdmin(); };
+    card.querySelectorAll('[data-aiansshow]').forEach(b => b.onclick = () => {
+      const id = b.dataset.aiansshow;
+      _aiAnsShown.has(id) ? _aiAnsShown.delete(id) : _aiAnsShown.add(id);
+      renderAiAdmin();
+    });
+    card.querySelectorAll('[data-aiansdel]').forEach(b => b.onclick = () => {
+      confirm2('Delete this answer for everyone? It gets re-asked next time you reload the queue.', async () => {
+        try { await db.collection('ai_answers').doc(b.dataset.aiansdel).delete(); } catch (e) {}
+        _aiAllAns = null; _aiAnsCache.clear();
+        renderAiAdmin();
+      });
+    });
     const tog = $('#aiQueueToggle');
     if (tog) tog.onclick = () => { _aiQueueOpen = !_aiQueueOpen; renderAiAdmin(); };
     card.querySelectorAll('[data-aiqshow]').forEach(b => b.onclick = () => {
@@ -3491,6 +3612,21 @@ function wire(){
     confirm2('Queue an AI fact-check of the '+year+' season dates and bag limits against official sources? It runs slowly in the background.',()=>{
       aiQueueFactcheck(year).then(()=>renderAiAdmin());
     });
+  };
+  const bfBtn=$('#btnAiBackfill');
+  if(bfBtn) bfBtn.onclick=async ()=>{
+    if(!db){ toast('Cloud unreachable — can\'t build the queue', true); return; }
+    const label=bfBtn.textContent;
+    bfBtn.disabled=true; bfBtn.textContent='Checking what\'s missing…';
+    try{
+      const res=await aiBackfill((done,total)=>{ bfBtn.textContent='Queuing… '+done+' / '+total; });
+      if(res.error){ toast('Couldn\'t reach the cloud', true); }
+      else if(!res.total){ toast('Everything is already answered or queued ✓'); }
+      else toast('Queued '+res.written+' question'+(res.written===1?'':'s')+' — they\'ll be answered a few each day');
+      if(res.written) aiKick(0);
+    }catch(e){ toast('Couldn\'t build the queue: '+e.message, true); }
+    bfBtn.disabled=false; bfBtn.textContent=label;
+    renderAiAdmin();
   };
   const kickBtn=$('#btnAiKick');
   if(kickBtn) kickBtn.onclick=async ()=>{

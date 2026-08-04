@@ -92,7 +92,7 @@ async function getAiState() {
   const d = await fs_('GET', 'meta/aiState');
   const f = d ? d.fields || {} : {};
   return { pausedUntil: gv(f.pausedUntil) || 0, day: gv(f.day) || '', used: gv(f.used) || 0,
-           groundingOffAt: gv(f.groundingOffAt) || 0 };
+           groundingOffDay: gv(f.groundingOffDay) || '' };
 }
 async function pauseAll(ms, why) {
   await fs_('PATCH', `meta/aiState?${mask(['pausedUntil', 'pauseWhy'])}`,
@@ -165,13 +165,14 @@ async function aiGenerate(prompt, opts = {}) {
   return { text, src: src.slice(0, 4), grounded: !!opts.search };
 }
 
-const REPROBE_MS = 7 * 24 * 3600 * 1000;
-const wantSearch = (state, want) =>
-  want && !(state.groundingOffAt && Date.now() - state.groundingOffAt < REPROBE_MS);
+// Grounding quota resets daily with the rest of the key's limits, so re-probe
+// once a day rather than staying off for a week.
+const today = () => new Date().toISOString().slice(0, 10);
+const wantSearch = (state, want) => want && state.groundingOffDay !== today();
 async function markGroundingOff(state) {
-  state.groundingOffAt = Date.now();
-  await fs_('PATCH', `meta/aiState?${mask(['groundingOffAt'])}`,
-    { fields: { groundingOffAt: V.i(state.groundingOffAt) } }).catch(() => {});
+  state.groundingOffDay = today();
+  await fs_('PATCH', `meta/aiState?${mask(['groundingOffDay'])}`,
+    { fields: { groundingOffDay: V.s(state.groundingOffDay) } }).catch(() => {});
 }
 
 // Same lenient JSON-array extraction the app uses for fact-check replies.
