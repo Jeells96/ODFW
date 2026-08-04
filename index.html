@@ -1370,7 +1370,7 @@ function toggleFav(num,sp) {
 const AI_KEY   = atob('QVEuQWI4Uk42SzkxaWRJUkFfMjZyS2FmWlB4YllNMDdEZ0ZWSE5ucVNJQWlsdlQtTC1fT2c=');
 const AI_MODEL = 'gemini-flash-latest';
 const AI_URL   = 'https://generativelanguage.googleapis.com/v1beta/models/' + AI_MODEL + ':generateContent';
-const AI_PACE_MS  = 8000;    // ≥8s between calls keeps us under the free RPM cap
+const AI_PACE_MS  = 10000;   // the RPM cap is per-KEY, shared by every open device — pace generously; 429 handling is the backstop
 const AI_CLAIM_MS = 120000;  // queue items claimed more recently belong to another device
 const AI_CLIENT   = Math.random().toString(36).slice(2, 10);
 
@@ -1381,11 +1381,18 @@ async function aiGenerate(prompt, opts) {
     generationConfig: { temperature: 0.2, maxOutputTokens: opts.maxTokens || 1024 }
   };
   if (opts.search) body.tools = [{ google_search: {} }];
-  const res = await fetch(AI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-goog-api-key': AI_KEY },
-    body: JSON.stringify(body)
-  });
+  let res;
+  try {
+    res = await fetch(AI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-goog-api-key': AI_KEY },
+      body: JSON.stringify(body)
+    });
+  } catch (e) {
+    // fetch() itself failed: DNS blocked, offline, firewall. This device can't
+    // reach Gemini — that must never mark shared queue items as failed.
+    const err = new Error('network: ' + (e.message || e)); err.network = true; throw err;
+  }
   if (res.status === 429) {
     let retryMs = 90000;
     try {
@@ -1415,22 +1422,37 @@ async function aiGenerate(prompt, opts) {
 
 // The hardcoded per-hunt questions. Opening a hunt's detail sheet enqueues any
 // of these it doesn't have an answer for yet.
+// Gemini is deliberately NOT restricted to this app's data — the whole point
+// is catching what our parsers can't see (like 241A's watershed permit rules,
+// which live in regs fine print and city ordinances, or unit knowledge that
+// only exists in forum threads and guide writeups). Every question runs with
+// Google Search grounding and an explicit license to use any useful source.
+const AI_RESEARCH = 'Research this using ANY resource that helps: official ODFW pages, eregulations.com, ' +
+  'city/county/agency sites, news articles, hunting forums, guide and outfitter writeups, and hunt-planning articles. ';
 const AI_QUESTIONS = [
   { k: 'rules', label: 'Access & special restrictions', search: true, prompt: h => {
       const se = seasonAnyYear(h.huntNum) || {};
       return 'Research Oregon controlled ' + h.species + ' hunt ' + h.huntNum + ' ("' + h.huntName + '"), ' +
-        (S.selectedYear || '') + ' season' + (se.s ? ', ' + se.s : '') + '. ' +
+        (S.selectedYear || '') + ' season' + (se.s ? ', ' + se.s : '') + '. ' + AI_RESEARCH +
         'List every special access requirement that applies to THIS hunt beyond a standard Oregon controlled hunt tag: entry permits, mandatory check-in or check-out, watershed or refuge rules, closures, vehicle limits, fees, or weapon restrictions. ' +
         '(Example of the kind of thing to catch: hunt 241A requires a City of The Dalles Watershed entry permit with mandatory check-in.) ' +
         'Use short plain sentences or hyphen bullets. If there are none, reply exactly: "No special access requirements found beyond the standard controlled hunt rules." ' +
-        'Never invent specifics — if something cannot be verified, say what to double-check and where. If relevant, name the ODFW district office to call.';
+        'For hard rules (permits, fees, closures) prefer official sources and never invent specifics — if something cannot be verified, say what to double-check and where. If relevant, name the ODFW district office to call.';
     } },
   { k: 'unit', label: 'Know the unit', search: true, prompt: h => {
       const se = seasonAnyYear(h.huntNum) || {};
-      return 'For the ' + (unitNameFor(h) || h.huntName) + ' area in Oregon (controlled ' + h.species + ' hunt ' + h.huntNum + '): ' +
-        'in under 130 words of hyphen bullets, describe the terrain and habitat, where ' + (h.species === 'elk' ? 'elk' : 'deer') +
-        ' tend to hold' + (se.s ? ' during the season (' + se.s + ')' : '') + ', land ownership and access basics, and one scouting tip. ' +
+      return 'For the ' + (unitNameFor(h) || h.huntName) + ' area in Oregon (controlled ' + h.species + ' hunt ' + h.huntNum + '): ' + AI_RESEARCH +
+        'In under 200 words of hyphen bullets, describe the terrain and habitat, where ' + (h.species === 'elk' ? 'elk' : 'deer') +
+        ' tend to hold' + (se.s ? ' during the season (' + se.s + ')' : '') + ', how hunting pressure moves them, land ownership basics, and a scouting tip or two. ' +
+        'Local knowledge from forums and guide writeups is welcome — attribute it as such ("locals report…"). ' +
         'If you lack reliable information about this specific unit, say so briefly instead of guessing.';
+    } },
+  { k: 'access', label: 'Roads, camping & getting in', search: true, prompt: h => {
+      const se = seasonAnyYear(h.huntNum) || {};
+      return 'For the ' + (unitNameFor(h) || h.huntName) + ' area in Oregon (controlled ' + h.species + ' hunt ' + h.huntNum +
+        (se.s ? ', season ' + se.s : '') + '): ' + AI_RESEARCH +
+        'In under 160 words of hyphen bullets cover: the main access roads and trailheads, seasonal road closures or travel-management rules to know about, camping options (dispersed and campgrounds) near the hunt area, and roughly how far the area is from the nearest town with fuel. ' +
+        'If conditions vary by winter weather, say so. If you cannot verify something for this specific area, say what to check and where.';
     } }
 ];
 
@@ -1467,7 +1489,15 @@ async function aiEnqueue(id, doc, skip) {
   try {
     if (skip && (await db.collection(skip.coll).doc(skip.id).get()).exists) return true;
     const ref = db.collection('ai_queue').doc(id);
-    if ((await ref.get()).exists) return true;
+    const cur = await ref.get();
+    if (cur.exists) {
+      // A doc parked as 'error' would otherwise deadlock this question forever
+      // (processors skip it, and this guard would keep reporting "queued").
+      // Re-viewing the hunt is the natural retry signal — reset it.
+      if (cur.data().status === 'error')
+        await ref.update({ status: 'pending', attempts: 0, lastError: '', claimedAt: 0, claimedBy: '' });
+      return true;
+    }
     await ref.set(Object.assign({
       status: 'pending', attempts: 0, createdAt: Date.now(), claimedAt: 0, claimedBy: ''
     }, doc));
@@ -1495,19 +1525,30 @@ async function aiBumpUsed() {
   try { await db.collection('meta').doc('aiState').set({ day, used }, { merge: true }); } catch (e) {}
 }
 
-// Oldest unclaimed item, claimed optimistically (re-read to confirm we won).
+// Oldest unclaimed item, claimed atomically in a transaction so two devices
+// can't both win it. Failed docs self-expire after a day so they can never
+// clog the head of the createdAt ordering and blind the whole scan window.
 async function aiClaimNext() {
-  const snap = await db.collection('ai_queue').orderBy('createdAt').limit(15).get();
-  const now = Date.now();
+  const snap = await db.collection('ai_queue').orderBy('createdAt').limit(40).get();
   for (const d of snap.docs) {
+    const now = Date.now();
     const it = d.data();
-    if (it.status === 'error') continue;
+    if (it.status === 'error') {
+      if ((it.failedAt || it.createdAt || 0) < now - 86400000) d.ref.delete().catch(() => {});
+      continue;
+    }
     if ((it.claimedAt || 0) > now - AI_CLAIM_MS && it.claimedBy !== AI_CLIENT) continue;
     try {
-      await d.ref.update({ claimedAt: now, claimedBy: AI_CLIENT });
-      const chk = await d.ref.get();
-      if (!chk.exists || chk.data().claimedBy !== AI_CLIENT) continue;
-      return Object.assign({ id: d.id, ref: d.ref }, chk.data());
+      const won = await db.runTransaction(async t => {
+        const cur = await t.get(d.ref);
+        if (!cur.exists) return null;
+        const c = cur.data();
+        if (c.status === 'error') return null;
+        if ((c.claimedAt || 0) > Date.now() - AI_CLAIM_MS && c.claimedBy !== AI_CLIENT) return null;
+        t.update(d.ref, { claimedAt: Date.now(), claimedBy: AI_CLIENT });
+        return c;
+      });
+      if (won) return Object.assign({ id: d.id, ref: d.ref }, won);
     } catch (e) { continue; }
   }
   return null;
@@ -1520,11 +1561,11 @@ function aiParseVerdicts(text) {
   try {
     const arr = JSON.parse(m[0]);
     if (!Array.isArray(arr)) return null;
-    const out = {};
+    const out = Object.create(null); // no prototype — key tricks land nowhere
     for (const e of arr) {
       if (!e || !e.hunt) continue;
       const id = String(e.hunt);
-      if (!/^[\w-]{1,20}$/.test(id)) continue; // hunt numbers only — no key tricks
+      if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,19}$/.test(id)) continue; // hunt numbers never start with _ or contain it
       const v = ['ok', 'suspect', 'unknown'].includes(e.v) ? e.v : 'unknown';
       out[id] = { v, note: String(e.note || '').slice(0, 160) };
     }
@@ -1583,10 +1624,17 @@ async function aiProcessLoop() {
       } catch (e) {
         if (e.quota) { await aiPause(e.retryMs, 'quota'); break; }
         if (e.status === 403 || e.status === 401) { await aiPause(6 * 3600 * 1000, 'key'); break; }
+        if (e.network) {
+          // THIS device can't reach Gemini (offline, DNS-blocked). Release the
+          // claim untouched and stop — another device or the nightly Action
+          // will process it. Never marks shared items failed.
+          try { await item.ref.update({ claimedAt: 0, claimedBy: '' }); } catch (e2) {}
+          break;
+        }
         const attempts = (item.attempts || 0) + 1;
         try {
           await item.ref.update({ attempts, lastError: String(e.message || e).slice(0, 200),
-            status: attempts >= 3 ? 'error' : 'pending', claimedAt: 0, claimedBy: '' });
+            status: attempts >= 3 ? 'error' : 'pending', failedAt: Date.now(), claimedAt: 0, claimedBy: '' });
         } catch (e2) {}
       }
       await new Promise(r => setTimeout(r, AI_PACE_MS));
@@ -1628,32 +1676,44 @@ function aiSrcHtml(srcJson) {
   ).filter(Boolean).join(' · ') + '</div>';
 }
 
-// If the open detail sheet is showing this hunt, redraw its AI section.
+// If the open detail sheet is showing this hunt, redraw its AI section — but
+// never while the user is typing in the ask box (a re-render would close the
+// mobile keyboard mid-word). Retry shortly after instead.
 function aiRefreshSheet(hk) {
   if (!sheetId) return;
   const [num, sp] = sheetId.split('_');
   if (num + '_' + sp !== hk) return;
+  if (document.activeElement && document.activeElement.id === 'aiAskText') {
+    setTimeout(() => aiRefreshSheet(hk), 8000);
+    return;
+  }
   const h = getH().find(x => x.huntNum === num && x.species === sp);
   if (h && $('#aiSec')) loadAiInto(h);
 }
 
+// Drafts and just-asked questions live in module maps, not the DOM, so they
+// survive every re-render path: answer deliveries, the harvest-year switcher
+// rebuilding the sheet, even close-and-reopen.
+const _aiDrafts = new Map();     // huntKey -> draft text of the ask box
+const _aiPendingAsk = new Map(); // huntKey -> Map(qk -> question text) asked this session
+let _aiPollTimer = null;
 async function loadAiInto(h) {
   const sec = $('#aiSec'); if (!sec) return;
-  // If the family member is mid-question, don't wipe their draft when an
-  // answer for a sibling question re-renders this section.
-  const draftEl = sec.querySelector('#aiAskText');
-  const draft = draftEl ? draftEl.value : '';
-  const draftOpen = !!draftEl && sec.querySelector('#aiAskBox').style.display !== 'none';
   const hk = hkey(h);
   const seed = AI_SEED[hk] || {};
   const answers = await aiAnswersFor(hk);
-  if (!$('#aiSec')) return; // sheet closed while loading
+  // openDetail may have rebuilt the sheet (other hunt, year switch) while we
+  // awaited — our #aiSec is detached then, and writing would hit the wrong hunt.
+  if (!sec.isConnected) return;
   const byQk = {};
   (answers || []).forEach(a => { byQk[a.qk] = a; });
+  const pend = _aiPendingAsk.get(hk) || new Map();
+  for (const qk of [...pend.keys()]) if (byQk[qk]) pend.delete(qk); // answered now
 
   let html = '<h3>AI scouting report</h3>';
   // fact-check flag for this hunt's season data, if the auditor found an issue
   const fc = await aiFactcheckFor(S.selectedYear);
+  if (!sec.isConnected) return;
   const flag = fc && fc[h.huntNum];
   if (flag && flag.v === 'suspect')
     html += '<p class="plain" style="background:var(--warnbg);color:var(--warn);padding:11px 13px;border-radius:10px;font-size:.9rem">⚠ The AI cross-check couldn\'t confirm this hunt\'s season/bag data' + (flag.note ? ': ' + esc(flag.note) : '') + '. Double-check the official regulations.</p>';
@@ -1678,18 +1738,36 @@ async function loadAiInto(h) {
       '<div style="font-size:.9rem;line-height:1.55;color:var(--dim)">' + aiHtml(a.a) + '</div>' + aiSrcHtml(a.src) +
       '<div class="help" style="margin-top:2px;font-size:.72rem">AI-generated ' + new Date(a.at).toLocaleDateString() + '</div></div>';
   });
+  // questions asked this session that haven't come back yet
+  for (const [, q] of pend)
+    html += '<div style="margin-bottom:12px"><div style="font-weight:700;margin-bottom:2px">' + esc(q) + '</div>' +
+      '<div class="help" style="margin:0">Queued ✓ — the answer will appear here for everyone.</div></div>';
 
+  let queueNote = '';
   if (answers === null) {
-    html += '<p class="help">Couldn\'t reach the cloud — AI answers will show when you\'re back online.</p>';
+    queueNote = '<p class="help">Couldn\'t reach the cloud — AI answers will show when you\'re back online.</p>';
   } else if (missing.length) {
-    html += '<p class="help">' + missing.map(q => esc(q.label)).join(' and ') + ': queued — answers appear here automatically, usually within a few minutes.</p>';
-    for (const qdef of missing)
+    // Enqueue FIRST, then tell the truth about what happened — including the
+    // shared free-quota pause, which delays answers until it lifts.
+    const results = await Promise.all(missing.map(qdef =>
       aiEnqueue(aiQid(hk + '__' + qdef.k), {
         kind: 'hunt', search: !!qdef.search, prompt: qdef.prompt(h),
         dest: JSON.stringify({ t: 'ans', hk, qk: qdef.k, label: qdef.label })
-      }, { coll: 'ai_answers', id: aiQid(hk + '__' + qdef.k) });
-    aiKick();
+      }, { coll: 'ai_answers', id: aiQid(hk + '__' + qdef.k) })));
+    if (!sec.isConnected) return;
+    const okAll = results.every(Boolean);
+    const labels = missing.map(q => esc(q.label)).join(', ');
+    if (!okAll) queueNote = '<p class="help" style="color:var(--warn)">' + labels + ': couldn\'t reach the cloud to queue these — they\'ll queue next time you open this hunt online.</p>';
+    else {
+      const st = await aiState();
+      if (!sec.isConnected) return;
+      queueNote = (st.pausedUntil || 0) > Date.now()
+        ? '<p class="help">' + labels + ': queued ✓ — the free AI quota is used up for now, so answers will arrive after it resets (usually overnight).</p>'
+        : '<p class="help">' + labels + ': queued ✓ — answers appear here automatically, usually within a few minutes.</p>';
+      aiKick();
+    }
   }
+  html += queueNote;
 
   html += '<button class="linkbtn" id="aiAskBtn" style="padding-left:0">+ Ask AI about this hunt</button>' +
     '<div id="aiAskBox" style="display:none">' +
@@ -1697,10 +1775,14 @@ async function loadAiInto(h) {
     '<button class="btn primary" id="aiAskSend" style="width:100%;margin-top:8px">Ask — answer appears for everyone</button></div>' +
     '<p class="help" style="margin-top:10px;font-size:.72rem">AI answers can be wrong or out of date. Always confirm rules, dates, and access in the current official Oregon regulations.</p>';
 
+  if (!sec.isConnected) return;
   sec.innerHTML = html;
   const askBtn = $('#aiAskBtn');
   if (askBtn) askBtn.onclick = () => { $('#aiAskBox').style.display = 'block'; askBtn.style.display = 'none'; $('#aiAskText').focus(); };
-  if (draftOpen || draft) { $('#aiAskBox').style.display = 'block'; if (askBtn) askBtn.style.display = 'none'; $('#aiAskText').value = draft; }
+  const ta = $('#aiAskText');
+  if (ta) ta.oninput = () => { _aiDrafts.set(hk, ta.value); };
+  const draft = _aiDrafts.get(hk);
+  if (draft) { $('#aiAskBox').style.display = 'block'; if (askBtn) askBtn.style.display = 'none'; ta.value = draft; }
   const send = $('#aiAskSend');
   if (send) send.onclick = async () => {
     const q = $('#aiAskText').value.trim();
@@ -1711,39 +1793,59 @@ async function loadAiInto(h) {
     const ok = await aiEnqueue(aiQid(hk + '__' + qk), {
       kind: 'custom', search: true,
       prompt: 'You are answering a question from a family of Oregon hunters about controlled ' + h.species + ' hunt ' +
-        h.huntNum + ' ("' + h.huntName + '"). Question: ' + q + '\nSearch for current information if needed. ' +
+        h.huntNum + ' ("' + h.huntName + '"). Question: ' + q + '\n' + AI_RESEARCH +
         'Answer concisely in plain language; use hyphen bullets for lists; if you are not sure, say so rather than guessing.',
       dest: JSON.stringify({ t: 'ans', hk, qk, label: 'Q: ' + q.slice(0, 80), q })
     }, { coll: 'ai_answers', id: aiQid(hk + '__' + qk) });
     toast(ok ? 'Queued — the answer will appear here for everyone ✓' : 'Couldn\'t queue it — check your connection', !ok);
-    if (ok) { aiKick(); loadAiInto(h); }
-    else { send.textContent = 'Ask — answer appears for everyone'; send.disabled = false; }
+    if (ok) {
+      _aiDrafts.delete(hk);
+      if (!_aiPendingAsk.has(hk)) _aiPendingAsk.set(hk, new Map());
+      _aiPendingAsk.get(hk).set(qk, q);
+      aiKick(); loadAiInto(h);
+    } else { send.textContent = 'Ask — answer appears for everyone'; send.disabled = false; }
   };
   sec.querySelectorAll('[data-airedo]').forEach(b => b.onclick = async () => {
     const qdef = AI_QUESTIONS.find(q => q.k === b.dataset.airedo); if (!qdef) return;
-    try { await db.collection('ai_answers').doc(aiQid(hk + '__' + qdef.k)).delete(); } catch (e) {}
-    _aiAnsCache.delete(hk);
-    await aiEnqueue(aiQid(hk + '__' + qdef.k), {
+    // Queue the re-ask FIRST and keep showing the old answer until the fresh
+    // one overwrites it — deleting up front could lose the answer for everyone
+    // if the queue write then failed.
+    const ok = await aiEnqueue(aiQid(hk + '__redo_' + qdef.k + '_' + aiHash(String(Date.now()))), {
       kind: 'hunt', search: !!qdef.search, prompt: qdef.prompt(h),
       dest: JSON.stringify({ t: 'ans', hk, qk: qdef.k, label: qdef.label })
     });
-    aiKick(); toast('Re-asked — a fresh answer is queued');
-    loadAiInto(h);
+    toast(ok ? 'Re-asked — the answer refreshes when ready' : 'Couldn\'t queue the update — check your connection', !ok);
+    if (ok) aiKick();
   });
+
+  // Answers can also arrive from another device or the nightly Action — poll
+  // gently while this hunt still has unanswered questions on screen.
+  clearTimeout(_aiPollTimer);
+  if ((missing.length && answers !== null) || pend.size) {
+    _aiPollTimer = setTimeout(() => {
+      if (!sec.isConnected) return;
+      _aiAnsCache.delete(hk);
+      loadAiInto(h);
+    }, 45000);
+  }
 }
 
 // ── fact-check: parsed season data vs official sources ───────────────────────
-const _aiFcCache = new Map(); // year -> {hunt: {v, note}}
+const _aiFcCache = new Map(); // year -> {at, map:{hunt: {v, note}}}
 async function aiFactcheckFor(year) {
   if (!year || !db) return null;
-  if (_aiFcCache.has(year)) return _aiFcCache.get(year);
+  const hit = _aiFcCache.get(year);
+  if (hit && Date.now() - hit.at < 300000) return hit.map; // 5-min TTL so other devices' verdicts show up
   try {
     const snap = await db.collection('ai_factcheck').where('year', '==', year).get();
-    const map = {};
-    snap.docs.forEach(d => { try { Object.assign(map, JSON.parse(d.data().items || '{}')); } catch (e) {} });
-    _aiFcCache.set(year, map);
+    const map = Object.create(null); // old stored data could hold hostile keys
+    snap.docs.forEach(d => { try {
+      const parsed = JSON.parse(d.data().items || '{}');
+      for (const k of Object.keys(parsed)) map[k] = parsed[k];
+    } catch (e) {} });
+    _aiFcCache.set(year, { at: Date.now(), map });
     return map;
-  } catch (e) { return null; }
+  } catch (e) { return hit ? hit.map : null; }
 }
 async function aiQueueFactcheck(year) {
   const yd = S.years[year];
@@ -1799,16 +1901,45 @@ async function loadAiSynopsis(entries, syn) {
 }
 
 // ── admin status card ────────────────────────────────────────────────────────
+// One queue item -> a human-readable row. Pure so it's testable.
+function aiQueueRowLabel(it) {
+  let d = {}; try { d = JSON.parse(it.dest || '{}'); } catch (e) {}
+  if (d.t === 'ans') {
+    const hunt = String(d.hk || '').replace('_', ' ');
+    return (d.qk || '').startsWith('c_') ? hunt + ' — “' + (d.q || 'custom question') + '”' : hunt + ' — ' + (d.label || d.qk);
+  }
+  if (d.t === 'fc') return 'Fact-check ' + (d.year || '') + ' season data (batch)';
+  if (d.t === 'syn') return 'Synopsis change summary';
+  return it.id;
+}
+function aiQueueRowsHtml(items) {
+  if (!items.length) return '<p class="help" style="margin:6px 0 0">The queue is empty.</p>';
+  const age = ms => { const m = Math.round((Date.now() - ms) / 60000);
+    return m < 2 ? 'just now' : m < 90 ? m + ' min ago' : Math.round(m / 60) + ' h ago'; };
+  return items.map(it => {
+    const failed = it.status === 'error';
+    const state = failed ? '✗ failed' + (it.lastError ? ' — ' + it.lastError.slice(0, 70) : '')
+      : (it.attempts || 0) > 0 ? '↻ retrying (' + it.attempts + ' tries)'
+      : (it.claimedAt || 0) > Date.now() - AI_CLAIM_MS ? '⏳ answering now…' : '· waiting';
+    return '<div class="statusline" style="display:flex;gap:8px;align-items:baseline">' +
+      '<span style="flex:1;min-width:0"><span style="font-weight:600">' + esc(aiQueueRowLabel(it)) + '</span>' +
+      '<span class="help" style="display:block;margin:0;font-size:.72rem;' + (failed ? 'color:var(--bad)' : '') + '">' + esc(state) + ' · queued ' + age(it.createdAt || Date.now()) + '</span></span>' +
+      '<button class="bmini dan" data-aiqdel="' + esc(it.id) + '" style="min-height:32px;padding:2px 8px;flex-shrink:0">✕</button></div>';
+  }).join('');
+}
+let _aiQueueOpen = false;
 async function renderAiAdmin() {
   const card = $('#aiAdminCard'); if (!card) return;
   if (!db) { card.textContent = 'Cloud unreachable — AI assistant needs a connection.'; return; }
   try {
-    const [snap, st] = await Promise.all([db.collection('ai_queue').limit(400).get(), aiState(true)]);
-    let pending = 0, errors = 0;
-    snap.docs.forEach(d => { d.data().status === 'error' ? errors++ : pending++; });
+    const [snap, st] = await Promise.all([db.collection('ai_queue').orderBy('createdAt').limit(200).get(), aiState(true)]);
+    const items = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    const errors = items.filter(i => i.status === 'error').length;
+    const pending = items.length - errors;
     const paused = (st.pausedUntil || 0) > Date.now();
     let html = '<div class="statusline"><strong>Queue:</strong> ' + pending + ' waiting · ' + errors + ' failed</div>';
-    if (st.day) html += '<div class="statusline"><strong>Today:</strong> ' + (st.used || 0) + ' AI answers generated</div>';
+    const today = new Date().toISOString().slice(0, 10);
+    html += '<div class="statusline"><strong>Today:</strong> ' + (st.day === today ? st.used || 0 : 0) + ' AI answers generated</div>';
     if (paused) html += '<div class="statusline" style="color:var(--warn)">Paused until ' + new Date(st.pausedUntil).toLocaleTimeString() + ' (' + (st.pauseWhy === 'key' ? 'API key problem' : 'free daily limit reached') + ') — resumes by itself.</div>';
     else if (pending) html += '<div class="statusline" style="color:var(--good)">Working through the queue while the app is open.</div>';
     else html += '<div class="statusline" style="color:var(--good)">All caught up ✓</div>';
@@ -1819,7 +1950,31 @@ async function renderAiAdmin() {
       if (n) html += '<div class="statusline"><strong>Fact-check:</strong> ' + n + ' hunts checked, ' + sus.length + ' flagged</div>' +
         sus.slice(0, 12).map(([id, x]) => '<div class="statusline" style="color:var(--warn)">⚠ ' + esc(id) + ' — ' + esc(x.note || 'could not confirm') + '</div>').join('');
     }
+    // the queue itself, expandable
+    html += '<button class="linkbtn" id="aiQueueToggle" style="padding-left:0;font-size:.85rem">' +
+      (_aiQueueOpen ? 'Hide the queue ▴' : 'Show the queue (' + items.length + ') ▾') + '</button>';
+    if (_aiQueueOpen) {
+      html += '<div id="aiQueueList">' + aiQueueRowsHtml(items) + '</div>';
+      if (errors) html += '<button class="bmini" id="aiRetryFailed" style="margin-top:8px">↻ Retry all failed (' + errors + ')</button>';
+    }
     card.innerHTML = html;
+    const tog = $('#aiQueueToggle');
+    if (tog) tog.onclick = () => { _aiQueueOpen = !_aiQueueOpen; renderAiAdmin(); };
+    card.querySelectorAll('[data-aiqdel]').forEach(b => b.onclick = () => {
+      confirm2('Remove this from the queue? It won\'t be answered.', async () => {
+        try { await db.collection('ai_queue').doc(b.dataset.aiqdel).delete(); } catch (e) {}
+        renderAiAdmin();
+      });
+    });
+    const rf = $('#aiRetryFailed');
+    if (rf) rf.onclick = async () => {
+      rf.disabled = true; rf.textContent = 'Resetting…';
+      for (const it of items.filter(i => i.status === 'error')) {
+        try { await db.collection('ai_queue').doc(it.id).update({ status: 'pending', attempts: 0, lastError: '', claimedAt: 0, claimedBy: '' }); } catch (e) {}
+      }
+      aiKick(); toast('Failed items re-queued');
+      renderAiAdmin();
+    };
   } catch (e) { card.textContent = 'Couldn\'t read AI status: ' + e.message; }
 }
 
@@ -3254,7 +3409,16 @@ function wire(){
     });
   };
   const kickBtn=$('#btnAiKick');
-  if(kickBtn) kickBtn.onclick=()=>{ aiKick(0); toast('Working through the queue — keep the app open'); setTimeout(renderAiAdmin, 1500); };
+  if(kickBtn) kickBtn.onclick=async ()=>{
+    if(!db){ toast('Cloud unreachable — can\'t process the queue', true); return; }
+    const st=await aiState(true);
+    if((st.pausedUntil||0)>Date.now()){
+      toast((st.pauseWhy==='key'?'API key problem — ':'Free AI quota used up — ')+'paused until '+new Date(st.pausedUntil).toLocaleTimeString(), true);
+      return;
+    }
+    aiKick(0); toast('Working through the queue — keep the app open');
+    setTimeout(renderAiAdmin, 1500);
+  };
   // admin
   $('#btnSetYear').onclick=()=>{
     const v=$('#pyInput').value.trim();

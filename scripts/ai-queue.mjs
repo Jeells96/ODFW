@@ -70,10 +70,12 @@ async function listQueue() {
     const f = d.fields || {};
     return {
       id: d.name.split('/').pop(),
+      updateTime: d.updateTime,
       status: gv(f.status) || 'pending',
       attempts: gv(f.attempts) || 0,
       createdAt: gv(f.createdAt) || 0,
       claimedAt: gv(f.claimedAt) || 0,
+      failedAt: gv(f.failedAt) || 0,
       search: !!gv(f.search),
       maxTokens: gv(f.maxTokens) || 1024,
       prompt: gv(f.prompt) || '',
@@ -106,11 +108,16 @@ async function aiGenerate(prompt, opts = {}) {
     generationConfig: { temperature: 0.2, maxOutputTokens: opts.maxTokens || 1024 }
   };
   if (opts.search) body.tools = [{ google_search: {} }];
-  const res = await fetch(AI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-goog-api-key': AI_KEY },
-    body: JSON.stringify(body)
-  });
+  let res;
+  try {
+    res = await fetch(AI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-goog-api-key': AI_KEY },
+      body: JSON.stringify(body)
+    });
+  } catch (e) {
+    const err = new Error('network: ' + (e.message || e)); err.network = true; throw err;
+  }
   if (res.status === 429) {
     let retryMs = 90000;
     try {
@@ -141,11 +148,11 @@ function parseVerdicts(text) {
   try {
     const arr = JSON.parse(m[0]);
     if (!Array.isArray(arr)) return null;
-    const out = {};
+    const out = Object.create(null); // no prototype — key tricks land nowhere
     for (const e of arr) {
       if (!e || !e.hunt) continue;
       const id = String(e.hunt);
-      if (!/^[\w-]{1,20}$/.test(id)) continue; // hunt numbers only — no key tricks
+      if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,19}$/.test(id)) continue; // hunt ids never start with _ or contain it
       const v = ['ok', 'suspect', 'unknown'].includes(e.v) ? e.v : 'unknown';
       out[id] = { v, note: String(e.note || '').slice(0, 160) };
     }
@@ -187,19 +194,29 @@ async function main() {
   console.log(`[ai] queue: ${queue.length} docs, ${runnable.length} runnable, cap ${MAX}${DRY ? ' (dry run)' : ''}`);
   if (DRY) { runnable.slice(0, MAX).forEach(it => console.log(`  - ${it.id} (${JSON.parse(it.dest).t}, attempts ${it.attempts})`)); return; }
 
+  // Failed docs self-expire after a day so they can't clog the queue forever.
+  for (const it of queue.filter(q => q.status === 'error' && (q.failedAt || q.createdAt || 0) < now - 86400000)) {
+    await fs_('DELETE', `ai_queue/${it.id}`).catch(() => {});
+    console.log(`[ai] expired failed item ${it.id}`);
+  }
+
   let done = 0, failed = 0;
   for (const item of runnable.slice(0, MAX)) {
+    // Compare-and-swap claim: the updateTime precondition makes the PATCH fail
+    // if ANYTHING touched the doc since our listing — a live browser claiming
+    // it, answering it, or deleting it. Without the precondition this PATCH
+    // would upsert deleted docs back to life as zombie stubs.
     try {
-      await fs_('PATCH', `ai_queue/${item.id}?${mask(['claimedAt', 'claimedBy'])}`,
+      await fs_('PATCH', `ai_queue/${item.id}?${mask(['claimedAt', 'claimedBy'])}` +
+        `&currentDocument.updateTime=${encodeURIComponent(item.updateTime)}`,
         { fields: { claimedAt: V.i(Date.now()), claimedBy: V.s('action') } });
-    } catch (e) { continue; } // deleted by a live client mid-run — skip
+    } catch (e) { continue; } // claimed/answered/deleted by someone else — skip
+    let delivered = false;
     try {
       const res = await aiGenerate(item.prompt, { search: item.search, maxTokens: item.maxTokens });
       await deliver(item, res);
       await fs_('DELETE', `ai_queue/${item.id}`);
-      await bumpUsed(state);
-      done++;
-      console.log(`[ai] ✓ ${item.id}`);
+      delivered = true;
     } catch (e) {
       if (e.quota) {
         await pauseAll(e.retryMs, 'quota');
@@ -211,13 +228,28 @@ async function main() {
         console.log('[ai] key rejected — paused 6h so we do not hammer a dead key');
         break;
       }
+      if (e.network) {
+        // The runner can't reach Gemini at all — release the claim (only if the
+        // doc still exists) and stop; nothing gets marked failed for our outage.
+        await fs_('PATCH', `ai_queue/${item.id}?${mask(['claimedAt', 'claimedBy'])}&currentDocument.exists=true`,
+          { fields: { claimedAt: V.i(0), claimedBy: V.s('') } }).catch(() => {});
+        console.log('[ai] network to Gemini is down — stopping this run');
+        break;
+      }
       failed++;
       const attempts = item.attempts + 1;
-      await fs_('PATCH', `ai_queue/${item.id}?${mask(['attempts', 'lastError', 'status', 'claimedAt', 'claimedBy'])}`, { fields: {
+      // exists=true so a doc a live client just deleted can't be resurrected
+      await fs_('PATCH', `ai_queue/${item.id}?${mask(['attempts', 'lastError', 'status', 'failedAt', 'claimedAt', 'claimedBy'])}&currentDocument.exists=true`, { fields: {
         attempts: V.i(attempts), lastError: V.s(String(e.message || e).slice(0, 200)),
-        status: V.s(attempts >= 3 ? 'error' : 'pending'), claimedAt: V.i(0), claimedBy: V.s('')
+        status: V.s(attempts >= 3 ? 'error' : 'pending'), failedAt: V.i(Date.now()), claimedAt: V.i(0), claimedBy: V.s('')
       } }).catch(() => {});
       console.log(`[ai] ✗ ${item.id}: ${e.message}`);
+    }
+    if (delivered) {
+      // outside the try: a failed counter bump must never re-touch a queue doc
+      await bumpUsed(state).catch(() => {});
+      done++;
+      console.log(`[ai] ✓ ${item.id}`);
     }
     await new Promise(r => setTimeout(r, PACE_MS));
   }
