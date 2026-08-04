@@ -28,6 +28,10 @@ const AI_MODEL = 'gemini-flash-latest';
 const AI_URL = process.env.GEMINI_URL ||
   `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent`;
 
+// Thinking tokens are charged against maxOutputTokens on this model (~1-2k per
+// question), so budgets must cover thinking + answer or replies come back
+// truncated mid-sentence.
+const MAX_TOKENS = 4096;
 const PACE_MS = Number(process.env.AI_PACE_MS || 7000);
 const CLAIM_MS = 120000;
 const argOf = f => { const i = process.argv.indexOf(f); return i >= 0 ? process.argv[i + 1] : null; };
@@ -77,7 +81,7 @@ async function listQueue() {
       claimedAt: gv(f.claimedAt) || 0,
       failedAt: gv(f.failedAt) || 0,
       search: !!gv(f.search),
-      maxTokens: gv(f.maxTokens) || 1024,
+      maxTokens: gv(f.maxTokens) || MAX_TOKENS,
       prompt: gv(f.prompt) || '',
       dest: gv(f.dest) || '{}'
     };
@@ -87,7 +91,8 @@ async function listQueue() {
 async function getAiState() {
   const d = await fs_('GET', 'meta/aiState');
   const f = d ? d.fields || {} : {};
-  return { pausedUntil: gv(f.pausedUntil) || 0, day: gv(f.day) || '', used: gv(f.used) || 0 };
+  return { pausedUntil: gv(f.pausedUntil) || 0, day: gv(f.day) || '', used: gv(f.used) || 0,
+           groundingOffAt: gv(f.groundingOffAt) || 0 };
 }
 async function pauseAll(ms, why) {
   await fs_('PATCH', `meta/aiState?${mask(['pausedUntil', 'pauseWhy'])}`,
@@ -105,7 +110,7 @@ async function bumpUsed(state) {
 async function aiGenerate(prompt, opts = {}) {
   const body = {
     contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.2, maxOutputTokens: opts.maxTokens || 1024 }
+    generationConfig: { temperature: 0.2, maxOutputTokens: opts.maxTokens || MAX_TOKENS }
   };
   if (opts.search) body.tools = [{ google_search: {} }];
   let res;
@@ -119,6 +124,15 @@ async function aiGenerate(prompt, opts = {}) {
     const err = new Error('network: ' + (e.message || e)); err.network = true; throw err;
   }
   if (res.status === 429) {
+    // Free-tier keys have no Google Search grounding allowance: grounded calls
+    // 429 while plain ones succeed. Retry without tools before concluding the
+    // whole key is exhausted (that mistake paused every device and answered
+    // nothing).
+    if (opts.search) {
+      const out = await aiGenerate(prompt, { ...opts, search: false });
+      out.groundingUnavailable = true;
+      return out;
+    }
     let retryMs = 90000;
     try {
       const j = await res.json();
@@ -129,16 +143,35 @@ async function aiGenerate(prompt, opts = {}) {
     throw err;
   }
   if (res.status === 400 && opts.search) return aiGenerate(prompt, { ...opts, search: false });
+  if (res.status >= 500) { const err = new Error(`AI busy (HTTP ${res.status})`); err.transient = true; throw err; }
   if (!res.ok) { const err = new Error(`AI HTTP ${res.status}`); err.status = res.status; throw err; }
   const j = await res.json();
   const cand = j.candidates && j.candidates[0];
   const text = ((cand?.content?.parts) || []).map(p => p.text || '').join('').trim();
+  // Never store a mid-sentence fragment: grow the budget once, then fail loudly.
+  if (cand?.finishReason === 'MAX_TOKENS') {
+    const budget = opts.maxTokens || MAX_TOKENS;
+    // Jump to a floor, not just double: queue docs written before this fix
+    // carry small budgets (512 for synopsis), and 512->1024 still truncates.
+    if (!opts._grew && budget < 16384)
+      return aiGenerate(prompt, { ...opts, maxTokens: Math.min(16384, Math.max(budget * 2, MAX_TOKENS * 2)), _grew: true });
+    throw new Error('reply was cut off before it finished');
+  }
   if (!text) throw new Error('empty response' + (cand?.finishReason ? ` (${cand.finishReason})` : ''));
   const src = [];
   (cand.groundingMetadata?.groundingChunks || []).forEach(c => {
     if (c.web?.uri && /^https?:/.test(c.web.uri)) src.push({ t: String(c.web.title || 'source').slice(0, 80), u: c.web.uri });
   });
-  return { text, src: src.slice(0, 4) };
+  return { text, src: src.slice(0, 4), grounded: !!opts.search };
+}
+
+const REPROBE_MS = 7 * 24 * 3600 * 1000;
+const wantSearch = (state, want) =>
+  want && !(state.groundingOffAt && Date.now() - state.groundingOffAt < REPROBE_MS);
+async function markGroundingOff(state) {
+  state.groundingOffAt = Date.now();
+  await fs_('PATCH', `meta/aiState?${mask(['groundingOffAt'])}`,
+    { fields: { groundingOffAt: V.i(state.groundingOffAt) } }).catch(() => {});
 }
 
 // Same lenient JSON-array extraction the app uses for fact-check replies.
@@ -166,7 +199,8 @@ async function deliver(item, res) {
   if (dest.t === 'ans') {
     await fs_('PATCH', `ai_answers/${qid(dest.hk + '__' + dest.qk)}`, { fields: {
       huntKey: V.s(dest.hk), qk: V.s(dest.qk), label: V.s(dest.label || ''), q: V.s(dest.q || ''),
-      a: V.s(res.text), src: V.s(JSON.stringify(res.src || [])), model: V.s(AI_MODEL), at: V.i(Date.now())
+      a: V.s(res.text), src: V.s(JSON.stringify(res.src || [])),
+      grounded: { booleanValue: !!res.grounded }, model: V.s(AI_MODEL), at: V.i(Date.now())
     } });
   } else if (dest.t === 'fc') {
     const items = parseVerdicts(res.text);
@@ -213,7 +247,9 @@ async function main() {
     } catch (e) { continue; } // claimed/answered/deleted by someone else — skip
     let delivered = false;
     try {
-      const res = await aiGenerate(item.prompt, { search: item.search, maxTokens: item.maxTokens });
+      const res = await aiGenerate(item.prompt, {
+        search: wantSearch(state, item.search), maxTokens: item.maxTokens });
+      if (res.groundingUnavailable) await markGroundingOff(state);
       await deliver(item, res);
       await fs_('DELETE', `ai_queue/${item.id}`);
       delivered = true;
@@ -227,6 +263,15 @@ async function main() {
         await pauseAll(6 * 3600 * 1000, 'key');
         console.log('[ai] key rejected — paused 6h so we do not hammer a dead key');
         break;
+      }
+      if (e.transient) {
+        // Model overloaded — release the claim and move on; a busy minute must
+        // not march items toward 'error'.
+        await fs_('PATCH', `ai_queue/${item.id}?${mask(['claimedAt', 'claimedBy'])}&currentDocument.exists=true`,
+          { fields: { claimedAt: V.i(0), claimedBy: V.s('') } }).catch(() => {});
+        console.log(`[ai] ~ ${item.id}: ${e.message} (will retry)`);
+        await new Promise(r => setTimeout(r, 20000));
+        continue;
       }
       if (e.network) {
         // The runner can't reach Gemini at all — release the claim (only if the

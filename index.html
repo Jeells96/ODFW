@@ -199,7 +199,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.9</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.10</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -1371,6 +1371,12 @@ const AI_KEY   = atob('QVEuQWI4Uk42SzkxaWRJUkFfMjZyS2FmWlB4YllNMDdEZ0ZWSE5ucVNJQ
 const AI_MODEL = 'gemini-flash-latest';
 const AI_URL   = 'https://generativelanguage.googleapis.com/v1beta/models/' + AI_MODEL + ':generateContent';
 const AI_PACE_MS  = 10000;   // the RPM cap is per-KEY, shared by every open device — pace generously; 429 handling is the backstop
+// gemini-flash-latest THINKS before answering, and those hidden reasoning
+// tokens are charged against maxOutputTokens. Measured: ~1,000-2,000 thinking
+// tokens per question. A 1,024 budget left ~40 tokens for the reply and came
+// back as a mid-sentence fragment, so budgets here are sized for thinking plus
+// the answer, not the answer alone.
+const AI_MAX_TOKENS = 4096;
 const AI_CLAIM_MS = 120000;  // queue items claimed more recently belong to another device
 const AI_CLIENT   = Math.random().toString(36).slice(2, 10);
 
@@ -1378,7 +1384,7 @@ async function aiGenerate(prompt, opts) {
   opts = opts || {};
   const body = {
     contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.2, maxOutputTokens: opts.maxTokens || 1024 }
+    generationConfig: { temperature: 0.2, maxOutputTokens: opts.maxTokens || AI_MAX_TOKENS }
   };
   if (opts.search) body.tools = [{ google_search: {} }];
   let res;
@@ -1394,6 +1400,16 @@ async function aiGenerate(prompt, opts) {
     const err = new Error('network: ' + (e.message || e)); err.network = true; throw err;
   }
   if (res.status === 429) {
+    // Free-tier keys have NO Google Search grounding allowance: a grounded call
+    // 429s on the very first request while plain calls return 200 all day. That
+    // used to read as "daily quota gone", pause every device, and leave every
+    // question unanswered. So when tools were in play, retry once WITHOUT them —
+    // if that succeeds it was grounding, not the key, that ran out.
+    if (opts.search) {
+      const out = await aiGenerate(prompt, Object.assign({}, opts, { search: false }));
+      out.groundingUnavailable = true;
+      return out;
+    }
     let retryMs = 90000;
     try {
       const j = await res.json();
@@ -1404,20 +1420,48 @@ async function aiGenerate(prompt, opts) {
     err.quota = true; err.retryMs = Math.min(retryMs, 6 * 3600 * 1000);
     throw err;
   }
-  // Some free keys reject the search-grounding tool — fall back to a plain ask.
+  // Some free keys reject the search-grounding tool outright — plain ask instead.
   if (res.status === 400 && opts.search)
     return aiGenerate(prompt, Object.assign({}, opts, { search: false }));
+  // "High demand" and other 5xx are transient: back off, don't burn a retry.
+  if (res.status >= 500) { const err = new Error('AI busy (HTTP ' + res.status + ')'); err.transient = true; throw err; }
   if (!res.ok) { const err = new Error('AI HTTP ' + res.status); err.status = res.status; throw err; }
   const j = await res.json();
   const cand = j.candidates && j.candidates[0];
   const text = ((cand && cand.content && cand.content.parts) || []).map(p => p.text || '').join('').trim();
+  // A truncated reply is worse than none — it reads like a real answer but
+  // starts and stops mid-sentence. Grow the budget once, then give up loudly.
+  if (cand && cand.finishReason === 'MAX_TOKENS') {
+    const budget = opts.maxTokens || AI_MAX_TOKENS;
+    // Jump to a floor, not just double: queue docs written before this fix
+    // carry small budgets (512 for synopsis), and 512->1024 still truncates.
+    if (!opts._grew && budget < 16384)
+      return aiGenerate(prompt, Object.assign({}, opts,
+        { maxTokens: Math.min(16384, Math.max(budget * 2, AI_MAX_TOKENS * 2)), _grew: true }));
+    throw new Error('reply was cut off before it finished');
+  }
   if (!text) throw new Error('AI empty response' + (cand && cand.finishReason ? ' (' + cand.finishReason + ')' : ''));
   const src = [];
   ((cand.groundingMetadata || {}).groundingChunks || []).forEach(c => {
     if (c.web && c.web.uri && /^https?:/.test(c.web.uri))
       src.push({ t: String(c.web.title || 'source').slice(0, 80), u: c.web.uri });
   });
-  return { text, src: src.slice(0, 4) };
+  return { text, src: src.slice(0, 4), grounded: !!opts.search };
+}
+
+// Whether to ask for search grounding right now. Once a 429 proves the key has
+// no grounding allowance we stop paying that round-trip, but re-probe weekly so
+// the app upgrades itself the day billing is enabled.
+const AI_REPROBE_MS = 7 * 24 * 3600 * 1000;
+function aiWantSearch(st, want) {
+  if (!want) return false;
+  const off = st && st.groundingOffAt;
+  return !(off && Date.now() - off < AI_REPROBE_MS);
+}
+async function aiMarkGroundingOff() {
+  _aiState = Object.assign({}, _aiState, { groundingOffAt: Date.now() });
+  _aiStateAt = Date.now();
+  try { await db.collection('meta').doc('aiState').set({ groundingOffAt: _aiState.groundingOffAt }, { merge: true }); } catch (e) {}
 }
 
 // The hardcoded per-hunt questions. Opening a hunt's detail sheet enqueues any
@@ -1579,7 +1623,8 @@ async function aiDeliver(item, res) {
   if (dest.t === 'ans') {
     await db.collection('ai_answers').doc(aiQid(dest.hk + '__' + dest.qk)).set({
       huntKey: dest.hk, qk: dest.qk, label: dest.label || '', q: dest.q || '',
-      a: res.text, src: JSON.stringify(res.src || []), model: AI_MODEL, at: Date.now()
+      a: res.text, src: JSON.stringify(res.src || []), grounded: !!res.grounded,
+      model: AI_MODEL, at: Date.now()
     });
     _aiAnsCache.delete(dest.hk);
     aiRefreshSheet(dest.hk);
@@ -1617,13 +1662,22 @@ async function aiProcessLoop() {
       try { item = await aiClaimNext(); } catch (e) { break; }
       if (!item) break;
       try {
-        const res = await aiGenerate(item.prompt, { search: !!item.search, maxTokens: item.maxTokens || 1024 });
+        const res = await aiGenerate(item.prompt, {
+          search: aiWantSearch(st, !!item.search), maxTokens: item.maxTokens || AI_MAX_TOKENS });
+        if (res.groundingUnavailable) await aiMarkGroundingOff();
         await aiDeliver(item, res);
         await item.ref.delete();
         aiBumpUsed();
       } catch (e) {
         if (e.quota) { await aiPause(e.retryMs, 'quota'); break; }
         if (e.status === 403 || e.status === 401) { await aiPause(6 * 3600 * 1000, 'key'); break; }
+        if (e.transient) {
+          // Model overloaded — release the claim untouched and try again on the
+          // next pass. A busy minute must not push items toward 'error'.
+          try { await item.ref.update({ claimedAt: 0, claimedBy: '' }); } catch (e2) {}
+          await new Promise(r => setTimeout(r, 20000));
+          continue;
+        }
         if (e.network) {
           // THIS device can't reach Gemini (offline, DNS-blocked). Release the
           // claim untouched and stop — another device or the nightly Action
@@ -1668,6 +1722,13 @@ function aiHtml(text) {
   return s;
 }
 const aiSynHtml = t => '<p class="help" style="margin:8px 0 0;color:var(--gold)">✨ ' + aiHtml(t) + '</p>';
+// An answer written without live web search comes from the model's training
+// data, which can be stale or wrong about a specific hunt's fine print. Say so
+// plainly rather than letting it read like a looked-up fact.
+function aiGroundNote(ans) {
+  if (ans.grounded) return '';
+  return '<div class="help" style="margin-top:4px;font-size:.72rem;color:var(--warn)">⚠ Written from the AI\'s own knowledge — it could not search the web for this one. Verify anything that matters against the regulations.</div>';
+}
 function aiSrcHtml(srcJson) {
   let src = []; try { src = JSON.parse(srcJson || '[]'); } catch (e) {}
   if (!src.length) return '';
@@ -1728,14 +1789,14 @@ async function loadAiInto(h) {
     } else if (ans) {
       html += '<div style="margin-bottom:14px"><div style="font-weight:700;margin-bottom:4px">' + esc(ans.label || qdef.label) + '</div>' +
         '<div style="font-size:.9rem;line-height:1.55;color:var(--dim)">' + aiHtml(ans.a) + '</div>' +
-        aiSrcHtml(ans.src) +
+        aiSrcHtml(ans.src) + aiGroundNote(ans) +
         '<div class="help" style="margin-top:2px;font-size:.72rem">AI-generated ' + new Date(ans.at).toLocaleDateString() + (window.pinOk ? ' · <button class="linkbtn" data-airedo="' + esc(qdef.k) + '" style="font-size:.72rem;padding:0">↻ update</button>' : '') + '</div></div>';
     } else missing.push(qdef);
   }
   // custom questions the family has asked about this hunt
   (answers || []).filter(a => a.qk && a.qk.startsWith('c_')).forEach(a => {
     html += '<div style="margin-bottom:14px"><div style="font-weight:700;margin-bottom:4px">' + esc(a.q || a.label) + '</div>' +
-      '<div style="font-size:.9rem;line-height:1.55;color:var(--dim)">' + aiHtml(a.a) + '</div>' + aiSrcHtml(a.src) +
+      '<div style="font-size:.9rem;line-height:1.55;color:var(--dim)">' + aiHtml(a.a) + '</div>' + aiSrcHtml(a.src) + aiGroundNote(a) +
       '<div class="help" style="margin-top:2px;font-size:.72rem">AI-generated ' + new Date(a.at).toLocaleDateString() + '</div></div>';
   });
   // questions asked this session that haven't come back yet
@@ -1860,7 +1921,7 @@ async function aiQueueFactcheck(year) {
   for (let i = 0; i < rows.length && queued < MAXB; i += BATCH) {
     const batch = rows.slice(i, i + BATCH);
     const ok = await aiEnqueue(aiQid('fc_' + year + '_' + aiHash(batch.map(b => b.hunt).join(','))), {
-      kind: 'factcheck', search: true, maxTokens: 2048,
+      kind: 'factcheck', search: true, maxTokens: 8192,
       prompt: 'Audit these parsed Oregon ' + year + ' controlled hunt records for accuracy. Our data:\n' +
         JSON.stringify(batch) + '\n' +
         'Search official Oregon sources (myodfw.com, eregulations.com/oregon/hunting). For each hunt decide: ' +
@@ -1888,7 +1949,7 @@ async function loadAiSynopsis(entries, syn) {
     if (have[e._id]) { if (el) el.innerHTML = aiSynHtml(have[e._id]); continue; }
     if (e._manual || queued >= 30) continue; // manual entries are already human-written
     aiEnqueue(aiQid('syn_' + e._id), {
-      kind: 'synopsis', search: false, maxTokens: 512,
+      kind: 'synopsis', search: false, maxTokens: 3072,
       prompt: 'ODFW highlights year-over-year rule changes in its Big Game Synopsis with yellow marks. Here is one highlighted change.\n' +
         'Section heading: ' + (e.h || 'unknown') + '\nHighlighted text: ' + (e.hl || '') + '\nSurrounding context: ' + (e.ctx || '') + '\n' +
         'In at most 2 plain sentences, explain what changed and what a hunter needs to do differently. ' +
@@ -1912,6 +1973,8 @@ function aiQueueRowLabel(it) {
   if (d.t === 'syn') return 'Synopsis change summary';
   return it.id;
 }
+// Which queue rows have their full prompt expanded.
+const _aiQShown = new Set();
 function aiQueueRowsHtml(items) {
   if (!items.length) return '<p class="help" style="margin:6px 0 0">The queue is empty.</p>';
   const age = ms => { const m = Math.round((Date.now() - ms) / 60000);
@@ -1921,10 +1984,24 @@ function aiQueueRowsHtml(items) {
     const state = failed ? '✗ failed' + (it.lastError ? ' — ' + it.lastError.slice(0, 70) : '')
       : (it.attempts || 0) > 0 ? '↻ retrying (' + it.attempts + ' tries)'
       : (it.claimedAt || 0) > Date.now() - AI_CLAIM_MS ? '⏳ answering now…' : '· waiting';
-    return '<div class="statusline" style="display:flex;gap:8px;align-items:baseline">' +
+    const open = _aiQShown.has(it.id);
+    // The exact text sent to Gemini, verbatim — this is the whole point of the
+    // viewer: no summarising, no truncation.
+    const prompt = open
+      ? '<pre style="white-space:pre-wrap;word-break:break-word;font-size:.72rem;line-height:1.45;' +
+        'background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;margin:6px 0 0;' +
+        'font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--text)">' + esc(it.prompt || '(no prompt stored)') + '</pre>' +
+        '<div class="help" style="margin:4px 0 0;font-size:.68rem">' +
+        (it.search ? 'Asks Gemini to search the web' : 'No web search requested') +
+        ' · up to ' + (it.maxTokens || AI_MAX_TOKENS) + ' tokens (incl. the model\'s thinking)</div>'
+      : '';
+    return '<div class="statusline">' +
+      '<div style="display:flex;gap:8px;align-items:baseline">' +
       '<span style="flex:1;min-width:0"><span style="font-weight:600">' + esc(aiQueueRowLabel(it)) + '</span>' +
       '<span class="help" style="display:block;margin:0;font-size:.72rem;' + (failed ? 'color:var(--bad)' : '') + '">' + esc(state) + ' · queued ' + age(it.createdAt || Date.now()) + '</span></span>' +
-      '<button class="bmini dan" data-aiqdel="' + esc(it.id) + '" style="min-height:32px;padding:2px 8px;flex-shrink:0">✕</button></div>';
+      '<button class="bmini" data-aiqshow="' + esc(it.id) + '" style="min-height:32px;padding:2px 8px;flex-shrink:0">' + (open ? 'Hide' : 'Question') + '</button>' +
+      '<button class="bmini dan" data-aiqdel="' + esc(it.id) + '" style="min-height:32px;padding:2px 8px;flex-shrink:0">✕</button></div>' +
+      prompt + '</div>';
   }).join('');
 }
 let _aiQueueOpen = false;
@@ -1940,6 +2017,8 @@ async function renderAiAdmin() {
     let html = '<div class="statusline"><strong>Queue:</strong> ' + pending + ' waiting · ' + errors + ' failed</div>';
     const today = new Date().toISOString().slice(0, 10);
     html += '<div class="statusline"><strong>Today:</strong> ' + (st.day === today ? st.used || 0 : 0) + ' AI answers generated</div>';
+    if (st.groundingOffAt && Date.now() - st.groundingOffAt < AI_REPROBE_MS)
+      html += '<div class="statusline" style="color:var(--warn)">Web search is off — this API key has no Google Search grounding quota (grounded requests get rejected). Answers come from the AI\'s own knowledge instead. It re-checks weekly, and turns search back on by itself if the key ever gets grounding quota.</div>';
     if (paused) html += '<div class="statusline" style="color:var(--warn)">Paused until ' + new Date(st.pausedUntil).toLocaleTimeString() + ' (' + (st.pauseWhy === 'key' ? 'API key problem' : 'free daily limit reached') + ') — resumes by itself.</div>';
     else if (pending) html += '<div class="statusline" style="color:var(--good)">Working through the queue while the app is open.</div>';
     else html += '<div class="statusline" style="color:var(--good)">All caught up ✓</div>';
@@ -1960,6 +2039,11 @@ async function renderAiAdmin() {
     card.innerHTML = html;
     const tog = $('#aiQueueToggle');
     if (tog) tog.onclick = () => { _aiQueueOpen = !_aiQueueOpen; renderAiAdmin(); };
+    card.querySelectorAll('[data-aiqshow]').forEach(b => b.onclick = () => {
+      const id = b.dataset.aiqshow;
+      _aiQShown.has(id) ? _aiQShown.delete(id) : _aiQShown.add(id);
+      renderAiAdmin();
+    });
     card.querySelectorAll('[data-aiqdel]').forEach(b => b.onclick = () => {
       confirm2('Remove this from the queue? It won\'t be answered.', async () => {
         try { await db.collection('ai_queue').doc(b.dataset.aiqdel).delete(); } catch (e) {}
