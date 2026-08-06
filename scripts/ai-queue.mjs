@@ -23,7 +23,13 @@ const BASE = process.env.FS_BASE ||
 
 // Free tier, no billing attached — shipped in-repo by the owner's explicit
 // choice. Base64 only because GitHub push protection blocks the literal form.
-const AI_KEY = atob('QVEuQWI4Uk42SzkxaWRJUkFfMjZyS2FmWlB4YllNMDdEZ0ZWSE5ucVNJQWlsdlQtTC1fT2c=');
+// Primary ("ODFW App") first, backup ("ODFW Backup") second: each key is used
+// until Gemini says it's exhausted for the day, then the next takes over.
+const AI_KEYS = [
+  atob('QVEuQWI4Uk42SzkxaWRJUkFfMjZyS2FmWlB4YllNMDdEZ0ZWSE5ucVNJQWlsdlQtTC1fT2c='),
+  atob('QVEuQWI4Uk42TDZJd2dEbkg1Z1ZLVFlvcWpXd2ZITHQtRE1ZR2V5X0RydEYySkdDaTV3MUE=')
+];
+const AI_KEY_NAMES = ['primary', 'backup'];
 const AI_MODEL = 'gemini-flash-latest';
 const AI_URL = process.env.GEMINI_URL ||
   `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent`;
@@ -91,8 +97,12 @@ async function listQueue() {
 async function getAiState() {
   const d = await fs_('GET', 'meta/aiState');
   const f = d ? d.fields || {} : {};
-  return { pausedUntil: gv(f.pausedUntil) || 0, day: gv(f.day) || '', used: gv(f.used) || 0,
-           groundingOffDay: gv(f.groundingOffDay) || '' };
+  const st = { pausedUntil: gv(f.pausedUntil) || 0, day: gv(f.day) || '', used: gv(f.used) || 0 };
+  for (let ki = 0; ki < AI_KEYS.length; ki++) {
+    st['keyOff' + ki] = gv(f['keyOff' + ki]) || '';
+    st['groundOff' + ki] = gv(f['groundOff' + ki]) || '';
+  }
+  return st;
 }
 async function pauseAll(ms, why) {
   await fs_('PATCH', `meta/aiState?${mask(['pausedUntil', 'pauseWhy'])}`,
@@ -106,55 +116,60 @@ async function bumpUsed(state) {
     { fields: { day: V.s(day), used: V.i(state.used) } });
 }
 
-// ── Gemini ───────────────────────────────────────────────────────────────────
-async function aiGenerate(prompt, opts = {}) {
+// ── Gemini (multi-key rotation — mirrors index.html) ─────────────────────────
+const today = () => new Date().toISOString().slice(0, 10);
+async function aiMark(state, field) {
+  state[field] = today();
+  await fs_('PATCH', `meta/aiState?${mask([field])}`,
+    { fields: { [field]: V.s(state[field]) } }).catch(() => {});
+}
+async function aiCallKey(ki, prompt, search, opts = {}) {
   const body = {
     contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.2, maxOutputTokens: opts.maxTokens || MAX_TOKENS }
+    generationConfig: { temperature: opts.temperature ?? 0.2, maxOutputTokens: opts.maxTokens || MAX_TOKENS }
   };
-  if (opts.search) body.tools = [{ google_search: {} }];
+  if (search) body.tools = [{ google_search: {} }];
   let res;
   try {
     res = await fetch(AI_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-goog-api-key': AI_KEY },
+      headers: { 'Content-Type': 'application/json', 'X-goog-api-key': AI_KEYS[ki] },
       body: JSON.stringify(body)
     });
   } catch (e) {
     const err = new Error('network: ' + (e.message || e)); err.network = true; throw err;
   }
   if (res.status === 429) {
-    // Free-tier keys have no Google Search grounding allowance: grounded calls
-    // 429 while plain ones succeed. Retry without tools before concluding the
-    // whole key is exhausted (that mistake paused every device and answered
-    // nothing).
-    if (opts.search) {
-      const out = await aiGenerate(prompt, { ...opts, search: false });
-      out.groundingUnavailable = true;
-      return out;
-    }
-    let retryMs = 90000;
+    // Google says WHICH limit tripped: QuotaFailure violations name PerDay vs
+    // PerMinute quotas. A minute-limit blip must not bench the key for the day.
+    let retryMs = 90000, daily = false;
     try {
       const j = await res.json();
-      const rd = (j.error?.details || []).find(d => String(d['@type'] || '').includes('RetryInfo'))?.retryDelay;
+      const det = j.error?.details || [];
+      const rd = det.find(d => String(d['@type'] || '').includes('RetryInfo'))?.retryDelay;
       if (rd) retryMs = Math.max(60000, parseFloat(rd) * 1000);
+      const viol = det.filter(d => String(d['@type'] || '').includes('QuotaFailure')).flatMap(d => d.violations || []);
+      daily = viol.some(v => /day|daily/i.test(String(v.quotaId || '') + ' ' + String(v.description || '')));
     } catch {}
-    const err = new Error('quota'); err.quota = true; err.retryMs = Math.min(retryMs, 6 * 3600 * 1000);
+    if (!daily && retryMs > 5 * 60 * 1000) daily = true; // long back-off = daily in practice
+    const err = new Error(`quota (${AI_KEY_NAMES[ki]} key${daily ? ', daily' : ', per-minute'})`);
+    err.quota = true; err.daily = daily; err.wasSearch = search; err.retryMs = Math.min(retryMs, 6 * 3600 * 1000);
     throw err;
   }
-  if (res.status === 400 && opts.search) return aiGenerate(prompt, { ...opts, search: false });
+  if (res.status === 400 && search) return aiCallKey(ki, prompt, false, opts);
+  if (res.status === 403 || res.status === 401) {
+    const err = new Error(`key rejected (${AI_KEY_NAMES[ki]}, HTTP ${res.status})`);
+    err.auth = true; err.status = res.status; throw err;
+  }
   if (res.status >= 500) { const err = new Error(`AI busy (HTTP ${res.status})`); err.transient = true; throw err; }
   if (!res.ok) { const err = new Error(`AI HTTP ${res.status}`); err.status = res.status; throw err; }
   const j = await res.json();
   const cand = j.candidates && j.candidates[0];
   const text = ((cand?.content?.parts) || []).map(p => p.text || '').join('').trim();
-  // Never store a mid-sentence fragment: grow the budget once, then fail loudly.
   if (cand?.finishReason === 'MAX_TOKENS') {
     const budget = opts.maxTokens || MAX_TOKENS;
-    // Jump to a floor, not just double: queue docs written before this fix
-    // carry small budgets (512 for synopsis), and 512->1024 still truncates.
     if (!opts._grew && budget < 16384)
-      return aiGenerate(prompt, { ...opts, maxTokens: Math.min(16384, Math.max(budget * 2, MAX_TOKENS * 2)), _grew: true });
+      return aiCallKey(ki, prompt, search, { ...opts, maxTokens: Math.min(16384, Math.max(budget * 2, MAX_TOKENS * 2)), _grew: true });
     throw new Error('reply was cut off before it finished');
   }
   if (!text) throw new Error('empty response' + (cand?.finishReason ? ` (${cand.finishReason})` : ''));
@@ -162,17 +177,68 @@ async function aiGenerate(prompt, opts = {}) {
   (cand.groundingMetadata?.groundingChunks || []).forEach(c => {
     if (c.web?.uri && /^https?:/.test(c.web.uri)) src.push({ t: String(c.web.title || 'source').slice(0, 80), u: c.web.uri });
   });
-  return { text, src: src.slice(0, 4), grounded: !!opts.search };
+  return { text, src: src.slice(0, 4), grounded: search, key: ki };
+}
+async function aiGenerate(prompt, opts = {}) {
+  const st = opts.state || {};
+  const t = today();
+  let lastQuota = null, lastAuth = null;
+  for (let ki = 0; ki < AI_KEYS.length; ki++) {
+    if (st['keyOff' + ki] === t) continue;
+    const search = !!opts.search && st['groundOff' + ki] !== t;
+    try {
+      return await aiCallKey(ki, prompt, search, opts);
+    } catch (eOuter) {
+      let e = eOuter;
+      if (e.quota && e.wasSearch) {
+        // grounded 429: a plain retry on the same key decides whether it was
+        // grounding quota or the key. Whatever the retry throws (429, 403 —
+        // the live backup key does grounded-429 then plain-403) falls through
+        // to the SAME handling below; nothing escapes the rotation bare.
+        try { const out = await aiCallKey(ki, prompt, false, opts); await aiMark(st, 'groundOff' + ki); return out; }
+        catch (e2) { e = e2; }
+      }
+      if (e.quota) {
+        if (e.daily) await aiMark(st, 'keyOff' + ki); // day quota: bench until tomorrow
+        lastQuota = e; continue;                       // minute blip: just move on, key recovers
+      }
+      if (e.auth) { await aiMark(st, 'keyOff' + ki); lastAuth = e; continue; }
+      throw e; // transient / network — not a key problem
+    }
+  }
+  // Prefer the quota error: its retryMs is honest (a minute-class 429 pauses
+  // everyone ~90s, not an hour), and 'quota' reads truer than 'key' when one
+  // key merely died while the other ran dry.
+  const err = lastQuota || lastAuth || Object.assign(new Error('AI quota exhausted'), { quota: true });
+  err.allKeys = true; err.retryMs = err.retryMs || 3600 * 1000;
+  throw err;
 }
 
-// Grounding quota resets daily with the rest of the key's limits, so re-probe
-// once a day rather than staying off for a week.
-const today = () => new Date().toISOString().slice(0, 10);
-const wantSearch = (state, want) => want && state.groundingOffDay !== today();
-async function markGroundingOff(state) {
-  state.groundingOffDay = today();
-  await fs_('PATCH', `meta/aiState?${mask(['groundingOffDay'])}`,
-    { fields: { groundingOffDay: V.s(state.groundingOffDay) } }).catch(() => {});
+// Audit replies: [{hunt, diffs:[{f, ours, official, note}]}] — normalized and
+// key-filtered exactly like the app does.
+const AUDIT_FIELDS = new Set(['name', 'tags', 'apps', 'season', 'bag']);
+function parseAudit(text) {
+  const m = String(text).match(/\[[\s\S]*\]/);
+  if (!m) return null;
+  try {
+    const arr = JSON.parse(m[0]);
+    if (!Array.isArray(arr)) return null;
+    const out = Object.create(null);
+    for (const e of arr) {
+      if (!e || !e.hunt) continue;
+      const id = String(e.hunt);
+      if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,19}$/.test(id)) continue;
+      const diffs = [];
+      for (const d of (Array.isArray(e.diffs) ? e.diffs : [])) {
+        if (!d || !AUDIT_FIELDS.has(d.f)) continue;
+        diffs.push({ f: d.f, ours: String(d.ours ?? '').slice(0, 200),
+                     ai: String(d.official ?? d.ai ?? '').slice(0, 200),
+                     note: String(d.note || '').slice(0, 160) });
+      }
+      out[id] = diffs;
+    }
+    return Object.keys(out).length ? out : null;
+  } catch { return null; }
 }
 
 // Same lenient JSON-array extraction the app uses for fact-check replies.
@@ -202,6 +268,13 @@ async function deliver(item, res) {
       huntKey: V.s(dest.hk), qk: V.s(dest.qk), label: V.s(dest.label || ''), q: V.s(dest.q || ''),
       a: V.s(res.text), src: V.s(JSON.stringify(res.src || [])),
       grounded: { booleanValue: !!res.grounded }, model: V.s(AI_MODEL), at: V.i(Date.now())
+    } });
+  } else if (dest.t === 'audit') {
+    const items = parseAudit(res.text) || Object.create(null);
+    for (const hu of (dest.hunts || [])) if (items[hu] === undefined) items[hu] = [];
+    if (!Object.keys(items).length) throw new Error('audit reply was not parseable JSON');
+    await fs_('PATCH', `ai_audit/${item.id}`, { fields: {
+      year: V.s(dest.year), items: V.s(JSON.stringify(items)), model: V.s(AI_MODEL), at: V.i(Date.now())
     } });
   } else if (dest.t === 'fc') {
     const items = parseVerdicts(res.text);
@@ -249,20 +322,14 @@ async function main() {
     let delivered = false;
     try {
       const res = await aiGenerate(item.prompt, {
-        search: wantSearch(state, item.search), maxTokens: item.maxTokens });
-      if (res.groundingUnavailable) await markGroundingOff(state);
+        search: item.search, maxTokens: item.maxTokens, state });
       await deliver(item, res);
       await fs_('DELETE', `ai_queue/${item.id}`);
       delivered = true;
     } catch (e) {
-      if (e.quota) {
-        await pauseAll(e.retryMs, 'quota');
-        console.log(`[ai] quota hit after ${done} answers — paused ${Math.round(e.retryMs / 60000)} min, queue resumes later`);
-        break;
-      }
-      if (e.status === 403 || e.status === 401) {
-        await pauseAll(6 * 3600 * 1000, 'key');
-        console.log('[ai] key rejected — paused 6h so we do not hammer a dead key');
+      if (e.allKeys) {
+        await pauseAll(e.retryMs, e.auth ? 'key' : 'quota');
+        console.log(`[ai] every key is out (${e.message}) after ${done} answers — paused ${Math.round(e.retryMs / 60000)} min`);
         break;
       }
       if (e.transient) {
