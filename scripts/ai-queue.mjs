@@ -97,7 +97,8 @@ async function listQueue() {
 async function getAiState() {
   const d = await fs_('GET', 'meta/aiState');
   const f = d ? d.fields || {} : {};
-  const st = { pausedUntil: gv(f.pausedUntil) || 0, day: gv(f.day) || '', used: gv(f.used) || 0 };
+  const st = { pausedUntil: gv(f.pausedUntil) || 0, day: gv(f.day) || '', used: gv(f.used) || 0,
+               userPaused: !!gv(f.userPaused) };
   for (let ki = 0; ki < AI_KEYS.length; ki++) {
     st['keyOff' + ki] = gv(f['keyOff' + ki]) || '';
     st['groundOff' + ki] = gv(f['groundOff' + ki]) || '';
@@ -297,6 +298,10 @@ async function deliver(item, res) {
 // ── main ─────────────────────────────────────────────────────────────────────
 async function main() {
   const state = await getAiState();
+  if (state.userPaused) {
+    console.log('[ai] queue is paused by the owner — nothing to do');
+    return;
+  }
   if (state.pausedUntil > Date.now()) {
     console.log(`[ai] paused until ${new Date(state.pausedUntil).toISOString()} — nothing to do`);
     return;

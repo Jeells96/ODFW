@@ -199,7 +199,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.13</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.14</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -331,7 +331,8 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
     <p class="ptitle">AI assistant</p>
     <div id="aiAdminCard" class="help">Checking…</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-      <button class="btn primary" id="btnAiBackfill" style="flex:1 1 100%">↻ Reload queue — ask everything unanswered</button>
+      <button class="btn primary" id="btnAiBackfill" style="flex:1 1 100%">↻ Reload queue — re-ask every question</button>
+      <button class="btn" id="btnAiPause" style="flex:1;min-width:140px">⏸ Pause queue</button>
       <button class="btn" id="btnAiFactcheck" style="flex:1;min-width:180px">Audit card data</button>
       <button class="btn" id="btnAiKick" style="flex:1;min-width:140px">Process queue now</button>
     </div>
@@ -1738,6 +1739,7 @@ async function aiProcessLoop() {
   try {
     while (true) {
       const st = await aiState();
+      if (st.userPaused) break; // owner hit Pause — nothing runs until Resume
       if ((st.pausedUntil || 0) > Date.now()) break;
       let item;
       try { item = await aiClaimNext(); } catch (e) { break; }
@@ -1999,13 +2001,21 @@ async function aiAllAnswers(force) {
   return _aiAllAns;
 }
 // What still needs asking: [{id, hunt, qdef}]
-async function aiMissingQuestions() {
-  const answers = await aiAllAnswers(true);
-  if (answers === null) return null;
-  const have = new Set(answers.map(a => a.id));
-  const qsnap = await db.collection('ai_queue').get();
-  qsnap.docs.forEach(d => have.add(d.id.replace(/^syn_/, '')));
-  const queued = new Set(qsnap.docs.map(d => d.id));
+// redoAll=false: only questions with no answer and no queue entry (kept for
+// gap-filling). redoAll=true: EVERY question goes back in the queue — fresh
+// answers overwrite old ones on delivery. That's the owner's "reload" button:
+// when a new season loads (or a year has passed), everything gets re-asked.
+async function aiMissingQuestions(redoAll) {
+  if (!db) return null;
+  const queued = new Set();
+  try { (await db.collection('ai_queue').get()).docs.forEach(d => queued.add(d.id)); }
+  catch (e) { return null; }
+  let have = new Set();
+  if (!redoAll) {
+    const answers = await aiAllAnswers(true);
+    if (answers === null) return null;
+    have = new Set(answers.map(a => a.id));
+  }
   const out = [];
   for (const [hk, h] of aiAllHunts()) {
     if (AI_SEED[hk]) continue;             // shipped answers need no API call
@@ -2017,8 +2027,8 @@ async function aiMissingQuestions() {
   }
   return out;
 }
-async function aiBackfill(onProgress) {
-  const missing = await aiMissingQuestions();
+async function aiBackfill(onProgress, redoAll) {
+  const missing = await aiMissingQuestions(redoAll);
   if (missing === null) return { error: 'offline' };
   let written = 0;
   for (let i = 0; i < missing.length; i += _AI_BATCH) {
@@ -2492,9 +2502,12 @@ async function renderAiAdmin() {
       if (off) html += '<div class="statusline" style="color:var(--warn)">The ' + AI_KEY_NAMES[ki] + ' key is used up (or rejected) for today — ' + (ki + 1 < AI_KEYS.length ? 'running on the next key.' : 'it re-tries tomorrow.') + '</div>';
       else if (goff) html += '<div class="statusline" style="color:var(--warn)">The ' + AI_KEY_NAMES[ki] + ' key has no web-search quota today — its answers come from the AI\'s own knowledge. Re-checked daily.</div>';
     }
-    if (paused) html += '<div class="statusline" style="color:var(--warn)">Paused until ' + new Date(st.pausedUntil).toLocaleTimeString() + ' (' + (st.pauseWhy === 'key' ? 'API key problem' : 'free daily limit reached') + ') — resumes by itself.</div>';
+    if (st.userPaused) html += '<div class="statusline" style="color:var(--warn)">⏸ Paused by you — nothing will be asked until you tap Resume.</div>';
+    else if (paused) html += '<div class="statusline" style="color:var(--warn)">Paused until ' + new Date(st.pausedUntil).toLocaleTimeString() + ' (' + (st.pauseWhy === 'key' ? 'API key problem' : 'free daily limit reached') + ') — resumes by itself.</div>';
     else if (pending) html += '<div class="statusline" style="color:var(--good)">Working through the queue while the app is open.</div>';
     else html += '<div class="statusline" style="color:var(--good)">All caught up ✓</div>';
+    const pb = $('#btnAiPause');
+    if (pb) pb.textContent = st.userPaused ? '▶ Resume queue' : '⏸ Pause queue';
     const auditYear = S.pendingYear || S.selectedYear;
     const audit = await aiAuditFor(auditYear);
     const ov = await aiOverrides();
@@ -4006,18 +4019,37 @@ function wire(){
     });
   };
   const bfBtn=$('#btnAiBackfill');
-  if(bfBtn) bfBtn.onclick=async ()=>{
+  if(bfBtn) bfBtn.onclick=()=>{
     if(!db){ toast('Cloud unreachable — can\'t build the queue', true); return; }
-    const label=bfBtn.textContent;
-    bfBtn.disabled=true; bfBtn.textContent='Checking what\'s missing…';
+    const nQ = aiAllHunts().size * AI_QUESTIONS.length;
+    confirm2('Re-ask every question for every hunt (~'+nQ+' items)? Existing answers stay visible until their fresh replacement arrives. At the free tier this takes roughly '+Math.ceil(nQ/200)+' days to work through.', async ()=>{
+      const label=bfBtn.textContent;
+      bfBtn.disabled=true; bfBtn.textContent='Rebuilding the queue…';
+      try{
+        const res=await aiBackfill((done,total)=>{ bfBtn.textContent='Queuing… '+done+' / '+total; }, true);
+        if(res.error){ toast('Couldn\'t reach the cloud', true); }
+        else if(!res.total){ toast('Everything is already in the queue ✓'); }
+        else toast('Queued '+res.written+' question'+(res.written===1?'':'s')+' — fresh answers will replace the old ones as they arrive');
+        if(res.written) aiKick(0);
+      }catch(e){ toast('Couldn\'t build the queue: '+e.message, true); }
+      bfBtn.disabled=false; bfBtn.textContent=label;
+      renderAiAdmin();
+    });
+  };
+  // ── owner's pause switch: stops every processor (this app, other phones,
+  //    the nightly Action) until resumed. Separate from the automatic
+  //    quota pause, which clears itself.
+  const pBtn=$('#btnAiPause');
+  if(pBtn) pBtn.onclick=async ()=>{
+    if(!db){ toast('Cloud unreachable', true); return; }
+    const st=await aiState(true);
+    const next=!st.userPaused;
     try{
-      const res=await aiBackfill((done,total)=>{ bfBtn.textContent='Queuing… '+done+' / '+total; });
-      if(res.error){ toast('Couldn\'t reach the cloud', true); }
-      else if(!res.total){ toast('Everything is already answered or queued ✓'); }
-      else toast('Queued '+res.written+' question'+(res.written===1?'':'s')+' — they\'ll be answered a few each day');
-      if(res.written) aiKick(0);
-    }catch(e){ toast('Couldn\'t build the queue: '+e.message, true); }
-    bfBtn.disabled=false; bfBtn.textContent=label;
+      await db.collection('meta').doc('aiState').set({ userPaused: next }, { merge: true });
+      _aiState=Object.assign({}, _aiState, { userPaused: next }); _aiStateAt=Date.now();
+      toast(next?'Queue paused — nothing will be asked until you resume':'Queue resumed ✓');
+      if(!next) aiKick(0);
+    }catch(e){ toast('Couldn\'t save — check connection', true); }
     renderAiAdmin();
   };
   const kickBtn=$('#btnAiKick');
