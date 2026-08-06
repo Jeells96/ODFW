@@ -117,7 +117,10 @@ async function bumpUsed(state) {
 }
 
 // ── Gemini (multi-key rotation — mirrors index.html) ─────────────────────────
-const today = () => new Date().toISOString().slice(0, 10);
+// Gemini's daily quotas reset at midnight PACIFIC — day-marks must live on
+// that boundary, not UTC's (an evening-PDT 429 stamped with the UTC date
+// would bench a fully-reset key through the next morning's drain).
+const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
 async function aiMark(state, field) {
   state[field] = today();
   await fs_('PATCH', `meta/aiState?${mask([field])}`,
@@ -270,9 +273,11 @@ async function deliver(item, res) {
       grounded: { booleanValue: !!res.grounded }, model: V.s(AI_MODEL), at: V.i(Date.now())
     } });
   } else if (dest.t === 'audit') {
-    const items = parseAudit(res.text) || Object.create(null);
+    // Parse FIRST: an unparseable reply must fail the item — filling the batch
+    // beforehand would silently mark 6 hunts verified-clean forever.
+    const items = parseAudit(res.text);
+    if (!items) throw new Error('audit reply was not parseable JSON');
     for (const hu of (dest.hunts || [])) if (items[hu] === undefined) items[hu] = [];
-    if (!Object.keys(items).length) throw new Error('audit reply was not parseable JSON');
     await fs_('PATCH', `ai_audit/${item.id}`, { fields: {
       year: V.s(dest.year), items: V.s(JSON.stringify(items)), model: V.s(AI_MODEL), at: V.i(Date.now())
     } });

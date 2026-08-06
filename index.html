@@ -199,7 +199,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.12</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.13</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -1297,7 +1297,7 @@ async function handleFile(target, file) {
     if (!S.selectedYear) S.selectedYear = year;
     saveLocal(); renderAll();
     banner('', 'Saving to cloud…', true);
-    const ok = await fbSave(year, yd.hunts, yd.harvestData);
+    const ok = await fbSave(year, aiCleanHunts(year, yd.hunts), yd.harvestData);
     banner(ok?'ok':'err', ok?'Saved to cloud ✓ — everyone will see this data':'Cloud save failed — data is only on this device', false);
   } catch(e) { console.error(e); toast('Problem with that file: '+e.message, true); }
 }
@@ -1402,7 +1402,11 @@ const AI_PACE_MS  = 10000;   // the RPM cap is per-KEY, shared by every open dev
 const AI_MAX_TOKENS = 4096;
 const AI_CLAIM_MS = 120000;  // queue items claimed more recently belong to another device
 const AI_CLIENT   = Math.random().toString(36).slice(2, 10);
-const aiToday = () => new Date().toISOString().slice(0, 10);
+// Gemini's free-tier daily quotas reset at midnight PACIFIC. Day-marks must
+// live on that boundary — a UTC date stamps an evening (PDT) 429 with
+// tomorrow's date and benches a fully-reset key ~17 more hours, which is
+// exactly when the 5:30am nightly drain would run.
+const aiToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
 
 // One HTTP round-trip on one specific key. Throws typed errors; never rotates.
 async function aiCallKey(ki, prompt, search, opts) {
@@ -1610,7 +1614,16 @@ async function aiEnqueue(id, doc, skip) {
 let _aiState = null, _aiStateAt = 0;
 async function aiState(force) {
   if (!force && _aiState && Date.now() - _aiStateAt < 60000) return _aiState;
-  try { const d = await db.collection('meta').doc('aiState').get(); _aiState = d.exists ? d.data() : {}; }
+  try {
+    const d = await db.collection('meta').doc('aiState').get();
+    const fresh = d.exists ? d.data() : {};
+    // Keep locally-learned day-marks that failed to persist (aiMark swallows
+    // write errors) — otherwise a Settings visit erases them and this device
+    // burns another 429+403 pair re-probing keys it already knows are out.
+    for (let ki = 0; ki < AI_KEYS.length; ki++) for (const f of ['keyOff' + ki, 'groundOff' + ki])
+      if (_aiState && _aiState[f] === aiToday() && fresh[f] !== aiToday()) fresh[f] = _aiState[f];
+    _aiState = fresh;
+  }
   catch (e) { _aiState = _aiState || {}; }
   _aiStateAt = Date.now();
   return _aiState;
@@ -1687,10 +1700,12 @@ async function aiDeliver(item, res) {
     _aiAnsCache.delete(dest.hk); _aiAllAns = null;
     aiRefreshSheet(dest.hk);
   } else if (dest.t === 'audit') {
-    const items = aiParseAudit(res.text) || Object.create(null);
+    // Parse FIRST: an unparseable reply (prose, refusal) must fail the item —
+    // filling the batch beforehand would silently mark 6 hunts verified-clean.
+    const items = aiParseAudit(res.text);
+    if (!items) throw new Error('audit reply was not parseable JSON');
     // every hunt in the batch counts as checked, even ones the model omitted
     for (const hu of (dest.hunts || [])) if (items[hu] === undefined) items[hu] = [];
-    if (!Object.keys(items).length) throw new Error('audit reply was not parseable JSON');
     await db.collection('ai_audit').doc(item.id).set({
       year: dest.year, items: JSON.stringify(items), model: AI_MODEL, at: Date.now()
     });
@@ -1841,7 +1856,7 @@ async function loadAiInto(h) {
   const audit = await aiAuditFor(S.selectedYear);
   const ov = await aiOverrides();
   if (!sec.isConnected) return;
-  const diffs = ((audit && audit[h.huntNum]) || []).filter(d => !ov[h.huntNum + '|' + d.f]);
+  const diffs = ((audit && audit[h.huntNum]) || []).filter(d => !ov[S.selectedYear + '|' + h.huntNum + '|' + d.f]);
   if (diffs.length)
     html += '<p class="plain" style="background:var(--warnbg);color:var(--warn);padding:11px 13px;border-radius:10px;font-size:.9rem">⚠ The AI audit found different official values for: ' +
       diffs.map(d => esc(AI_AUDIT_FIELDS[d.f] || d.f)).join(', ') + '. Resolve it under Settings → AI assistant.</p>';
@@ -2108,8 +2123,13 @@ async function aiQueueAudit(year) {
 }
 
 // ── owner's resolutions: which value the app displays ────────────────────────
-// meta/aiOverrides = { items: JSON { "huntNum|field": {c:'ours'|'ai', v} } }
+// meta/aiOverrides = { items: JSON { "year|huntNum|field": {c:'ours'|'ai', v} } }
+// Keys are YEAR-scoped: hunt numbers recur every season with different values,
+// so a 2026 resolution must never leak into 2025 (or 2027) data.
 let _aiOv = null, _aiOvAt = 0;
+// Original values captured before the first patch, so switching back to "Keep
+// ours" restores them and cloud saves can be scrubbed clean.
+const _aiPristine = new Map(); // "year|hunt|field" -> original value (undefined = wasn't set)
 async function aiOverrides(force) {
   if (!force && _aiOv && Date.now() - _aiOvAt < 300000) return _aiOv;
   if (!db) return _aiOv || {};
@@ -2120,38 +2140,114 @@ async function aiOverrides(force) {
   _aiOvAt = Date.now();
   return _aiOv;
 }
-async function aiSetOverride(hunt, field, choice, value) {
-  const ov = await aiOverrides(true);
-  ov[hunt + '|' + field] = { c: choice, v: choice === 'ai' ? value : undefined };
-  _aiOv = ov; _aiOvAt = Date.now();
+async function aiSetOverride(year, hunt, field, choice, value) {
+  if (choice === 'ai') {
+    if (value === undefined || String(value).trim() === '') {
+      toast('The AI didn\'t supply a value for that one — keeping ours', true); return false;
+    }
+    if ((field === 'tags' || field === 'apps') && !isFinite(+String(value).replace(/,/g, ''))) {
+      toast('The AI\'s value isn\'t a number — keeping ours', true); return false;
+    }
+  }
+  const key = year + '|' + hunt + '|' + field;
   try {
-    await db.collection('meta').doc('aiOverrides').set({
-      items: JSON.stringify(ov), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    // transaction: two family members resolving different rows at once must
+    // not clobber each other's choice (the map is one JSON field)
+    await db.runTransaction(async t => {
+      const ref = db.collection('meta').doc('aiOverrides');
+      const cur = await t.get(ref);
+      const items = cur.exists ? JSON.parse(cur.data().items || '{}') : {};
+      items[key] = { c: choice, v: choice === 'ai' ? String(value) : undefined };
+      t.set(ref, { items: JSON.stringify(items), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      _aiOv = items;
+    });
+    _aiOvAt = Date.now();
   } catch (e) { toast('Save failed — check connection', true); return false; }
-  applyAiOverrides(S.selectedYear);
+  applyAiOverrides(year);
   saveLocal(); renderAll();
   return true;
 }
-// Patch the DISPLAYED copies of the data with any values the owner chose from
-// the audit. Mutates only in-memory state (cloud data untouched); runs after
-// every load and every choice change.
+function aiReadField(yd, hunt, field) {
+  if (field === 'season' || field === 'bag') {
+    const se = (yd.seasons || {})[hunt];
+    return se ? se[field === 'season' ? 's' : 'b'] : undefined;
+  }
+  const h = yd.hunts.find(x => x.huntNum === hunt);
+  if (!h) return undefined;
+  return field === 'name' ? h.huntName : field === 'tags' ? h.tags : field === 'apps' ? h.residentApps : undefined;
+}
+function aiWriteField(yd, hunt, field, v) {
+  if (field === 'season' || field === 'bag') {
+    if (v === undefined) { // restoring a value that never existed
+      const se = (yd.seasons || {})[hunt];
+      if (se) { se[field === 'season' ? 's' : 'b'] = ''; if (!se.s && !se.b && !se.n) delete yd.seasons[hunt]; }
+      return;
+    }
+    if (!yd.seasons) yd.seasons = {};
+    if (!yd.seasons[hunt]) yd.seasons[hunt] = { s: '', b: '', n: '' };
+    yd.seasons[hunt][field === 'season' ? 's' : 'b'] = v;
+    return;
+  }
+  const h = yd.hunts.find(x => x.huntNum === hunt);
+  if (!h || v === undefined) return;
+  if (field === 'name') h.huntName = String(v);
+  if (field === 'tags') { const n = +String(v).replace(/,/g, ''); if (isFinite(n)) h.tags = n; }
+  if (field === 'apps') { const n = +String(v).replace(/,/g, ''); if (isFinite(n)) h.residentApps = n; }
+}
+// Patch the DISPLAYED copies of the data with chosen audit values, restoring
+// originals for anything switched back to "Keep ours". In-memory only.
 function applyAiOverrides(year) {
   const yd = S.years[year]; if (!yd || !_aiOv) return;
+  // restore de-selected patches first
+  for (const [key, orig] of [..._aiPristine]) {
+    const [y, hunt, field] = key.split('|');
+    if (y !== year) continue;
+    const cur = _aiOv[key];
+    if (cur && cur.c === 'ai' && cur.v !== undefined) continue; // still chosen
+    aiWriteField(yd, hunt, field, orig);
+    _aiPristine.delete(key);
+  }
   for (const [key, o] of Object.entries(_aiOv)) {
-    if (!o || o.c !== 'ai' || o.v === undefined) continue;
-    const [hunt, field] = key.split('|');
-    const h = yd.hunts.find(x => x.huntNum === hunt);
-    if (field === 'season' || field === 'bag') {
-      if (!yd.seasons) yd.seasons = {};
-      if (!yd.seasons[hunt]) yd.seasons[hunt] = { s: '', b: '', n: '' };
-      yd.seasons[hunt][field === 'season' ? 's' : 'b'] = o.v;
-    } else if (h) {
-      if (field === 'name') h.huntName = o.v;
-      if (field === 'tags' && isFinite(+String(o.v).replace(/,/g, ''))) h.tags = +String(o.v).replace(/,/g, '');
-      if (field === 'apps' && isFinite(+String(o.v).replace(/,/g, ''))) h.residentApps = +String(o.v).replace(/,/g, '');
-    }
+    if (!o || o.c !== 'ai' || o.v === undefined || o.v === '') continue;
+    const [y, hunt, field] = key.split('|');
+    if (y !== year) continue;
+    if (!_aiPristine.has(key)) _aiPristine.set(key, aiReadField(yd, hunt, field));
+    aiWriteField(yd, hunt, field, o.v);
   }
   invalidate();
+}
+// Cloud saves must carry SOURCE data, not display patches: clone with the
+// pristine values put back.
+function aiCleanHunts(year, hunts) {
+  const keys = [..._aiPristine.keys()].filter(k => k.startsWith(year + '|'));
+  if (!keys.length) return hunts;
+  const byHunt = new Map();
+  for (const k of keys) { const [, hunt, field] = k.split('|'); if (field !== 'season' && field !== 'bag') {
+    if (!byHunt.has(hunt)) byHunt.set(hunt, {}); byHunt.get(hunt)[field] = _aiPristine.get(k); } }
+  if (!byHunt.size) return hunts;
+  return hunts.map(h => {
+    const p = byHunt.get(h.huntNum); if (!p) return h;
+    const c = Object.assign({}, h);
+    if ('name' in p && p.name !== undefined) c.huntName = p.name;
+    if ('tags' in p && p.tags !== undefined) c.tags = p.tags;
+    if ('apps' in p && p.apps !== undefined) c.residentApps = p.apps;
+    return c;
+  });
+}
+function aiCleanSeasons(year, seasons) {
+  const keys = [..._aiPristine.keys()].filter(k => k.startsWith(year + '|'));
+  if (!keys.length) return seasons;
+  const out = Object.assign({}, seasons);
+  for (const k of keys) {
+    const [, hunt, field] = k.split('|');
+    if (field !== 'season' && field !== 'bag') continue;
+    const orig = _aiPristine.get(k);
+    if (!out[hunt]) continue;
+    const se = out[hunt] = Object.assign({}, out[hunt]);
+    se[field === 'season' ? 's' : 'b'] = orig === undefined ? '' : orig;
+    if (!se.s && !se.b && !se.n) delete out[hunt];
+  }
+  return out;
 }
 
 // ── synopsis-change summaries ────────────────────────────────────────────────
@@ -2182,18 +2278,20 @@ async function loadAiSynopsis(entries, syn) {
 
 // ── audit differences: pick which value the cards display ───────────────────
 let _aiAuditOpen = false;
-function aiAuditDiffsHtml(audit, ov) {
+function aiAuditDiffsHtml(year, audit, ov) {
   const rows = [];
   for (const [hunt, ds] of Object.entries(audit)) for (const d of ds) rows.push({ hunt, d });
   if (!rows.length) return '<p class="help" style="margin:6px 0 0">No differences — everything checked matches the official sources ✓</p>';
   rows.sort((a, b) => {
-    const ra = ov[a.hunt + '|' + a.d.f] ? 1 : 0, rb = ov[b.hunt + '|' + b.d.f] ? 1 : 0;
+    const ra = ov[year + '|' + a.hunt + '|' + a.d.f] ? 1 : 0, rb = ov[year + '|' + b.hunt + '|' + b.d.f] ? 1 : 0;
     return ra - rb || String(a.hunt).localeCompare(String(b.hunt), undefined, { numeric: true });
   });
   return rows.map(({ hunt, d }) => {
-    const key = hunt + '|' + d.f, choice = ov[key];
+    const key = year + '|' + hunt + '|' + d.f, choice = ov[key];
     const oursOn = choice && choice.c === 'ours', aiOn = choice && choice.c === 'ai';
-    const btn = (on, label, attr) => '<button class="bmini" ' + attr + ' style="min-height:34px;padding:3px 10px;' +
+    const aiEmpty = !d.ai || !String(d.ai).trim();
+    const btn = (on, label, attr, disabled) => '<button class="bmini" ' + attr + (disabled ? ' disabled' : '') +
+      ' style="min-height:34px;padding:3px 10px;' + (disabled ? 'opacity:.4;' : '') +
       (on ? 'background:var(--gold);color:#1c2418;border-color:var(--gold);font-weight:700' : '') + '">' + label + '</button>';
     return '<div class="statusline">' +
       '<div style="font-weight:700">' + esc(hunt) + ' · ' + esc(AI_AUDIT_FIELDS[d.f] || d.f) +
@@ -2201,10 +2299,10 @@ function aiAuditDiffsHtml(audit, ov) {
       (d.note ? '<div class="help" style="margin:2px 0 6px;font-size:.74rem">' + esc(d.note) + '</div>' : '') +
       '<div style="display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
       '<span style="flex:1;min-width:120px;font-size:.84rem">Ours: <strong>' + esc(d.ours || '—') + '</strong></span>' +
-      btn(oursOn, oursOn ? '✓ Keeping ours' : 'Keep ours', 'data-aiov="ours" data-aiovk="' + esc(key) + '"') + '</div>' +
+      btn(oursOn, oursOn ? '✓ Keeping ours' : 'Keep ours', 'data-aiov="ours" data-aiovk="' + esc(key) + '"', false) + '</div>' +
       '<div style="display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
       '<span style="flex:1;min-width:120px;font-size:.84rem;color:var(--gold)">AI found: <strong>' + esc(d.ai || '—') + '</strong></span>' +
-      btn(aiOn, aiOn ? '✓ Displaying this' : 'Display this', 'data-aiov="ai" data-aiovk="' + esc(key) + '" data-aiovv="' + esc(d.ai || '') + '"') + '</div>' +
+      btn(aiOn, aiOn ? '✓ Displaying this' : 'Display this', 'data-aiov="ai" data-aiovk="' + esc(key) + '" data-aiovv="' + esc(d.ai || '') + '"', aiEmpty) + '</div>' +
       '</div>';
   }).join('');
 }
@@ -2303,9 +2401,12 @@ async function qaAsk(question) {
 function wireQa() {
   const inp = $('#qaInput'), btn = $('#qaAsk'), out = $('#qaOut');
   if (!inp || !btn) return;
+  let busy = false;
   const go = async () => {
+    if (busy) return; // Enter must respect the in-flight guard too
     const q = inp.value.trim();
     if (!q) { toast('Type a question first', true); return; }
+    busy = true;
     if (!getH().length) { toast('Hunt data hasn\'t loaded yet', true); return; }
     btn.disabled = true; btn.textContent = '…';
     out.innerHTML = '<div style="display:flex;gap:8px;align-items:center;margin-top:10px"><div class="spin"></div><span class="help" style="margin:0">Reading the cards…</span></div>';
@@ -2315,13 +2416,15 @@ function wireQa() {
         aiHtml(res.text) +
         '<div class="help" style="margin-top:8px;font-size:.7rem">Answered from this app\'s data only — tap any hunt card to verify.</div></div>';
     } catch (e) {
-      const msg = e.quota || e.allKeys ? 'The free AI quota is used up for today — try again tomorrow.'
+      const msg = (e.quota || e.allKeys) && !e.daily ? 'The AI is rate-limited right now — try again in a minute.'
+        : e.quota || e.allKeys ? 'The free AI quota is used up for today — try again tomorrow.'
         : e.network ? 'Can\'t reach the AI right now — check your connection.'
         : e.transient ? 'The AI is busy — try again in a minute.'
         : 'Something went wrong: ' + e.message;
       out.innerHTML = '<p class="help" style="margin-top:10px;color:var(--warn)">' + esc(msg) + '</p>';
     }
     btn.disabled = false; btn.textContent = 'Ask';
+    busy = false;
   };
   btn.onclick = go;
   inp.onkeydown = e => { if (e.key === 'Enter') go(); };
@@ -2335,6 +2438,7 @@ function aiQueueRowLabel(it) {
     const hunt = String(d.hk || '').replace('_', ' ');
     return (d.qk || '').startsWith('c_') ? hunt + ' — “' + (d.q || 'custom question') + '”' : hunt + ' — ' + (d.label || d.qk);
   }
+  if (d.t === 'audit') return 'Card audit ' + (d.year || '') + ' (batch of ' + ((d.hunts || []).length || '?') + ' hunts)';
   if (d.t === 'fc') return 'Fact-check ' + (d.year || '') + ' season data (batch)';
   if (d.t === 'syn') return 'Synopsis change summary';
   return it.id;
@@ -2394,14 +2498,16 @@ async function renderAiAdmin() {
     const auditYear = S.pendingYear || S.selectedYear;
     const audit = await aiAuditFor(auditYear);
     const ov = await aiOverrides();
-    if (audit) {
+    if (audit && !Object.keys(audit).length) {
+      html += '<div class="statusline"><strong>Card audit (' + esc(auditYear) + '):</strong> not run yet — tap "Audit card data" below.</div>';
+    } else if (audit) {
       const withDiffs = Object.entries(audit).filter(([, ds]) => ds.length);
-      const unresolved = withDiffs.reduce((n, [hu, ds]) => n + ds.filter(d => !ov[hu + '|' + d.f]).length, 0);
+      const unresolved = withDiffs.reduce((n, [hu, ds]) => n + ds.filter(d => !ov[auditYear + '|' + hu + '|' + d.f]).length, 0);
       html += '<div class="statusline"><strong>Card audit (' + esc(auditYear) + '):</strong> ' + Object.keys(audit).length +
         ' hunts checked · ' + withDiffs.length + ' with differences · ' + unresolved + ' unresolved</div>';
       html += '<button class="linkbtn" id="aiAuditToggle" style="padding-left:0;font-size:.85rem;display:block">' +
         (_aiAuditOpen ? 'Hide differences ▴' : 'Show differences ▾') + '</button>';
-      if (_aiAuditOpen) html += '<div id="aiAuditList">' + aiAuditDiffsHtml(audit, ov) + '</div>';
+      if (_aiAuditOpen) html += '<div id="aiAuditList">' + aiAuditDiffsHtml(auditYear, audit, ov) + '</div>';
     }
     // the queue itself, expandable
     html += '<button class="linkbtn" id="aiQueueToggle" style="padding-left:0;font-size:.85rem;display:block">' +
@@ -2422,9 +2528,9 @@ async function renderAiAdmin() {
     const audT = $('#aiAuditToggle');
     if (audT) audT.onclick = () => { _aiAuditOpen = !_aiAuditOpen; renderAiAdmin(); };
     card.querySelectorAll('[data-aiov]').forEach(b => b.onclick = async () => {
-      const [hunt, field] = b.dataset.aiovk.split('|');
+      const [year, hunt, field] = b.dataset.aiovk.split('|');
       b.disabled = true;
-      const ok = await aiSetOverride(hunt, field, b.dataset.aiov, b.dataset.aiovv);
+      const ok = await aiSetOverride(year, hunt, field, b.dataset.aiov, b.dataset.aiovv);
       if (ok) toast(b.dataset.aiov === 'ai' ? 'Cards now display the AI\'s value for ' + hunt : 'Keeping our value for ' + hunt);
       renderAiAdmin();
     });
@@ -3267,9 +3373,12 @@ async function renderAdmin(){
 
 // ─── SYNC NOTE ────────────────────────────────────────────────────────────────
 function setSyncNote(cls,msg){
-  // status only — the refresh action lives in Settings now, freeing the header
+  // Routine refresh lives in Settings now. The one exception: when the cloud
+  // is unreachable, everyone (not just PIN-holders) needs a way to retry.
   const el=$('#syncNote'); el.className='syncnote '+(cls||'');
-  el.innerHTML=`<span>${esc(msg)}</span>`;
+  el.innerHTML=`<span>${esc(msg)}</span>`+(cls==='err'?` <button id="refreshBtn" class="refreshbtn">↻ Try again</button>`:'');
+  const b=$('#refreshBtn');
+  if(b) b.onclick=()=>refreshData();
 }
 // Manual refresh: re-run the cloud sync right now (catches an already-run
 // workflow). If nothing new, offer the one-tap link to kick ODFW's fetch.
@@ -3964,7 +4073,7 @@ function wire(){
       yd.seasons=Object.assign(yd.seasons||{},parsed);
       saveLocal(); renderAll(); renderAdmin();
       $('#regsSave').textContent='Saving…'; $('#regsSave').disabled=true;
-      const ok=await fbSaveSeasons(year, yd.seasons);
+      const ok=await fbSaveSeasons(year, aiCleanSeasons(year, yd.seasons));
       toast(ok?`Saved ${n} season/bag entries ✓ — spike & whitetail tags will show now`:'Cloud save failed', !ok);
       $('#regsPaste').value=''; pv.innerHTML='';
     };
