@@ -199,7 +199,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.11</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.12</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -236,6 +236,16 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
       <p class="help" style="margin:0 0 8px">Checked = shown in the list. Uncheck a type to hide those hunts:</p>
       <div id="spChecks"></div>
     </div>
+  </div></div>
+
+  <div class="panel"><div class="pbody">
+    <p class="ptitle">Ask about these hunts</p>
+    <p class="help" style="margin-bottom:8px">Answers come only from this app's own data — the same numbers on the cards below.</p>
+    <div style="display:flex;gap:8px">
+      <input type="search" id="qaInput" placeholder="e.g. Which elk hunts can I draw with 6 points?" style="flex:1">
+      <button class="btn" id="qaAsk" style="min-height:54px;flex:0 0 auto;border-color:var(--gold);color:var(--gold)">Ask</button>
+    </div>
+    <div id="qaOut"></div>
   </div></div>
 
   <div class="count" id="rcount"></div>
@@ -313,6 +323,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
   <div class="panel"><div class="pbody">
     <p class="ptitle">Automatic updates</p>
     <div id="autoCard" class="help">Checking…</div>
+    <button class="btn" id="btnRefreshData" style="width:100%;margin-top:10px;border-color:var(--gold);color:var(--gold)">↻ Refresh data now</button>
     <p class="help" style="margin-top:10px">A helper program checks ODFW on the 1st of each month and loads new draw reports and harvest results by itself. If a line above says <strong>NEEDS MANUAL UPLOAD</strong>, follow the steps below for that file.</p>
   </div></div>
 
@@ -321,7 +332,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
     <div id="aiAdminCard" class="help">Checking…</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
       <button class="btn primary" id="btnAiBackfill" style="flex:1 1 100%">↻ Reload queue — ask everything unanswered</button>
-      <button class="btn" id="btnAiFactcheck" style="flex:1;min-width:180px">Fact-check season data</button>
+      <button class="btn" id="btnAiFactcheck" style="flex:1;min-width:180px">Audit card data</button>
       <button class="btn" id="btnAiKick" style="flex:1;min-width:140px">Process queue now</button>
     </div>
     <p class="help" style="margin-top:10px">Answers come from Google Gemini on a free key. <strong>Reload queue</strong> puts every hunt's unanswered questions in line — press it again any time the queue empties or a new season loads. The queue drains a bit at a time while the app is open, and automatically every night. When the day's free limit runs out it pauses and resumes tomorrow where it left off — nothing is lost.</p>
@@ -1368,7 +1379,18 @@ function toggleFav(num,sp) {
 // out and the queue pauses. It's stored base64-encoded only because GitHub's
 // push protection blocks the literal form; anyone with the page can decode it,
 // which is understood and accepted.
-const AI_KEY   = atob('QVEuQWI4Uk42SzkxaWRJUkFfMjZyS2FmWlB4YllNMDdEZ0ZWSE5ucVNJQWlsdlQtTC1fT2c=');
+// Two keys: primary ("ODFW App") and backup ("ODFW Backup"). Each is used
+// until Gemini actually says it's exhausted for the day (429 on a plain call)
+// — no guessing at limits — then the next key takes over. Only when EVERY key
+// is out does the shared pause engage. Per-key exhaustion and per-key
+// grounding-rejection are remembered as day-strings in meta/aiState
+// (keyOff0/keyOff1, groundOff0/groundOff1) and re-probed automatically the
+// next day when the quotas reset.
+const AI_KEYS = [
+  atob('QVEuQWI4Uk42SzkxaWRJUkFfMjZyS2FmWlB4YllNMDdEZ0ZWSE5ucVNJQWlsdlQtTC1fT2c='),
+  atob('QVEuQWI4Uk42TDZJd2dEbkg1Z1ZLVFlvcWpXd2ZITHQtRE1ZR2V5X0RydEYySkdDaTV3MUE=')
+];
+const AI_KEY_NAMES = ['primary', 'backup'];
 const AI_MODEL = 'gemini-flash-latest';
 const AI_URL   = 'https://generativelanguage.googleapis.com/v1beta/models/' + AI_MODEL + ':generateContent';
 const AI_PACE_MS  = 10000;   // the RPM cap is per-KEY, shared by every open device — pace generously; 429 handling is the backstop
@@ -1380,19 +1402,20 @@ const AI_PACE_MS  = 10000;   // the RPM cap is per-KEY, shared by every open dev
 const AI_MAX_TOKENS = 4096;
 const AI_CLAIM_MS = 120000;  // queue items claimed more recently belong to another device
 const AI_CLIENT   = Math.random().toString(36).slice(2, 10);
+const aiToday = () => new Date().toISOString().slice(0, 10);
 
-async function aiGenerate(prompt, opts) {
-  opts = opts || {};
+// One HTTP round-trip on one specific key. Throws typed errors; never rotates.
+async function aiCallKey(ki, prompt, search, opts) {
   const body = {
     contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.2, maxOutputTokens: opts.maxTokens || AI_MAX_TOKENS }
+    generationConfig: { temperature: opts.temperature ?? 0.2, maxOutputTokens: opts.maxTokens || AI_MAX_TOKENS }
   };
-  if (opts.search) body.tools = [{ google_search: {} }];
+  if (search) body.tools = [{ google_search: {} }];
   let res;
   try {
     res = await fetch(AI_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-goog-api-key': AI_KEY },
+      headers: { 'Content-Type': 'application/json', 'X-goog-api-key': AI_KEYS[ki] },
       body: JSON.stringify(body)
     });
   } catch (e) {
@@ -1401,29 +1424,29 @@ async function aiGenerate(prompt, opts) {
     const err = new Error('network: ' + (e.message || e)); err.network = true; throw err;
   }
   if (res.status === 429) {
-    // Free-tier keys have NO Google Search grounding allowance: a grounded call
-    // 429s on the very first request while plain calls return 200 all day. That
-    // used to read as "daily quota gone", pause every device, and leave every
-    // question unanswered. So when tools were in play, retry once WITHOUT them —
-    // if that succeeds it was grounding, not the key, that ran out.
-    if (opts.search) {
-      const out = await aiGenerate(prompt, Object.assign({}, opts, { search: false }));
-      out.groundingUnavailable = true;
-      return out;
-    }
-    let retryMs = 90000;
+    // Google says WHICH limit tripped: QuotaFailure violations name PerDay vs
+    // PerMinute quotas. A minute-limit blip must not bench the key for the day.
+    let retryMs = 90000, daily = false;
     try {
       const j = await res.json();
-      const rd = (j.error?.details || []).find(d => String(d['@type'] || '').includes('RetryInfo'))?.retryDelay;
+      const det = (j.error || {}).details || [];
+      const rd = (det.find(d => String(d['@type'] || '').includes('RetryInfo')) || {}).retryDelay;
       if (rd) retryMs = Math.max(60000, parseFloat(rd) * 1000);
+      const viol = det.filter(d => String(d['@type'] || '').includes('QuotaFailure')).flatMap(d => d.violations || []);
+      daily = viol.some(v => /day|daily/i.test(String(v.quotaId || '') + ' ' + String(v.description || '')));
     } catch (e) {}
-    const err = new Error('AI quota exhausted');
-    err.quota = true; err.retryMs = Math.min(retryMs, 6 * 3600 * 1000);
+    if (!daily && retryMs > 5 * 60 * 1000) daily = true; // long back-off = daily in practice
+    const err = new Error('quota (' + AI_KEY_NAMES[ki] + ' key' + (daily ? ', daily' : ', per-minute') + ')');
+    err.quota = true; err.daily = daily; err.wasSearch = search; err.retryMs = Math.min(retryMs, 6 * 3600 * 1000);
     throw err;
   }
-  // Some free keys reject the search-grounding tool outright — plain ask instead.
-  if (res.status === 400 && opts.search)
-    return aiGenerate(prompt, Object.assign({}, opts, { search: false }));
+  // Some keys reject the search-grounding tool outright — plain ask instead.
+  if (res.status === 400 && search) return aiCallKey(ki, prompt, false, opts);
+  // This key is dead (revoked / project denied): let the rotation skip it.
+  if (res.status === 403 || res.status === 401) {
+    const err = new Error('key rejected (' + AI_KEY_NAMES[ki] + ', HTTP ' + res.status + ')');
+    err.auth = true; err.status = res.status; throw err;
+  }
   // "High demand" and other 5xx are transient: back off, don't burn a retry.
   if (res.status >= 500) { const err = new Error('AI busy (HTTP ' + res.status + ')'); err.transient = true; throw err; }
   if (!res.ok) { const err = new Error('AI HTTP ' + res.status); err.status = res.status; throw err; }
@@ -1434,10 +1457,8 @@ async function aiGenerate(prompt, opts) {
   // starts and stops mid-sentence. Grow the budget once, then give up loudly.
   if (cand && cand.finishReason === 'MAX_TOKENS') {
     const budget = opts.maxTokens || AI_MAX_TOKENS;
-    // Jump to a floor, not just double: queue docs written before this fix
-    // carry small budgets (512 for synopsis), and 512->1024 still truncates.
     if (!opts._grew && budget < 16384)
-      return aiGenerate(prompt, Object.assign({}, opts,
+      return aiCallKey(ki, prompt, search, Object.assign({}, opts,
         { maxTokens: Math.min(16384, Math.max(budget * 2, AI_MAX_TOKENS * 2)), _grew: true }));
     throw new Error('reply was cut off before it finished');
   }
@@ -1447,24 +1468,58 @@ async function aiGenerate(prompt, opts) {
     if (c.web && c.web.uri && /^https?:/.test(c.web.uri))
       src.push({ t: String(c.web.title || 'source').slice(0, 80), u: c.web.uri });
   });
-  return { text, src: src.slice(0, 4), grounded: !!opts.search };
+  return { text, src: src.slice(0, 4), grounded: search, key: ki };
 }
 
-// Whether to ask for search grounding right now. Once a 429 proves the key has
-// no grounding allowance we stop paying that round-trip, but re-probe weekly so
-// the app upgrades itself the day billing is enabled.
-const aiToday = () => new Date().toISOString().slice(0, 10);
-function aiWantSearch(st, want) {
-  if (!want) return false;
-  // The key's quota resets every day, so re-probe grounding once per day: only
-  // skip search if we already proved today that it has no allowance. Costs one
-  // extra request a day and turns search back on by itself the moment it works.
-  return !(st && st.groundingOffDay === aiToday());
-}
-async function aiMarkGroundingOff() {
-  _aiState = Object.assign({}, _aiState, { groundingOffDay: aiToday() });
+// Remember a per-key day marker (keyOffN / groundOffN) for every device.
+async function aiMark(field) {
+  _aiState = Object.assign({}, _aiState, { [field]: aiToday() });
   _aiStateAt = Date.now();
-  try { await db.collection('meta').doc('aiState').set({ groundingOffDay: _aiState.groundingOffDay }, { merge: true }); } catch (e) {}
+  try { await db.collection('meta').doc('aiState').set({ [field]: aiToday() }, { merge: true }); } catch (e) {}
+}
+
+// The rotation: walk the keys, skipping any already proven exhausted or dead
+// today. Grounded 429 → retry the SAME key plain (that's grounding quota, not
+// the key); plain 429 → this key is done for the day, move on. Throws a quota
+// error only when every key is spent — that's what pauses the shared queue.
+async function aiGenerate(prompt, opts) {
+  opts = opts || {};
+  const st = opts.state || _aiState || {};
+  const today = aiToday();
+  let lastQuota = null, lastAuth = null;
+  for (let ki = 0; ki < AI_KEYS.length; ki++) {
+    if (st['keyOff' + ki] === today) continue;
+    const search = !!opts.search && st['groundOff' + ki] !== today;
+    try {
+      return await aiCallKey(ki, prompt, search, opts);
+    } catch (eOuter) {
+      let e = eOuter;
+      if (e.quota && e.wasSearch) {
+        // grounded 429: a plain retry on the same key decides whether it was
+        // grounding quota or the key. Whatever the retry throws (429, 403 —
+        // the live backup key does grounded-429 then plain-403) falls through
+        // to the SAME handling below; nothing escapes the rotation bare.
+        try {
+          const out = await aiCallKey(ki, prompt, false, opts);
+          await aiMark('groundOff' + ki);
+          return out;
+        } catch (e2) { e = e2; }
+      }
+      if (e.quota) {
+        if (e.daily) await aiMark('keyOff' + ki); // day quota: bench until tomorrow
+        lastQuota = e; continue;                   // minute blip: just move on, key recovers
+      }
+      if (e.auth) { await aiMark('keyOff' + ki); lastAuth = e; continue; }
+      throw e; // transient / network / other HTTP — not a key problem
+    }
+  }
+  // Prefer the quota error: its retryMs is honest (a minute-class 429 pauses
+  // everyone ~90s, not an hour), and 'quota' reads truer than 'key' when one
+  // key merely died while the other ran dry.
+  const err = lastQuota || lastAuth || Object.assign(new Error('AI quota exhausted'), { quota: true });
+  err.allKeys = true;
+  err.retryMs = err.retryMs || 3600 * 1000;
+  throw err;
 }
 
 // The hardcoded per-hunt questions. Opening a hunt's detail sheet enqueues any
@@ -1631,13 +1686,21 @@ async function aiDeliver(item, res) {
     });
     _aiAnsCache.delete(dest.hk); _aiAllAns = null;
     aiRefreshSheet(dest.hk);
+  } else if (dest.t === 'audit') {
+    const items = aiParseAudit(res.text) || Object.create(null);
+    // every hunt in the batch counts as checked, even ones the model omitted
+    for (const hu of (dest.hunts || [])) if (items[hu] === undefined) items[hu] = [];
+    if (!Object.keys(items).length) throw new Error('audit reply was not parseable JSON');
+    await db.collection('ai_audit').doc(item.id).set({
+      year: dest.year, items: JSON.stringify(items), model: AI_MODEL, at: Date.now()
+    });
+    _aiAuditCache.delete(dest.year);
   } else if (dest.t === 'fc') {
     const items = aiParseVerdicts(res.text);
     if (!items) throw new Error('fact-check reply was not parseable JSON');
     await db.collection('ai_factcheck').doc(item.id).set({
       year: dest.year, items: JSON.stringify(items), model: AI_MODEL, at: Date.now()
     });
-    _aiFcCache.delete(dest.year);
   } else if (dest.t === 'syn') {
     await db.collection('ai_syn').doc(item.id).set({
       file: dest.file, cid: dest.id, a: res.text, model: AI_MODEL, at: Date.now()
@@ -1666,14 +1729,12 @@ async function aiProcessLoop() {
       if (!item) break;
       try {
         const res = await aiGenerate(item.prompt, {
-          search: aiWantSearch(st, !!item.search), maxTokens: item.maxTokens || AI_MAX_TOKENS });
-        if (res.groundingUnavailable) await aiMarkGroundingOff();
+          search: !!item.search, maxTokens: item.maxTokens || AI_MAX_TOKENS, state: st });
         await aiDeliver(item, res);
         await item.ref.delete();
         aiBumpUsed();
       } catch (e) {
-        if (e.quota) { await aiPause(e.retryMs, 'quota'); break; }
-        if (e.status === 403 || e.status === 401) { await aiPause(6 * 3600 * 1000, 'key'); break; }
+        if (e.allKeys) { await aiPause(e.retryMs, e.auth ? 'key' : 'quota'); break; }
         if (e.transient) {
           // Model overloaded — release the claim untouched and try again on the
           // next pass. A busy minute must not push items toward 'error'.
@@ -1775,12 +1836,15 @@ async function loadAiInto(h) {
   for (const qk of [...pend.keys()]) if (byQk[qk]) pend.delete(qk); // answered now
 
   let html = '<h3>AI scouting report</h3>';
-  // fact-check flag for this hunt's season data, if the auditor found an issue
-  const fc = await aiFactcheckFor(S.selectedYear);
+  // audit flag: this hunt's card data differs from official sources and the
+  // owner hasn't resolved it yet in Settings
+  const audit = await aiAuditFor(S.selectedYear);
+  const ov = await aiOverrides();
   if (!sec.isConnected) return;
-  const flag = fc && fc[h.huntNum];
-  if (flag && flag.v === 'suspect')
-    html += '<p class="plain" style="background:var(--warnbg);color:var(--warn);padding:11px 13px;border-radius:10px;font-size:.9rem">⚠ The AI cross-check couldn\'t confirm this hunt\'s season/bag data' + (flag.note ? ': ' + esc(flag.note) : '') + '. Double-check the official regulations.</p>';
+  const diffs = ((audit && audit[h.huntNum]) || []).filter(d => !ov[h.huntNum + '|' + d.f]);
+  if (diffs.length)
+    html += '<p class="plain" style="background:var(--warnbg);color:var(--warn);padding:11px 13px;border-radius:10px;font-size:.9rem">⚠ The AI audit found different official values for: ' +
+      diffs.map(d => esc(AI_AUDIT_FIELDS[d.f] || d.f)).join(', ') + '. Resolve it under Settings → AI assistant.</p>';
 
   const missing = [];
   for (const qdef of AI_QUESTIONS) {
@@ -1960,47 +2024,134 @@ async function aiBackfill(onProgress) {
 }
 
 // ── fact-check: parsed season data vs official sources ───────────────────────
-const _aiFcCache = new Map(); // year -> {at, map:{hunt: {v, note}}}
-async function aiFactcheckFor(year) {
-  if (!year || !db) return null;
-  const hit = _aiFcCache.get(year);
-  if (hit && Date.now() - hit.at < 300000) return hit.map; // 5-min TTL so other devices' verdicts show up
+// ── card audit: EVERY fact on the hunt cards vs official sources ─────────────
+// The AI re-checks each card's externally-verifiable facts (name, tags issued,
+// 1st-choice applicants, season dates, bag limit — the same columns ODFW
+// prints in the synopsis tables). Differences land in Settings where the owner
+// picks which value the app displays; a chosen AI value is applied to the
+// displayed data via applyAiOverrides(), never written into the source data.
+const AI_AUDIT_FIELDS = { name: 'Hunt name', tags: 'Tags issued', apps: '1st-choice applicants',
+                          season: 'Season dates', bag: 'Bag limit' };
+const _aiAuditCache = new Map(); // year -> {at, map:{hunt:[{f,ours,ai,note}]}}
+function aiParseAudit(text) {
+  const m = String(text).match(/\[[\s\S]*\]/);
+  if (!m) return null;
   try {
-    const snap = await db.collection('ai_factcheck').where('year', '==', year).get();
-    const map = Object.create(null); // old stored data could hold hostile keys
+    const arr = JSON.parse(m[0]);
+    if (!Array.isArray(arr)) return null;
+    const out = Object.create(null);
+    for (const e of arr) {
+      if (!e || !e.hunt) continue;
+      const id = String(e.hunt);
+      if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,19}$/.test(id)) continue;
+      const diffs = [];
+      for (const d of (Array.isArray(e.diffs) ? e.diffs : [])) {
+        if (!d || !AI_AUDIT_FIELDS[d.f]) continue;
+        diffs.push({ f: d.f, ours: String(d.ours ?? '').slice(0, 200),
+                     ai: String(d.official ?? d.ai ?? '').slice(0, 200),
+                     note: String(d.note || '').slice(0, 160) });
+      }
+      out[id] = diffs;
+    }
+    return Object.keys(out).length ? out : null;
+  } catch (e) { return null; }
+}
+async function aiAuditFor(year, force) {
+  if (!year || !db) return null;
+  const hit = _aiAuditCache.get(year);
+  if (!force && hit && Date.now() - hit.at < 300000) return hit.map;
+  try {
+    const snap = await db.collection('ai_audit').where('year', '==', year).get();
+    const map = Object.create(null);
     snap.docs.forEach(d => { try {
       const parsed = JSON.parse(d.data().items || '{}');
-      for (const k of Object.keys(parsed)) map[k] = parsed[k];
+      for (const k of Object.keys(parsed)) if (Array.isArray(parsed[k])) map[k] = parsed[k];
     } catch (e) {} });
-    _aiFcCache.set(year, { at: Date.now(), map });
+    _aiAuditCache.set(year, { at: Date.now(), map });
     return map;
   } catch (e) { return hit ? hit.map : null; }
 }
-async function aiQueueFactcheck(year) {
+function aiAuditRow(h, se) {
+  return { hunt: h.huntNum, name: h.huntName, species: h.species,
+    tags: h.tags, apps: h.residentApps,
+    season: se ? se.s : '(none on file)', bag: se && se.b ? se.b : '(none on file)' };
+}
+async function aiQueueAudit(year) {
   const yd = S.years[year];
   if (!yd) { toast('No data for ' + year, true); return; }
-  const covered = await aiFactcheckFor(year) || {};
-  const rows = yd.hunts
-    .filter(h => (yd.seasons || {})[h.huntNum] && !covered[h.huntNum])
-    .map(h => { const se = yd.seasons[h.huntNum]; return { hunt: h.huntNum, species: h.species, name: h.huntName, season: se.s, bag: se.b || '' }; });
-  if (!rows.length) { toast('Every hunt with season data is already checked ✓'); return; }
-  const BATCH = 8, MAXB = 40;
+  const covered = await aiAuditFor(year, true) || {};
+  const rows = yd.hunts.filter(h => covered[h.huntNum] === undefined)
+    .map(h => aiAuditRow(h, (yd.seasons || {})[h.huntNum]));
+  if (!rows.length) { toast('Every hunt is already audited ✓'); return; }
+  const BATCH = 6, MAXB = 50;
   let queued = 0;
   for (let i = 0; i < rows.length && queued < MAXB; i += BATCH) {
     const batch = rows.slice(i, i + BATCH);
-    const ok = await aiEnqueue(aiQid('fc_' + year + '_' + aiHash(batch.map(b => b.hunt).join(','))), {
-      kind: 'factcheck', search: true, maxTokens: 8192,
-      prompt: 'Audit these parsed Oregon ' + year + ' controlled hunt records for accuracy. Our data:\n' +
+    const qid = aiQid('audit_' + year + '_' + aiHash(batch.map(b => b.hunt).join(',')));
+    const ok = await aiEnqueue(qid, {
+      kind: 'audit', search: true, maxTokens: 8192,
+      prompt: 'You are auditing a hunting app\'s data for Oregon\'s ' + year + ' controlled hunts against official sources ' +
+        '(the ' + year + ' Oregon Big Game Regulations / synopsis hunt tables on eregulations.com and myodfw.com). Our data:\n' +
         JSON.stringify(batch) + '\n' +
-        'Search official Oregon sources (myodfw.com, eregulations.com/oregon/hunting). For each hunt decide: ' +
-        '"ok" if our season dates and bag limit match official information, "suspect" if they look wrong or have changed, "unknown" if you cannot verify. ' +
-        'Reply with ONLY a JSON array, no prose: [{"hunt":"231","v":"ok|suspect|unknown","note":"<=15 words, only when suspect"}]',
-      dest: JSON.stringify({ t: 'fc', year })
-    }, { coll: 'ai_factcheck', id: aiQid('fc_' + year + '_' + aiHash(batch.map(b => b.hunt).join(','))) });
+        'For EVERY hunt above, compare each field with the official published value: name (hunt name), tags (controlled tags issued), ' +
+        'apps (first-choice applicants in the prior draw), season (open season dates), bag (bag limit). ' +
+        'Reply with ONLY a JSON array, one entry per hunt, no prose:\n' +
+        '[{"hunt":"231","diffs":[{"f":"season","ours":"Nov. 7 - Nov. 13","official":"Nov. 6 - Nov. 12","note":"<=12 words"}]}]\n' +
+        'diffs must be [] when everything matches. Only report a diff when you actually found the official value and it clearly differs — ' +
+        'if you cannot verify a field, do NOT report it as a diff. f must be one of name|tags|apps|season|bag.',
+      dest: JSON.stringify({ t: 'audit', year, hunts: batch.map(b => b.hunt) })
+    }, { coll: 'ai_audit', id: qid });
     if (ok) queued++;
   }
-  toast('Queued ' + queued + ' fact-check batch' + (queued === 1 ? '' : 'es') + ' (~' + Math.min(rows.length, queued * BATCH) + ' hunts). ' + (rows.length > MAXB * BATCH ? 'Tap again later for the rest.' : ''));
+  toast('Queued ' + queued + ' audit batch' + (queued === 1 ? '' : 'es') + ' (~' + Math.min(rows.length, queued * BATCH) + ' hunts). ' + (rows.length > MAXB * BATCH ? 'Tap again later for the rest.' : ''));
   aiKick();
+}
+
+// ── owner's resolutions: which value the app displays ────────────────────────
+// meta/aiOverrides = { items: JSON { "huntNum|field": {c:'ours'|'ai', v} } }
+let _aiOv = null, _aiOvAt = 0;
+async function aiOverrides(force) {
+  if (!force && _aiOv && Date.now() - _aiOvAt < 300000) return _aiOv;
+  if (!db) return _aiOv || {};
+  try {
+    const d = await db.collection('meta').doc('aiOverrides').get();
+    _aiOv = d.exists ? JSON.parse(d.data().items || '{}') : {};
+  } catch (e) { _aiOv = _aiOv || {}; }
+  _aiOvAt = Date.now();
+  return _aiOv;
+}
+async function aiSetOverride(hunt, field, choice, value) {
+  const ov = await aiOverrides(true);
+  ov[hunt + '|' + field] = { c: choice, v: choice === 'ai' ? value : undefined };
+  _aiOv = ov; _aiOvAt = Date.now();
+  try {
+    await db.collection('meta').doc('aiOverrides').set({
+      items: JSON.stringify(ov), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  } catch (e) { toast('Save failed — check connection', true); return false; }
+  applyAiOverrides(S.selectedYear);
+  saveLocal(); renderAll();
+  return true;
+}
+// Patch the DISPLAYED copies of the data with any values the owner chose from
+// the audit. Mutates only in-memory state (cloud data untouched); runs after
+// every load and every choice change.
+function applyAiOverrides(year) {
+  const yd = S.years[year]; if (!yd || !_aiOv) return;
+  for (const [key, o] of Object.entries(_aiOv)) {
+    if (!o || o.c !== 'ai' || o.v === undefined) continue;
+    const [hunt, field] = key.split('|');
+    const h = yd.hunts.find(x => x.huntNum === hunt);
+    if (field === 'season' || field === 'bag') {
+      if (!yd.seasons) yd.seasons = {};
+      if (!yd.seasons[hunt]) yd.seasons[hunt] = { s: '', b: '', n: '' };
+      yd.seasons[hunt][field === 'season' ? 's' : 'b'] = o.v;
+    } else if (h) {
+      if (field === 'name') h.huntName = o.v;
+      if (field === 'tags' && isFinite(+String(o.v).replace(/,/g, ''))) h.tags = +String(o.v).replace(/,/g, '');
+      if (field === 'apps' && isFinite(+String(o.v).replace(/,/g, ''))) h.residentApps = +String(o.v).replace(/,/g, '');
+    }
+  }
+  invalidate();
 }
 
 // ── synopsis-change summaries ────────────────────────────────────────────────
@@ -2027,6 +2178,35 @@ async function loadAiSynopsis(entries, syn) {
     queued++;
   }
   if (queued) aiKick();
+}
+
+// ── audit differences: pick which value the cards display ───────────────────
+let _aiAuditOpen = false;
+function aiAuditDiffsHtml(audit, ov) {
+  const rows = [];
+  for (const [hunt, ds] of Object.entries(audit)) for (const d of ds) rows.push({ hunt, d });
+  if (!rows.length) return '<p class="help" style="margin:6px 0 0">No differences — everything checked matches the official sources ✓</p>';
+  rows.sort((a, b) => {
+    const ra = ov[a.hunt + '|' + a.d.f] ? 1 : 0, rb = ov[b.hunt + '|' + b.d.f] ? 1 : 0;
+    return ra - rb || String(a.hunt).localeCompare(String(b.hunt), undefined, { numeric: true });
+  });
+  return rows.map(({ hunt, d }) => {
+    const key = hunt + '|' + d.f, choice = ov[key];
+    const oursOn = choice && choice.c === 'ours', aiOn = choice && choice.c === 'ai';
+    const btn = (on, label, attr) => '<button class="bmini" ' + attr + ' style="min-height:34px;padding:3px 10px;' +
+      (on ? 'background:var(--gold);color:#1c2418;border-color:var(--gold);font-weight:700' : '') + '">' + label + '</button>';
+    return '<div class="statusline">' +
+      '<div style="font-weight:700">' + esc(hunt) + ' · ' + esc(AI_AUDIT_FIELDS[d.f] || d.f) +
+      (choice ? ' <span class="chip" style="font-size:.6rem">resolved</span>' : ' <span class="chip sp" style="font-size:.6rem">choose</span>') + '</div>' +
+      (d.note ? '<div class="help" style="margin:2px 0 6px;font-size:.74rem">' + esc(d.note) + '</div>' : '') +
+      '<div style="display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
+      '<span style="flex:1;min-width:120px;font-size:.84rem">Ours: <strong>' + esc(d.ours || '—') + '</strong></span>' +
+      btn(oursOn, oursOn ? '✓ Keeping ours' : 'Keep ours', 'data-aiov="ours" data-aiovk="' + esc(key) + '"') + '</div>' +
+      '<div style="display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
+      '<span style="flex:1;min-width:120px;font-size:.84rem;color:var(--gold)">AI found: <strong>' + esc(d.ai || '—') + '</strong></span>' +
+      btn(aiOn, aiOn ? '✓ Displaying this' : 'Display this', 'data-aiov="ai" data-aiovk="' + esc(key) + '" data-aiovv="' + esc(d.ai || '') + '"') + '</div>' +
+      '</div>';
+  }).join('');
 }
 
 // ── answered questions: collapsible list of everything the AI has written ────
@@ -2060,6 +2240,91 @@ function aiAnsweredHtml(answers) {
     }
   }
   return html;
+}
+
+// ── "Ask about these hunts": Q&A answered ONLY from this app's data ──────────
+// The context is built from the same in-memory state the cards render from —
+// so any audit resolutions the owner chose are already baked in. No search
+// tools, and the prompt forbids outside knowledge, so the model can only
+// restate what the app itself shows.
+function qaHuntFacts(h) {
+  const se = seasonOf(h), b = blendHarvest(h, 3), co = choiceOdds(h);
+  return {
+    hunt: h.huntNum, name: h.huntName, species: h.species, weapon: wLabel(h.weapon),
+    tagsIssued: h.tags, firstChoiceApplicants: h.residentApps,
+    overallDrawOddsPct: h.resOdds == null ? null : Math.round(h.resOdds),
+    pointsForSureTag: h.pts100 === null ? 'luck draw — points don\'t guarantee it' : h.pts100,
+    huntersWhoScoredPct: b ? b.succ : null,
+    typicalAnimalTaken: b && b.top ? b.top.label : null,
+    seasonDates: se ? se.s : null, bagLimit: se && se.b ? se.b : null,
+    specialNotes: se && se.n ? se.n : null,
+    secondChoiceOddsPct: co && co.left1 > 0 ? Math.round(co.o2) : (co ? 0 : null)
+  };
+}
+function qaContext(question) {
+  const q = question.toLowerCase();
+  const all = getH();
+  // hunts named by number...
+  const ids = new Set((question.match(/\b\d{3}[A-Za-z]?\d{0,2}\b|\b[A-Za-z]{2}\d{3}\b/g) || []).map(x => x.toUpperCase()));
+  // ...or by unit-name words (ignore short/common words)
+  const words = q.split(/[^a-z]+/).filter(w => w.length > 3);
+  const scored = all.map(h => {
+    let sc = 0;
+    if (ids.has(String(h.huntNum).toUpperCase())) sc += 100;
+    const name = h.huntName.toLowerCase();
+    for (const w of words) if (name.includes(w)) sc += 10;
+    if (q.includes('elk') && h.species === 'elk') sc += 1;
+    if (q.includes('deer') && h.species === 'deer') sc += 1;
+    return { h, sc };
+  }).filter(x => x.sc > 0).sort((a, b) => b.sc - a.sc);
+  // matched hunts, or the current best suggestions if nothing matched
+  const picked = (scored.length ? scored.slice(0, 12).map(x => x.h)
+                                : sortHunts(applyFilters(all)).slice(0, 15));
+  return {
+    app: 'Oregon Hunt Planner — family app for Oregon controlled deer & elk hunt draw odds and harvest stats',
+    dataYear: S.selectedYear,
+    yearsOnFile: yList(),
+    familyPreferencePoints: { deer: P.deerPts, elk: P.elkPts },
+    totalHuntsInApp: all.length,
+    hunts: picked.map(qaHuntFacts)
+  };
+}
+async function qaAsk(question) {
+  await aiState(); // key/grounding day-marks feed the rotation
+  const prompt =
+    'You are the built-in help assistant of the Oregon Hunt Planner web app. Answer the family member\'s question ' +
+    'using ONLY the app data below — these are the exact numbers shown on the app\'s hunt cards. ' +
+    'Never use outside knowledge, never guess, and never contradict the data. If the data below cannot answer the ' +
+    'question, say the app doesn\'t have that information and suggest opening a hunt\'s card or asking the per-hunt AI. ' +
+    'Be concise and plain; hyphen bullets for lists; mention hunt numbers so they can find the cards.\n\n' +
+    'APP DATA:\n' + JSON.stringify(qaContext(question)) + '\n\nQUESTION: ' + question;
+  return aiGenerate(prompt, { search: false, maxTokens: AI_MAX_TOKENS, temperature: 0.1, state: _aiState });
+}
+function wireQa() {
+  const inp = $('#qaInput'), btn = $('#qaAsk'), out = $('#qaOut');
+  if (!inp || !btn) return;
+  const go = async () => {
+    const q = inp.value.trim();
+    if (!q) { toast('Type a question first', true); return; }
+    if (!getH().length) { toast('Hunt data hasn\'t loaded yet', true); return; }
+    btn.disabled = true; btn.textContent = '…';
+    out.innerHTML = '<div style="display:flex;gap:8px;align-items:center;margin-top:10px"><div class="spin"></div><span class="help" style="margin:0">Reading the cards…</span></div>';
+    try {
+      const res = await qaAsk(q);
+      out.innerHTML = '<div style="margin-top:10px;padding:12px 14px;background:var(--card2);border:1px solid var(--gold);border-radius:12px;font-size:.92rem;line-height:1.55">' +
+        aiHtml(res.text) +
+        '<div class="help" style="margin-top:8px;font-size:.7rem">Answered from this app\'s data only — tap any hunt card to verify.</div></div>';
+    } catch (e) {
+      const msg = e.quota || e.allKeys ? 'The free AI quota is used up for today — try again tomorrow.'
+        : e.network ? 'Can\'t reach the AI right now — check your connection.'
+        : e.transient ? 'The AI is busy — try again in a minute.'
+        : 'Something went wrong: ' + e.message;
+      out.innerHTML = '<p class="help" style="margin-top:10px;color:var(--warn)">' + esc(msg) + '</p>';
+    }
+    btn.disabled = false; btn.textContent = 'Ask';
+  };
+  btn.onclick = go;
+  inp.onkeydown = e => { if (e.key === 'Enter') go(); };
 }
 
 // ── admin status card ────────────────────────────────────────────────────────
@@ -2118,17 +2383,25 @@ async function renderAiAdmin() {
     let html = '<div class="statusline"><strong>Queue:</strong> ' + pending + ' waiting · ' + errors + ' failed</div>';
     const today = new Date().toISOString().slice(0, 10);
     html += '<div class="statusline"><strong>Today:</strong> ' + (st.day === today ? st.used || 0 : 0) + ' AI answers generated</div>';
-    if (st.groundingOffDay === aiToday())
-      html += '<div class="statusline" style="color:var(--warn)">Web search is off for today — this API key\'s grounded requests are being rejected, so answers come from the AI\'s own knowledge. It re-checks once a day and turns search back on by itself the moment grounding works.</div>';
+    for (let ki = 0; ki < AI_KEYS.length; ki++) {
+      const off = st['keyOff' + ki] === aiToday(), goff = st['groundOff' + ki] === aiToday();
+      if (off) html += '<div class="statusline" style="color:var(--warn)">The ' + AI_KEY_NAMES[ki] + ' key is used up (or rejected) for today — ' + (ki + 1 < AI_KEYS.length ? 'running on the next key.' : 'it re-tries tomorrow.') + '</div>';
+      else if (goff) html += '<div class="statusline" style="color:var(--warn)">The ' + AI_KEY_NAMES[ki] + ' key has no web-search quota today — its answers come from the AI\'s own knowledge. Re-checked daily.</div>';
+    }
     if (paused) html += '<div class="statusline" style="color:var(--warn)">Paused until ' + new Date(st.pausedUntil).toLocaleTimeString() + ' (' + (st.pauseWhy === 'key' ? 'API key problem' : 'free daily limit reached') + ') — resumes by itself.</div>';
     else if (pending) html += '<div class="statusline" style="color:var(--good)">Working through the queue while the app is open.</div>';
     else html += '<div class="statusline" style="color:var(--good)">All caught up ✓</div>';
-    const fc = await aiFactcheckFor(S.pendingYear || S.selectedYear);
-    if (fc) {
-      const sus = Object.entries(fc).filter(([, x]) => x.v === 'suspect');
-      const n = Object.keys(fc).length;
-      if (n) html += '<div class="statusline"><strong>Fact-check:</strong> ' + n + ' hunts checked, ' + sus.length + ' flagged</div>' +
-        sus.slice(0, 12).map(([id, x]) => '<div class="statusline" style="color:var(--warn)">⚠ ' + esc(id) + ' — ' + esc(x.note || 'could not confirm') + '</div>').join('');
+    const auditYear = S.pendingYear || S.selectedYear;
+    const audit = await aiAuditFor(auditYear);
+    const ov = await aiOverrides();
+    if (audit) {
+      const withDiffs = Object.entries(audit).filter(([, ds]) => ds.length);
+      const unresolved = withDiffs.reduce((n, [hu, ds]) => n + ds.filter(d => !ov[hu + '|' + d.f]).length, 0);
+      html += '<div class="statusline"><strong>Card audit (' + esc(auditYear) + '):</strong> ' + Object.keys(audit).length +
+        ' hunts checked · ' + withDiffs.length + ' with differences · ' + unresolved + ' unresolved</div>';
+      html += '<button class="linkbtn" id="aiAuditToggle" style="padding-left:0;font-size:.85rem;display:block">' +
+        (_aiAuditOpen ? 'Hide differences ▴' : 'Show differences ▾') + '</button>';
+      if (_aiAuditOpen) html += '<div id="aiAuditList">' + aiAuditDiffsHtml(audit, ov) + '</div>';
     }
     // the queue itself, expandable
     html += '<button class="linkbtn" id="aiQueueToggle" style="padding-left:0;font-size:.85rem;display:block">' +
@@ -2146,6 +2419,15 @@ async function renderAiAdmin() {
     card.innerHTML = html;
     const at = $('#aiAnsToggle');
     if (at) at.onclick = () => { _aiAnsOpen = !_aiAnsOpen; renderAiAdmin(); };
+    const audT = $('#aiAuditToggle');
+    if (audT) audT.onclick = () => { _aiAuditOpen = !_aiAuditOpen; renderAiAdmin(); };
+    card.querySelectorAll('[data-aiov]').forEach(b => b.onclick = async () => {
+      const [hunt, field] = b.dataset.aiovk.split('|');
+      b.disabled = true;
+      const ok = await aiSetOverride(hunt, field, b.dataset.aiov, b.dataset.aiovv);
+      if (ok) toast(b.dataset.aiov === 'ai' ? 'Cards now display the AI\'s value for ' + hunt : 'Keeping our value for ' + hunt);
+      renderAiAdmin();
+    });
     card.querySelectorAll('[data-aiansshow]').forEach(b => b.onclick = () => {
       const id = b.dataset.aiansshow;
       _aiAnsShown.has(id) ? _aiAnsShown.delete(id) : _aiAnsShown.add(id);
@@ -2984,13 +3266,10 @@ async function renderAdmin(){
 }
 
 // ─── SYNC NOTE ────────────────────────────────────────────────────────────────
-function setSyncNote(cls,msg,withRefresh){
+function setSyncNote(cls,msg){
+  // status only — the refresh action lives in Settings now, freeing the header
   const el=$('#syncNote'); el.className='syncnote '+(cls||'');
-  el.innerHTML=`<span>${esc(msg)}</span>`+(withRefresh?` <button id="refreshBtn" class="refreshbtn">↻ Refresh data</button>`:'');
-  if(withRefresh){
-    const b=$('#refreshBtn');
-    if(b) b.onclick=()=>refreshData();
-  }
+  el.innerHTML=`<span>${esc(msg)}</span>`;
 }
 // Manual refresh: re-run the cloud sync right now (catches an already-run
 // workflow). If nothing new, offer the one-tap link to kick ODFW's fetch.
@@ -3602,15 +3881,19 @@ function wire(){
   renderSpChecks();
   spSum();
   // Rebuilding the whole card list per keystroke made typing stutter on phones.
+  wireQa();
   $('#fSearch').oninput=debounce(()=>renderCards(),120);
   $('#fYear').onchange=e=>{S.selectedYear=e.target.value;saveLocal();renderCards();renderMyList();};
+  const rfd=$('#btnRefreshData');
+  if(rfd) rfd.onclick=async ()=>{ rfd.disabled=true; rfd.textContent='Refreshing…';
+    await refreshData(); rfd.disabled=false; rfd.textContent='↻ Refresh data now'; };
   // AI assistant
   const fcBtn=$('#btnAiFactcheck');
   if(fcBtn) fcBtn.onclick=()=>{
     const year=S.pendingYear||S.selectedYear;
     if(!year){ toast('Pick a year first (Step 1)', true); return; }
-    confirm2('Queue an AI fact-check of the '+year+' season dates and bag limits against official sources? It runs slowly in the background.',()=>{
-      aiQueueFactcheck(year).then(()=>renderAiAdmin());
+    confirm2('Queue an AI audit of every '+year+' hunt card (name, tags, applicants, season, bag limit) against official sources? It runs slowly in the background; differences appear here for you to resolve.',()=>{
+      aiQueueAudit(year).then(()=>renderAiAdmin());
     });
   };
   const bfBtn=$('#btnAiBackfill');
@@ -3721,6 +4004,8 @@ async function init(firstRun){
     }
     if(!S.selectedYear||!S.years[S.selectedYear]) S.selectedYear=yList()[0];
     if(!S.pendingYear) S.pendingYear=S.selectedYear;
+    await aiOverrides(true).catch(()=>{});
+    applyAiOverrides(S.selectedYear);
     saveLocal(); renderAll();
     banner('ok','Cloud connected ✓',false);
     const changed=diffSnapshot(before);
