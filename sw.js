@@ -16,7 +16,7 @@
 //                            stale cache; the app has its own offline path.
 //
 // Bump CACHE when the shell changes — old caches are dropped on activate.
-const CACHE = 'ohp-v7.13.0';
+const CACHE = 'ohp-v7.14.0';
 
 const SHELL = [
   './',
