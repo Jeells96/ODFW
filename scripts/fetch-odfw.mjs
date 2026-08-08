@@ -40,10 +40,14 @@ function weapon(num, name) {
 function derive(h) {
   h.pointBreakdown.sort((a, b) => b.points - a.points);
   let pts100 = null, minPts = null;
+  // Mirrors index.html: a sure-tag level only counts if every tier above it
+  // also drew out, so stop at the first tier that had applicants and didn't.
   for (const p of h.pointBreakdown) {
-    if (p.resDrawn > 0) minPts = p.points;
-    if (p.resApps > 0 && p.resDrawn >= p.resApps) pts100 = p.points;
+    if (p.resApps <= 0) continue;
+    if (p.resDrawn >= p.resApps) pts100 = p.points;
+    else break;
   }
+  for (const p of h.pointBreakdown) if (p.resDrawn > 0) minPts = p.points;
   h.pts100 = pts100; h.minPointsToDraw = minPts;
   h.resOdds = h.residentApps > 0 ? (h.residentDrawn / h.residentApps) * 100 : null;
 }
@@ -93,7 +97,10 @@ function parseHunts(buf, sp) {
 
 // ═══ Harvest PDF parser (line-based, aggregating, validated) ══════════════════
 const ID_RE = /^(\d{3}(?:[A-Z]\d{0,2})?|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/;
-const NUM_RE = /^\d{1,6}$/;
+// ODFW prints thousands separators; a bare \d{1,6} silently dropped every row
+// containing one (mirrors the same fix in index.html).
+const NUM_RE = /^(?:\d{1,3}(?:,\d{3})+|\d{1,7})$/;
+const numOf = t => Number(String(t).replace(/,/g, ''));
 
 async function pdfToLines(buf) {
   const doc = await getDocument({ data: new Uint8Array(buf), useSystemFonts: true }).promise;
@@ -137,7 +144,7 @@ function parseHarvestLines(lines, defaultK) {
     if (!id) continue;
     const nums = [];
     for (let i = idIdx + 1; i < toks.length; i++)
-      if (NUM_RE.test(toks[i])) nums.push(Number(toks[i]));
+      if (NUM_RE.test(toks[i])) nums.push(numOf(toks[i]));
     if (nums.length < k) continue;
     const n = nums.slice(-k);
     let hu, da, al, tb, th, sp, t2, t3, t4, t5, t6;
