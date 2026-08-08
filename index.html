@@ -63,11 +63,17 @@ h1{font-size:1.35rem;margin:0;font-weight:700}
 .btn:active{opacity:.75}
 
 /* points steppers */
+/* Two steppers side by side need 2x182px plus gutters — more than a 360px
+   phone has. The buttons had no flex-shrink:0 while .step-val was pinned by
+   min-width, so the whole deficit came out of the two tap targets and they
+   collapsed to ~17-35px. Stack the steppers instead of shrinking them: below
+   420px one per row, where each has the full width and the 56px targets hold. */
 .pts-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:420px){ .pts-grid{grid-template-columns:1fr} }
 .stepper{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
 .stepper .lbl{font-size:.85rem;color:var(--dim);margin-bottom:6px}
 .step-row{display:flex;align-items:center;justify-content:center;gap:6px}
-.step-btn{width:56px;height:56px;font-size:1.7rem;font-weight:700;background:var(--card);border:1.5px solid var(--line);border-radius:12px;line-height:1}
+.step-btn{flex:0 0 auto;width:56px;height:56px;min-width:56px;font-size:1.7rem;font-weight:700;background:var(--card);border:1.5px solid var(--line);border-radius:12px;line-height:1}
 .step-val{min-width:58px;font-size:1.9rem;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums}
 .pts-summary{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .pts-summary .txt{font-size:1rem}
@@ -116,6 +122,7 @@ select,input[type=search],input[type=number]{width:100%;min-height:54px;font-siz
 .cseason{font-size:.88rem;color:var(--text);margin-top:10px;padding:7px 10px;background:var(--card2);border-radius:8px}
 .cseason strong{color:var(--gold)}
 .ctrend{font-size:.83rem;color:var(--dim);margin-top:9px}
+.cwhy{font-size:.8rem;color:var(--dim);margin-top:8px;font-style:italic;opacity:.9}
 .ctrend.harder{color:var(--warn)} .ctrend.easier{color:var(--good)}
 .empty{padding:36px 16px;text-align:center;color:var(--dim);font-size:1rem;line-height:1.6}
 
@@ -143,6 +150,10 @@ select,input[type=search],input[type=number]{width:100%;min-height:54px;font-siz
 .callout.v-luck{background:var(--luckbg);color:var(--luck)} .callout.v-no{background:var(--badbg);color:var(--bad)}
 .sec{margin-bottom:20px}
 .sec h3{font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);border-bottom:1px solid var(--line);padding-bottom:6px;margin:0 0 10px}
+/* Same treatment as .sec h3, for headings that aren't inside a .sec block.
+   Four places used this class with no rule behind it, so they rendered as
+   plain body text and the sections ran together with nothing dividing them. */
+.sechead{font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);border-bottom:1px solid var(--line);padding-bottom:6px;margin:0 0 10px;font-weight:700}
 .plain{font-size:.97rem;margin:0 0 10px}
 .kvg{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .kv{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
@@ -209,7 +220,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.15</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.16</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -417,11 +428,13 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 </footer>
 
 <!-- tab bar -->
-<nav class="tabbar">
-  <button class="tab on" data-tab="hunts"><span class="ic">◎</span>Hunts</button>
-  <button class="tab" data-tab="premium"><span class="ic">★</span>Premium</button>
-  <button class="tab" data-tab="mylist"><span class="ic">♥</span>My List</button>
-  <button class="tab" data-tab="synopsis"><span class="ic">📖</span>Synopsis/Data</button>
+<!-- aria-selected, not just the .on class: which tab you're on was signalled
+     by colour alone, so a screen reader read four interchangeable buttons. -->
+<nav class="tabbar" role="tablist" aria-label="Main sections">
+  <button class="tab on" role="tab" aria-selected="true" data-tab="hunts"><span class="ic" aria-hidden="true">◎</span>Hunts</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="premium"><span class="ic" aria-hidden="true">★</span>Premium</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="mylist"><span class="ic" aria-hidden="true">♥</span>My List</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="synopsis"><span class="ic" aria-hidden="true">📖</span>Synopsis/Data</button>
 </nav>
 
 <!-- detail sheet -->
@@ -621,7 +634,19 @@ const P = Object.assign({ deerPts:null, elkPts:null, sp:'all', wep:'all', sort:'
   JSON.parse(localStorage.getItem(PK)||'{}'));
 P.specialShow = Object.assign({youth:P.showYouth===true, spike:true, trad:true, whitetail:true, late:true, damage:true}, P.specialShow||{});
 if(P.specialOnly===undefined) P.specialOnly=false;
-const savePrefs = () => { try{ localStorage.setItem(PK, JSON.stringify(P)); }catch(e){} invalidate(); };
+// Preferences used to blow the ENTIRE derived cache on every tap. Only grade()
+// reads P (through ptsFor), so changing the sort order or the weapon filter was
+// paying a full rebuild of the hunt index, the harvest blends and the trend
+// lines — measured at 1.2ms warm vs 8.7ms cold on desktop, several times that
+// on the family's phones. The special-tag caches are handled by saveJSON(),
+// which invalidates when the DEFINITIONS change (P only stores which ones to
+// show), so points are genuinely the only prefs any memo depends on.
+let _lastPts = null;
+const savePrefs = () => {
+  try{ localStorage.setItem(PK, JSON.stringify(P)); }catch(e){}
+  const now = P.deerPts + '|' + P.elkPts;
+  if (now !== _lastPts) { _lastPts = now; _c.grade.clear(); }
+};
 
 const curYD  = () => S.selectedYear ? S.years[S.selectedYear] : null;
 const getH   = () => { const y = curYD(); return y ? y.hunts : []; };
@@ -776,8 +801,17 @@ function myOdds(h, myPts) {
   if (exact && exact.resApps > 0) return (exact.resDrawn / exact.resApps) * 100;
   const below = h.pointBreakdown.filter(p => p.points <= myPts).sort((a,b) => b.points - a.points);
   if (below.length && below[0].resApps > 0) return (below[0].resDrawn / below[0].resApps) * 100;
-  if (h.residentApps > 0 && h.tags > 0) return Math.min(100, (h.tags * 0.25 / h.residentApps) * 100);
   return null;
+}
+// Rough stand-in when NO point tier at or below your level has any applicants
+// on record — it just assumes a quarter of tags reach the random pool. Kept
+// separate from myOdds() so the UI can mark it as a guess instead of printing
+// it in the same type as a real drawn/applied ratio.
+function estOdds(h, myPts) {
+  if (myPts === null || myPts === undefined) return null;
+  if (myOdds(h, myPts) !== null) return null;
+  if (!(h.residentApps > 0 && h.tags > 0)) return null;
+  return Math.min(100, (h.tags * 0.25 / h.residentApps) * 100);
 }
 const ptsFor = h => h.species==='elk' ? P.elkPts : P.deerPts;
 // Season dates + bag limit for a hunt in the selected year (from the regs tables)
@@ -1017,9 +1051,29 @@ function blendHarvestRaw(h, maxN){
   return {years:yrs.map(r=>r.year), n:yrs.length, succ, hunters, taken, days, shares, top, repN, tagN, repRate};
 }
 
+// Why "Suggested for me" ranked this hunt where it did. grade() quietly blends
+// harvest success, mature-antler share and how realistic the draw is for your
+// points; the list just appeared in an order with nothing said about why.
+function gradeReason(h) {
+  const b = blendHarvest(h, 3), my = ptsFor(h), bits = [];
+  if (b && b.succ >= 40) bits.push(b.succ + '% of hunters filled a tag');
+  else if (b && b.succ >= 20) bits.push('a solid ' + b.succ + '% success rate');
+  if (b && b.top && /4-point|5-point|6-point/.test(b.top.label))
+    bits.push('mostly ' + b.top.label.toLowerCase() + ' animals');
+  if (my !== null && h.pts100 !== null && my >= h.pts100) bits.push('and your points already cover it');
+  else if (my !== null && h.pts100 !== null && h.pts100 - my <= 1) bits.push('and it is nearly within reach');
+  return bits.length ? bits.join(', ') : null;
+}
+
 // The verdict: one plain-English answer per hunt
 function verdict(h) {
   const my = ptsFor(h), p = h.pts100, mo = myOdds(h, my);
+  // No point tier at or below yours has any applicants on record. "Under 1%" was
+  // a guess dressed up as a fact; say it's a rough estimate instead.
+  const est = mo === null ? estOdds(h, my) : null;
+  const odds = mo !== null ? 'about ' + fmtP(mo)
+    : est !== null ? 'roughly ' + fmtP(est) + ' (rough estimate — no record at your point level)'
+    : 'not on record at your point level';
   // A quota that dropped to zero still appears in the draw report. Without this
   // it read as "Luck-of-the-draw — anyone can win a tag", which is the opposite
   // of the truth and could waste one of only three choices.
@@ -1031,12 +1085,12 @@ function verdict(h) {
   if (p !== null && my >= p) return {cls:'v-yes', text:'You have enough points — apply and this tag is yours.'};
   if (p === null) {
     if (mo !== null && mo >= 20) return {cls:'v-luck', text:`Luck-of-the-draw — about a ${fmtP(mo)} chance for you.`};
-    return {cls:'v-luck', text:`Luck-of-the-draw — a long shot (${mo===null?'under 1%':'about '+fmtP(mo)}).`};
+    return {cls:'v-luck', text:`Luck-of-the-draw — a long shot (${odds}).`};
   }
   const gap = p - my;
   if (mo !== null && mo >= 50) return {cls:'v-soon', text:`Good chance this year — about ${fmtP(mo)}. A sure tag takes ${gap} more point${gap===1?'':'s'}.`};
-  if (gap <= 2) return {cls:'v-soon', text:`Close — about ${gap} more year${gap===1?'':'s'} of waiting for a sure tag. Your odds now: ${mo===null?'under 1%':'about '+fmtP(mo)}.`};
-  return {cls:'v-no', text:`A long wait — about ${gap} more years of points for a sure tag. Your odds now: ${mo===null?'under 1%':'about '+fmtP(mo)}.`};
+  if (gap <= 2) return {cls:'v-soon', text:`Close — about ${gap} more year${gap===1?'':'s'} of waiting for a sure tag. Your odds now: ${odds}.`};
+  return {cls:'v-no', text:`A long wait — about ${gap} more years of points for a sure tag. Your odds now: ${odds}.`};
 }
 
 // Multi-year trend for a hunt
@@ -1213,7 +1267,11 @@ function parseChoicesXlsx(buf){
   const wb=XLSX.read(buf,{type:'array'}), ws=wb.Sheets[wb.SheetNames[0]];
   const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
   let idx=null; const out={};
-  const idRe=/^(\d{3}[A-Z]?\d{0,2}|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/;
+  // Premium hunts (L10, M32, N45…) must be here too. The scraper's copy of
+  // this regex accepts them and this one didn't, so a hand-uploaded choice
+  // report silently dropped every premium row — the exact hunts whose 2nd/3rd
+  // choice odds the Premium tab is built to show.
+  const idRe=/^(\d{3}[A-Z]?\d{0,2}|[LMN]\d{1,3}[A-Z]?\d{0,2}|[A-Z]{2}\d{3}(?:[A-Z]\d{0,2}|-\d)?)$/;
   for(const r of rows){
     if(!r) continue;
     const cells=r.map(c=>String(c??'').trim());
@@ -1371,7 +1429,7 @@ function saveLocal() {
   // with no signal. Instead, drop the oldest seasons (which nobody browses) and
   // keep the newest ones cached. The cloud still holds everything.
   const write = years => localStorage.setItem(SK,
-    JSON.stringify({years, selectedYear:S.selectedYear, pendingYear:S.pendingYear}));
+    JSON.stringify({years:cleanYears(years), selectedYear:S.selectedYear, pendingYear:S.pendingYear}));
   try { write(S.years); return; } catch(e) { if(!isQuotaError(e)) return; }
 
   const keep = yList().slice(); // newest first — COPY: yList() hands back the memoised array
@@ -2260,6 +2318,9 @@ function aiWriteField(yd, hunt, field, v) {
   if (field === 'name') h.huntName = String(v);
   if (field === 'tags') { const n = +String(v).replace(/,/g, ''); if (isFinite(n)) h.tags = n; }
   if (field === 'apps') { const n = +String(v).replace(/,/g, ''); if (isFinite(n)) h.residentApps = n; }
+  // residentApps feeds resOdds; without this the card would show the new
+  // applicant count next to the odds computed from the old one.
+  if (field === 'tags' || field === 'apps') derive(h);
 }
 // Patch the DISPLAYED copies of the data with chosen audit values, restoring
 // originals for anything switched back to "Keep ours". In-memory only.
@@ -2298,8 +2359,27 @@ function aiCleanHunts(year, hunts) {
     if ('name' in p && p.name !== undefined) c.huntName = p.name;
     if ('tags' in p && p.tags !== undefined) c.tags = p.tags;
     if ('apps' in p && p.apps !== undefined) c.residentApps = p.apps;
+    // The clone carries resOdds/pts100 computed from the patched numbers —
+    // recompute them from the restored originals.
+    if (c.pointBreakdown) derive(c);
     return c;
   });
+}
+// Same rule for the offline copy: localStorage is a cache of the SOURCE data,
+// not of the display patches. Without this, an audit choice would bake itself
+// into the cache and survive as if it were parsed from ODFW's own file — even
+// after the owner switched the resolution back to "Keep ours".
+function cleanYears(years) {
+  if (!_aiPristine.size) return years;
+  const out = {};
+  for (const [y, yd] of Object.entries(years)) {
+    if (!yd) { out[y] = yd; continue; }
+    const hunts = yd.hunts ? aiCleanHunts(y, yd.hunts) : yd.hunts;
+    const seasons = yd.seasons ? aiCleanSeasons(y, yd.seasons) : yd.seasons;
+    out[y] = (hunts === yd.hunts && seasons === yd.seasons)
+      ? yd : Object.assign({}, yd, {hunts, seasons});
+  }
+  return out;
 }
 function aiCleanSeasons(year, seasons) {
   const keys = [..._aiPristine.keys()].filter(k => k.startsWith(year + '|'));
@@ -2397,7 +2477,7 @@ function aiAnsweredHtml(answers) {
         '<span style="flex:1;min-width:0;font-size:.86rem">' + esc(a.q || a.label || a.qk) +
         (a.grounded === false ? ' <span class="chip" style="font-size:.6rem">no web search</span>' : '') + '</span>' +
         '<button class="bmini" data-aiansshow="' + esc(a.id) + '" style="min-height:30px;padding:2px 8px;flex-shrink:0">' + (open ? 'Hide' : 'Answer') + '</button>' +
-        '<button class="bmini dan" data-aiansdel="' + esc(a.id) + '" style="min-height:30px;padding:2px 8px;flex-shrink:0">✕</button></div>' +
+        '<button class="bmini dan" data-aiansdel="' + esc(a.id) + '" aria-label="Delete this answer" style="min-height:44px;padding:2px 10px;flex-shrink:0">✕</button></div>' +
         (open ? '<div style="font-size:.84rem;line-height:1.5;margin-top:6px;padding:9px 10px;background:var(--card2);border:1px solid var(--line);border-radius:8px">' +
           aiHtml(a.a) + aiSrcHtml(a.src) +
           '<div class="help" style="margin-top:6px;font-size:.68rem">' + new Date(a.at || 0).toLocaleString() + '</div></div>' : '') +
@@ -2473,8 +2553,13 @@ function wireQa() {
     if (busy) return; // Enter must respect the in-flight guard too
     const q = inp.value.trim();
     if (!q) { toast('Type a question first', true); return; }
-    busy = true;
+    // This check has to happen BEFORE the guard flag goes up. Asking on a cold
+    // start (no cached season, Firestore still in flight) used to set busy and
+    // return without clearing it, so Ask stayed dead for the life of the page —
+    // silently, with only a full reload to recover. Not something anyone would
+    // think to do standing in a driveway on one bar.
     if (!getH().length) { toast('Hunt data hasn\'t loaded yet', true); return; }
+    busy = true;
     btn.disabled = true; btn.textContent = '…';
     out.innerHTML = '<div style="display:flex;gap:8px;align-items:center;margin-top:10px"><div class="spin"></div><span class="help" style="margin:0">Reading the cards…</span></div>';
     try {
@@ -2489,9 +2574,10 @@ function wireQa() {
         : e.transient ? 'The AI is busy — try again in a minute.'
         : 'Something went wrong: ' + e.message;
       out.innerHTML = '<p class="help" style="margin-top:10px;color:var(--warn)">' + esc(msg) + '</p>';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Ask';
+      busy = false;
     }
-    btn.disabled = false; btn.textContent = 'Ask';
-    busy = false;
   };
   btn.onclick = go;
   inp.onkeydown = e => { if (e.key === 'Enter') go(); };
@@ -2537,7 +2623,7 @@ function aiQueueRowsHtml(items) {
       '<span style="flex:1;min-width:0"><span style="font-weight:600">' + esc(aiQueueRowLabel(it)) + '</span>' +
       '<span class="help" style="display:block;margin:0;font-size:.72rem;' + (failed ? 'color:var(--bad)' : '') + '">' + esc(state) + ' · queued ' + age(it.createdAt || Date.now()) + '</span></span>' +
       '<button class="bmini" data-aiqshow="' + esc(it.id) + '" style="min-height:32px;padding:2px 8px;flex-shrink:0">' + (open ? 'Hide' : 'Question') + '</button>' +
-      '<button class="bmini dan" data-aiqdel="' + esc(it.id) + '" style="min-height:32px;padding:2px 8px;flex-shrink:0">✕</button></div>' +
+      '<button class="bmini dan" data-aiqdel="' + esc(it.id) + '" aria-label="Remove this question from the queue" style="min-height:44px;padding:2px 10px;flex-shrink:0">✕</button></div>' +
       prompt + '</div>';
   }).join('');
 }
@@ -2897,7 +2983,12 @@ function cardHTML(h){
   const lowRep=bl&&bl.repRate!==null&&bl.repRate<LOW_REPORT;
   const succLbl=lowRep?'Got one ⚠ few reported':(bl?(bl.n>1?`Got one (${bl.n}-yr avg)`:`Got one (${bl.years[0]})`):'Hunters who got one');
   const t=trendData(h);
-  const moTxt = my===null?'—':(mo===null?'<1%':fmtP(mo));
+  // mo===null means no tier at or below your points has any record. Showing
+  // "<1%" there was a fabrication; show the rough estimate flagged as one.
+  const est = mo===null?estOdds(h,my):null;
+  const moTxt = my===null?'—':(mo!==null?fmtP(mo):(est!==null?'~'+fmtP(est):'—'));
+  const moLbl = my!==null&&mo===null&&est!==null ? 'Your chance (rough estimate)'
+    : my!==null&&mo===null ? 'No record at your points' : 'Your chance this year';
   const specials=specialTags(h).map(s=>`<span class="chip sp">${esc(s)}</span>`).join('');
   return `<div class="card ${v.cls}" data-id="${esc(h.huntNum)}_${h.species}">
     <div class="crow1"><span class="cid">${esc(h.huntNum)}</span><span class="cname">${esc(h.huntName)}</span>
@@ -2905,7 +2996,7 @@ function cardHTML(h){
     <div class="chips"><span class="chip">${wLabel(h.weapon)}</span><span class="chip">${h.species==='elk'?'Elk':'Deer'}</span>${specials}${(seasonOf(h)?.n)?'<span class="chip sp">Special rules</span>':''}</div>
     <div class="verdict">${v.text}</div>
     <div class="stats">
-      <div class="stat"><div class="n">${moTxt}</div><div class="l">Your chance this year</div></div>
+      <div class="stat"><div class="n">${moTxt}</div><div class="l">${moLbl}</div></div>
       <div class="stat"><div class="n" ${lowRep?'style="color:var(--warn)"':''}>${succ==null?'—':fmtP(succ)}</div><div class="l" ${lowRep?'style="color:var(--warn)"':''}>${succLbl}</div></div>
       <div class="stat"><div class="n">${h.pts100===null?'Luck':h.pts100}</div><div class="l">Points for a sure tag</div></div>
     </div>
@@ -2928,6 +3019,8 @@ function cardHTML(h){
       return `<div class="cseason" style="border-left:3px solid var(--good)">Backup pick: <strong>${lbl}</strong> as a 2nd choice${third} — ${fmt(co.left1)} tags left over, ${fmt(co.ch.c2)} competing${co.current?'':' ('+co.year+')'}</div>`;})()}
     ${(()=>{const se=seasonOf(h);return se?`<div class="cseason">Season: <strong>${esc(se.s)}</strong></div>`:'';})()}
     ${t.sentence?`<div class="ctrend ${t.dir}">${esc(t.sentence)}</div>`:''}
+    ${(()=>{ if(P.sort!=='best') return '';
+      const r=gradeReason(h); return r?`<div class="cwhy">Ranked here because ${esc(r)}.</div>`:'';})()}
     <button class="detailbtn" data-open="${esc(h.huntNum)}_${h.species}">See full details ›</button>
   </div>`;
 }
@@ -3049,7 +3142,7 @@ function renderReqs(sec, h, key, items, offline){
     <span style="color:var(--gold);flex-shrink:0">▸</span><span style="font-size:.93rem">${esc(t)} <span class="help" style="margin:0;display:inline">— from the ${S.selectedYear} regulations</span></span></div>`).join('');
   const manHtml=items.map((n,i)=>`<div style="display:flex;gap:9px;padding:8px 0;border-bottom:1px solid var(--card2);align-items:baseline">
     <span style="color:var(--warn);flex-shrink:0">▸</span><span style="font-size:.93rem;flex:1">${esc(n.t)}</span>
-    <button class="bmini dan" data-delreq="${i}" style="min-height:34px;padding:2px 8px;flex-shrink:0">✕</button></div>`).join('');
+    <button class="bmini dan" data-delreq="${i}" aria-label="Remove this requirement" style="min-height:44px;padding:2px 10px;flex-shrink:0">✕</button></div>`).join('');
   sec.innerHTML=`<h3>Requirements &amp; special rules</h3>
     ${auto.length||items.length?autoHtml+manHtml:'<p class="help">No special requirements on record for this hunt.</p>'}
     ${offline?'<p class="help">Couldn\'t reach the cloud — saved rules may be missing.</p>':''}
@@ -3123,10 +3216,14 @@ function openDetail(id, keepSel){
   </div>`;
 
   if(my!==null){
+    const dEst = mo===null?estOdds(h,my):null;
+    const dOdds = mo!==null ? fmtP(mo)
+      : dEst!==null ? `~${fmtP(dEst)}<div class="k" style="margin-top:2px">rough estimate</div>`
+      : 'Not on record';
     html+=`<div class="sec"><h3>Your odds</h3>
       <div class="kvg">
         <div class="kv"><div class="k">Your points</div><div class="v">${my}</div></div>
-        <div class="kv"><div class="k">Chance this year</div><div class="v">${mo===null?'<1%':fmtP(mo)}</div></div>
+        <div class="kv"><div class="k">Chance this year</div><div class="v">${dOdds}</div></div>
         <div class="kv"><div class="k">Points for a sure tag</div><div class="v">${h.pts100===null?'Luck only':h.pts100}</div></div>
         <div class="kv"><div class="k">Lowest points that drew</div><div class="v">${h.minPointsToDraw??'—'}</div></div>
       </div></div>`;
@@ -3190,7 +3287,7 @@ function openDetail(id, keepSel){
       <div class="kvg" style="margin-bottom:10px">
         <div class="kv"><div class="k">Controlled tags drawn${avgTag}</div><div class="v">${tagsIssued==null?'—':fmt(tagsIssued)}</div></div>
         <div class="kv"><div class="k">Hunters in the unit${avgTag}</div><div class="v">${fmt(hunters)}</div></div>
-        <div class="kv"><div class="k">Deer taken${avgTag}</div><div class="v" style="color:var(--good)">${fmt(taken)}</div></div>
+        <div class="kv"><div class="k">${h.species==='elk'?'Elk':'Deer'} taken${avgTag}</div><div class="v" style="color:var(--good)">${fmt(taken)}</div></div>
         <div class="kv"><div class="k">Days hunted per hunter (avg)</div><div class="v">${days??'—'}</div></div>
       </div>
       ${mixedPool?`<p class="plain" style="background:var(--warnbg);color:var(--warn);padding:11px 13px;border-radius:10px;font-size:.9rem;margin-bottom:12px">ℹ️ More hunters than controlled tags because this ${unitNameFor(h)||'unit'} is also open to general-season and other tags. ODFW's harvest survey counts <strong>everyone who hunted here</strong>, so "deer taken" reflects the whole unit — not just the ${tagsIssued==null?'':fmt(tagsIssued)+' '}controlled-tag holders.</p>`:''}
@@ -3398,10 +3495,19 @@ function premUnitStats(id){
   const sp=id[0]==='M'?'elk':id[0]==='L'?'deer':'pronghorn';
   const pubLand=WMU_INFO[u]?WMU_INFO[u][1]:(DEERAREA_INFO[u]?DEERAREA_INFO[u][1]:null);
   if(sp==='pronghorn') return pubLand!=null?{succ:null,sizeIdx:null,sizeLabel:null,pubLand}:null; // no regular hunts to blend, but public land % still known
-  const pre=sp==='elk'?'2':'1';
   const d=curYD(); if(!d) return pubLand!=null?{succ:null,sizeIdx:null,sizeLabel:null,pubLand}:null;
-  const rx=new RegExp('^'+pre+u+'([A-Z]|$)');
-  const hunts=d.hunts.filter(h=>h.species===sp && rx.test(String(h.huntNum)));
+  // Two shapes of premium code, and only one used to work. Numeric units
+  // (L10 -> hunts 110*) matched fine; the 2026 herd-area entries (LAD01 ->
+  // hunts AD101*) were fed to the same '1'+u regex, which can never match, so
+  // 43 of the 153 premium hunts showed no success or antler data at all.
+  let hunts;
+  if(/^[A-Z]{2}\d{2}$/.test(u)){
+    hunts=d.hunts.filter(h=>h.species===sp && herdCode(h)===u);
+  } else {
+    const pre=sp==='elk'?'2':'1';
+    const rx=new RegExp('^'+pre+u+'([A-Z]|$)');
+    hunts=d.hunts.filter(h=>h.species===sp && rx.test(String(h.huntNum)));
+  }
   let sSum=0,sW=0, idxSum=0, idxW=0;
   const keys=sp==='elk'?CLASS_KEYS:CLASS_KEYS.slice(0,4);
   for(const h of hunts){
@@ -4158,7 +4264,8 @@ function openSynEditor(id, e){
 function showPage(name){
   if(name!=='synopsis') window.synEdit=false;
   $$('.page').forEach(p=>p.classList.toggle('active',p.dataset.page===name));
-  $$('.tab').forEach(t=>t.classList.toggle('on',t.dataset.tab===name));
+  $$('.tab').forEach(t=>{ const on=t.dataset.tab===name;
+    t.classList.toggle('on',on); t.setAttribute('aria-selected',on); });
   if(name==='mylist') renderMyList();
   if(name==='premium') renderPremium();
   if(name==='admin') renderAdmin();
@@ -4255,7 +4362,10 @@ function wire(){
   // Rebuilding the whole card list per keystroke made typing stutter on phones.
   wireQa();
   $('#fSearch').oninput=debounce(()=>renderCards(),120);
-  $('#fYear').onchange=e=>{S.selectedYear=e.target.value;saveLocal();renderCards();renderMyList();};
+  // applyAiOverrides is year-scoped, so switching seasons has to re-run it —
+  // otherwise the owner's audit resolutions silently stop applying the moment
+  // anyone looks at a different year.
+  $('#fYear').onchange=e=>{S.selectedYear=e.target.value;applyAiOverrides(S.selectedYear);saveLocal();renderCards();renderMyList();};
   const rfd=$('#btnRefreshData');
   if(rfd) rfd.onclick=async ()=>{ rfd.disabled=true; rfd.textContent='Refreshing…';
     await refreshData(); rfd.disabled=false; rfd.textContent='↻ Refresh data now'; };
