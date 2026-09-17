@@ -123,6 +123,16 @@ select,input[type=search],input[type=number]{width:100%;min-height:54px;font-siz
 .cseason strong{color:var(--gold)}
 .ctrend{font-size:.83rem;color:var(--dim);margin-top:9px}
 .cwhy{font-size:.8rem;color:var(--dim);margin-top:8px;font-style:italic;opacity:.9}
+/* AI coverage bar: one stacked strip showing answered / queued / failed / not
+   asked, so "what's done and what's left" is one glance rather than arithmetic. */
+.aibar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--card2);border:1px solid var(--line);margin-top:4px}
+.aibar>div{height:100%}
+.aikey{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;font-size:.74rem;color:var(--dim)}
+.aikey span{display:flex;align-items:center;gap:5px}
+.aikey i{width:10px;height:10px;border-radius:3px;display:inline-block;flex:0 0 auto}
+#promptBody textarea{width:100%;font-size:.9rem;line-height:1.5;padding:10px;border-radius:10px;
+  background:var(--card2);border:1.5px solid var(--line);color:var(--text);font-family:inherit}
+#promptBody input[type=text]{width:100%}
 .ctrend.harder{color:var(--warn)} .ctrend.easier{color:var(--good)}
 .empty{padding:36px 16px;text-align:center;color:var(--dim);font-size:1rem;line-height:1.6}
 
@@ -220,7 +230,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.16</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.17</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -353,10 +363,12 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
     <div id="aiAdminCard" class="help">Checking…</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
       <button class="btn primary" id="btnAiBackfill" style="flex:1 1 100%">↻ Reload queue — re-ask every question</button>
+      <button class="btn" id="btnAiPrio" style="flex:1 1 100%;border-color:var(--gold);color:var(--gold)">⭐ Answer my saved hunts first</button>
       <button class="btn" id="btnAiPause" style="flex:1;min-width:140px">⏸ Pause queue</button>
       <button class="btn" id="btnAiFactcheck" style="flex:1;min-width:180px">Audit card data</button>
       <button class="btn" id="btnAiKick" style="flex:1;min-width:140px">Process queue now</button>
     </div>
+    <p class="help" style="margin-top:10px">The free key only manages a handful of answers a day, so with a full queue the hunts you actually care about could wait months. <strong>Answer my saved hunts first</strong> moves everything starred in My List — and everything on your application slate — to the front of the line.</p>
     <p class="help" style="margin-top:10px">Answers come from Google Gemini on a free key. <strong>Reload queue</strong> puts every hunt's unanswered questions in line — press it again any time the queue empties or a new season loads. The queue drains a bit at a time while the app is open, and automatically every night. When the day's free limit runs out it pauses and resumes tomorrow where it left off — nothing is lost.</p>
   </div></div>
 
@@ -453,6 +465,16 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
     <button class="closebtn" id="mapClose">Close</button>
   </div>
   <div class="sbody" id="mapBody"></div>
+</div>
+
+<!-- Editor for what the AI is asked. Its own sheet so the long prompt text has
+     room on a phone, and so Escape/Close behave like every other sheet. -->
+<div class="sheet" id="promptSheet" role="dialog" aria-modal="true" aria-labelledby="promptTitle" aria-hidden="true">
+  <div class="shead">
+    <div class="t"><h2 id="promptTitle">Edit question</h2><div class="sub">Asked about every hunt</div></div>
+    <button class="closebtn" id="promptClose">Close</button>
+  </div>
+  <div class="sbody" id="promptBody"></div>
 </div>
 
 <div class="cbackdrop" id="confirmBox" role="dialog" aria-modal="true" aria-labelledby="confirmMsg"><div class="cbox">
@@ -1507,8 +1529,15 @@ const AI_KEYS = [
   atob('QVEuQWI4Uk42TDZJd2dEbkg1Z1ZLVFlvcWpXd2ZITHQtRE1ZR2V5X0RydEYySkdDaTV3MUE=')
 ];
 const AI_KEY_NAMES = ['primary', 'backup'];
-const AI_MODEL = 'gemini-flash-latest';
-const AI_URL   = 'https://generativelanguage.googleapis.com/v1beta/models/' + AI_MODEL + ':generateContent';
+// A ladder, not one model. Measured live on this free key: gemini-flash-latest
+// returned 503 "experiencing high demand" on essentially every real prompt
+// (47s to fail), which is why nightly runs were managing ~4 answers against a
+// 1,600-item queue. flash-lite answered 8 of 8 in about a second each. So: try
+// the best model first, drop to the next the moment one says it's busy, and
+// record which one actually answered. No guessing at capacity — react to it.
+const AI_MODELS = ['gemini-2.5-flash', 'gemini-flash-lite-latest', 'gemini-flash-latest'];
+const AI_MODEL = AI_MODELS[0];   // what the UI names as the default
+const aiUrlFor = m => 'https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent';
 const AI_PACE_MS  = 10000;   // the RPM cap is per-KEY, shared by every open device — pace generously; 429 handling is the backstop
 // gemini-flash-latest THINKS before answering, and those hidden reasoning
 // tokens are charged against maxOutputTokens. Measured: ~1,000-2,000 thinking
@@ -1525,7 +1554,22 @@ const AI_CLIENT   = Math.random().toString(36).slice(2, 10);
 const aiToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
 
 // One HTTP round-trip on one specific key. Throws typed errors; never rotates.
+// One key, walking the model ladder: a 503/404 from one model drops straight to
+// the next rather than giving the whole item back to the queue.
 async function aiCallKey(ki, prompt, search, opts) {
+  let lastBusy = null;
+  for (let mi = opts._model || 0; mi < AI_MODELS.length; mi++) {
+    try {
+      return await aiCallModel(ki, mi, prompt, search, opts);
+    } catch (e) {
+      if (e.transient) { lastBusy = e; continue; }   // busy or gone: next model
+      throw e;
+    }
+  }
+  throw lastBusy || Object.assign(new Error('AI busy (every model)'), { transient: true });
+}
+async function aiCallModel(ki, mi, prompt, search, opts) {
+  const model = AI_MODELS[mi];
   const body = {
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: { temperature: opts.temperature ?? 0.2, maxOutputTokens: opts.maxTokens || AI_MAX_TOKENS }
@@ -1533,7 +1577,7 @@ async function aiCallKey(ki, prompt, search, opts) {
   if (search) body.tools = [{ google_search: {} }];
   let res;
   try {
-    res = await fetch(AI_URL, {
+    res = await fetch(aiUrlFor(model), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-goog-api-key': AI_KEYS[ki] },
       body: JSON.stringify(body)
@@ -1555,20 +1599,36 @@ async function aiCallKey(ki, prompt, search, opts) {
       const viol = det.filter(d => String(d['@type'] || '').includes('QuotaFailure')).flatMap(d => d.violations || []);
       daily = viol.some(v => /day|daily/i.test(String(v.quotaId || '') + ' ' + String(v.description || '')));
     } catch (e) {}
-    if (!daily && retryMs > 5 * 60 * 1000) daily = true; // long back-off = daily in practice
-    const err = new Error('quota (' + AI_KEY_NAMES[ki] + ' key' + (daily ? ', daily' : ', per-minute') + ')');
+    // This used to read "no QuotaFailure detail + a long RetryInfo" as a daily
+    // limit and bench the key until tomorrow. Gemini's grounded 429 carries
+    // NEITHER detail (verified live: the body is just a Help link), so a busy
+    // minute benched the family's only working key for the rest of the day —
+    // which is why nightly runs stopped after ~4 answers. Bench for the day
+    // only when Google actually says PerDay.
+    const err = new Error('quota (' + AI_KEY_NAMES[ki] + ' key' + (daily ? ', daily' : ', short-term') + ')');
     err.quota = true; err.daily = daily; err.wasSearch = search; err.retryMs = Math.min(retryMs, 6 * 3600 * 1000);
     throw err;
   }
   // Some keys reject the search-grounding tool outright — plain ask instead.
-  if (res.status === 400 && search) return aiCallKey(ki, prompt, false, opts);
+  if (res.status === 400 && search) return aiCallModel(ki, mi, prompt, false, opts);
   // This key is dead (revoked / project denied): let the rotation skip it.
   if (res.status === 403 || res.status === 401) {
-    const err = new Error('key rejected (' + AI_KEY_NAMES[ki] + ', HTTP ' + res.status + ')');
-    err.auth = true; err.status = res.status; throw err;
+    // "Your project has been denied access" is permanent — no amount of waiting
+    // fixes it. Benching such a key until "tomorrow" meant re-probing a dead
+    // key every single day forever while the panel reported a cheerful
+    // "running on the next key". Mark it dead and say so out loud.
+    let why = '';
+    try { why = String((((await res.json()).error) || {}).message || ''); } catch (e) {}
+    const dead = /denied access|has been suspended|disabled|consumer|not been used|is disabled/i.test(why);
+    const err = new Error('key rejected (' + AI_KEY_NAMES[ki] + ', HTTP ' + res.status + ')' + (why ? ' — ' + why.slice(0, 120) : ''));
+    err.auth = true; err.dead = dead; err.why = why.slice(0, 200); err.status = res.status; throw err;
   }
-  // "High demand" and other 5xx are transient: back off, don't burn a retry.
-  if (res.status >= 500) { const err = new Error('AI busy (HTTP ' + res.status + ')'); err.transient = true; throw err; }
+  // "High demand" and other 5xx are transient, and so is a model that has been
+  // retired (404) — both mean "try the next model", not "this key is spent".
+  if (res.status >= 500 || res.status === 404) {
+    const err = new Error(res.status === 404 ? 'model ' + model + ' is gone' : 'AI busy (HTTP ' + res.status + ')');
+    err.transient = true; err.model = model; throw err;
+  }
   if (!res.ok) { const err = new Error('AI HTTP ' + res.status); err.status = res.status; throw err; }
   const j = await res.json();
   const cand = j.candidates && j.candidates[0];
@@ -1578,7 +1638,7 @@ async function aiCallKey(ki, prompt, search, opts) {
   if (cand && cand.finishReason === 'MAX_TOKENS') {
     const budget = opts.maxTokens || AI_MAX_TOKENS;
     if (!opts._grew && budget < 16384)
-      return aiCallKey(ki, prompt, search, Object.assign({}, opts,
+      return aiCallModel(ki, mi, prompt, search, Object.assign({}, opts,
         { maxTokens: Math.min(16384, Math.max(budget * 2, AI_MAX_TOKENS * 2)), _grew: true }));
     throw new Error('reply was cut off before it finished');
   }
@@ -1588,14 +1648,18 @@ async function aiCallKey(ki, prompt, search, opts) {
     if (c.web && c.web.uri && /^https?:/.test(c.web.uri))
       src.push({ t: String(c.web.title || 'source').slice(0, 80), u: c.web.uri });
   });
-  return { text, src: src.slice(0, 4), grounded: search, key: ki };
+  return { text, src: src.slice(0, 4), grounded: search, key: ki, model };
 }
 
 // Remember a per-key day marker (keyOffN / groundOffN) for every device.
-async function aiMark(field) {
-  _aiState = Object.assign({}, _aiState, { [field]: aiToday() });
+async function aiMark(field, permanent) {
+  // Day-markers (keyOffN / groundOffN) store today's Pacific date and clear
+  // themselves tomorrow. Permanent markers (keyDeadN) store a reason string
+  // and stay until the owner replaces the key.
+  const v = permanent === undefined ? aiToday() : String(permanent).slice(0, 200);
+  _aiState = Object.assign({}, _aiState, { [field]: v });
   _aiStateAt = Date.now();
-  try { await db.collection('meta').doc('aiState').set({ [field]: aiToday() }, { merge: true }); } catch (e) {}
+  try { await db.collection('meta').doc('aiState').set({ [field]: v }, { merge: true }); } catch (e) {}
 }
 
 // The rotation: walk the keys, skipping any already proven exhausted or dead
@@ -1607,7 +1671,9 @@ async function aiGenerate(prompt, opts) {
   const st = opts.state || _aiState || {};
   const today = aiToday();
   let lastQuota = null, lastAuth = null;
+  let lastTransient = null;
   for (let ki = 0; ki < AI_KEYS.length; ki++) {
+    if (st['keyDead' + ki]) continue;                 // permanently denied — never probe again
     if (st['keyOff' + ki] === today) continue;
     const search = !!opts.search && st['groundOff' + ki] !== today;
     try {
@@ -1615,24 +1681,41 @@ async function aiGenerate(prompt, opts) {
     } catch (eOuter) {
       let e = eOuter;
       if (e.quota && e.wasSearch) {
+        // Grounding quota is per MODEL, not per key: gemini-2.5-flash grounds
+        // fine on this key (verified — real answers carrying 4 sources each)
+        // while gemini-flash-latest 429s on every grounded call. So the
+        // day-marker below is set only once a PLAIN retry proves the key itself
+        // is healthy. Marking it on the 429 alone would silently kill web
+        // search for the whole day the first time the ladder fell through to
+        // the older model — and the sourced research is the point of this.
         // grounded 429: a plain retry on the same key decides whether it was
         // grounding quota or the key. Whatever the retry throws (429, 403 —
         // the live backup key does grounded-429 then plain-403) falls through
         // to the SAME handling below; nothing escapes the rotation bare.
-        try {
-          const out = await aiCallKey(ki, prompt, false, opts);
-          await aiMark('groundOff' + ki);
-          return out;
-        } catch (e2) { e = e2; }
+        try { const out = await aiCallKey(ki, prompt, false, opts); await aiMark('groundOff' + ki); return out; }
+        catch (e2) { e = e2; }
       }
       if (e.quota) {
         if (e.daily) await aiMark('keyOff' + ki); // day quota: bench until tomorrow
         lastQuota = e; continue;                   // minute blip: just move on, key recovers
       }
-      if (e.auth) { await aiMark('keyOff' + ki); lastAuth = e; continue; }
-      throw e; // transient / network / other HTTP — not a key problem
+      if (e.auth) {
+        // dead = the project itself is denied; a day-mark would hide that.
+        await aiMark(e.dead ? 'keyDead' + ki : 'keyOff' + ki, e.dead ? (e.why || 'denied') : undefined);
+        lastAuth = e; continue;
+      }
+      // A 503 is Gemini being busy, not this key being spent — but the other
+      // key is a different project and may well get through, so try it before
+      // giving the whole item back to the queue.
+      if (e.transient) { lastTransient = e; continue; }
+      throw e; // network / other HTTP — not a key problem
     }
   }
+  // Precedence matters: a 503 is Gemini being busy for a minute, and must NOT
+  // be reported as "every key is out" — that pauses every device and the
+  // nightly Action for an hour. It outranks a key we already know is dead,
+  // whose 403 would otherwise masquerade as the reason nothing can run.
+  if (lastTransient) throw lastTransient;
   // Prefer the quota error: its retryMs is honest (a minute-class 429 pauses
   // everyone ~90s, not an hour), and 'quota' reads truer than 'key' when one
   // key merely died while the other ran dry.
@@ -1811,7 +1894,7 @@ async function aiDeliver(item, res) {
     await db.collection('ai_answers').doc(aiQid(dest.hk + '__' + dest.qk)).set({
       huntKey: dest.hk, qk: dest.qk, label: dest.label || '', q: dest.q || '',
       a: res.text, src: JSON.stringify(res.src || []), grounded: !!res.grounded,
-      model: AI_MODEL, at: Date.now()
+      model: res.model || AI_MODEL, at: Date.now()
     });
     _aiAnsCache.delete(dest.hk); _aiAllAns = null;
     aiRefreshSheet(dest.hk);
@@ -1851,13 +1934,17 @@ function aiKick(delay) {
 async function aiProcessLoop() {
   if (_aiBusy || !db) return;
   _aiBusy = true;
+  // Tallies for the run log. A browser pass that achieves nothing is not worth
+  // a log row (every page load starts one), but a pass that answered, failed or
+  // hit a wall is exactly what the owner is trying to see.
+  let done = 0, failed = 0, busy = 0, ended = 'complete', endNote = '';
   try {
     while (true) {
       const st = await aiState();
-      if (st.userPaused) break; // owner hit Pause — nothing runs until Resume
-      if ((st.pausedUntil || 0) > Date.now()) break;
+      if (st.userPaused) { ended = 'paused-by-owner'; break; }
+      if ((st.pausedUntil || 0) > Date.now()) { ended = 'paused'; break; }
       let item;
-      try { item = await aiClaimNext(); } catch (e) { break; }
+      try { item = await aiClaimNext(); } catch (e) { ended = 'cloud-error'; endNote = String(e.message || e); break; }
       if (!item) break;
       try {
         const res = await aiGenerate(item.prompt, {
@@ -1865,13 +1952,17 @@ async function aiProcessLoop() {
         await aiDeliver(item, res);
         await item.ref.delete();
         aiBumpUsed();
+        done++;
       } catch (e) {
-        if (e.allKeys) { await aiPause(e.retryMs, e.auth ? 'key' : 'quota'); break; }
+        if (e.allKeys) { ended = e.auth ? 'keys-rejected' : 'quota'; endNote = String(e.message || e);
+          await aiPause(e.retryMs, e.auth ? 'key' : 'quota'); break; }
         if (e.transient) {
           // Model overloaded — release the claim untouched and try again on the
           // next pass. A busy minute must not push items toward 'error'.
           try { await item.ref.update({ claimedAt: 0, claimedBy: '' }); } catch (e2) {}
-          await new Promise(r => setTimeout(r, 20000));
+          busy++;
+          if (busy >= 8 && done === 0) { ended = 'overloaded'; endNote = String(e.message || e); break; }
+          await new Promise(r => setTimeout(r, Math.min(20000, 3000 + busy * 1500)));
           continue;
         }
         if (e.network) {
@@ -1879,9 +1970,10 @@ async function aiProcessLoop() {
           // claim untouched and stop — another device or the nightly Action
           // will process it. Never marks shared items failed.
           try { await item.ref.update({ claimedAt: 0, claimedBy: '' }); } catch (e2) {}
-          break;
+          ended = 'network'; break;
         }
         const attempts = (item.attempts || 0) + 1;
+        failed++;
         try {
           await item.ref.update({ attempts, lastError: String(e.message || e).slice(0, 200),
             status: attempts >= 3 ? 'error' : 'pending', failedAt: Date.now(), claimedAt: 0, claimedBy: '' });
@@ -1889,7 +1981,13 @@ async function aiProcessLoop() {
       }
       await new Promise(r => setTimeout(r, AI_PACE_MS));
     }
-  } finally { _aiBusy = false; }
+  } finally {
+    _aiBusy = false;
+    if (done || failed || busy) {
+      aiWriteRunLog({ at: Date.now(), src: 'phone', answered: done, failed, busy, ended, note: endNote })
+        .then(() => { _aiLog = null; if ($('#aiAdminCard')) renderAiAdmin(); });
+    }
+  }
 }
 
 // ── per-hunt answers: cache, enqueue-on-view, render ─────────────────────────
@@ -1979,7 +2077,8 @@ async function loadAiInto(h) {
       diffs.map(d => esc(AI_AUDIT_FIELDS[d.f] || d.f)).join(', ') + '. Resolve it under Settings → AI assistant.</p>';
 
   const missing = [];
-  for (const qdef of AI_QUESTIONS) {
+  for (const qdef of aiQuestionDefs()) {
+    if (qdef.off) continue;               // owner turned this question off
     const seeded = seed[qdef.k], ans = byQk[qdef.k];
     if (seeded) {
       html += '<div style="margin-bottom:14px"><div style="font-weight:700;margin-bottom:4px">' + esc(seeded.label) +
@@ -2066,7 +2165,7 @@ async function loadAiInto(h) {
     } else { send.textContent = 'Ask — answer appears for everyone'; send.disabled = false; }
   };
   sec.querySelectorAll('[data-airedo]').forEach(b => b.onclick = async () => {
-    const qdef = AI_QUESTIONS.find(q => q.k === b.dataset.airedo); if (!qdef) return;
+    const qdef = aiQuestionDefs().find(q => q.k === b.dataset.airedo); if (!qdef) return;
     // Queue the re-ask FIRST and keep showing the old answer until the fresh
     // one overwrites it — deleting up front could lose the answer for everyone
     // if the queue write then failed.
@@ -2134,7 +2233,8 @@ async function aiMissingQuestions(redoAll) {
   const out = [];
   for (const [hk, h] of aiAllHunts()) {
     if (AI_SEED[hk]) continue;             // shipped answers need no API call
-    for (const qdef of AI_QUESTIONS) {
+    for (const qdef of aiQuestionDefs()) {
+      if (qdef.off) continue;             // disabled questions are not work
       const id = aiQid(hk + '__' + qdef.k);
       if (have.has(id) || queued.has(id)) continue;
       out.push({ id, hunt: h, qdef });
@@ -2627,28 +2727,408 @@ function aiQueueRowsHtml(items) {
       prompt + '</div>';
   }).join('');
 }
-let _aiQueueOpen = false;
+// ─── AI ACTIVITY LOG, HEALTH & COVERAGE ──────────────────────────────────────
+// The owner's problem in their own words: "I can't see what the ai log has been
+// doing or if it's working or not." Everything the nightly GitHub Action did
+// went to the Actions console, and every queue doc is DELETED the moment it
+// succeeds — so a drained queue and a queue that never ran looked identical.
+// ai_log keeps one small row per run (from the Action and from phones), which
+// is what turns "is it working?" into a question the app can answer.
+const AI_LOG_KEEP = 60;
+let _aiLog = null, _aiLogAt = 0;
+async function aiWriteRunLog(row) {
+  if (!db) return;
+  const id = 'r' + String(row.at) + '-' + (row.src || 'phone');
+  try {
+    await db.collection('ai_log').doc(id).set({
+      at: row.at, src: row.src || 'phone', answered: row.answered || 0,
+      failed: row.failed || 0, busy: row.busy || 0, left: row.left || 0,
+      ended: row.ended || '', note: String(row.note || '').slice(0, 300)
+    });
+  } catch (e) { return; }
+  // Deliberately no pruning here. Trimming from a phone meant reading 200 docs
+  // on every drain pass and racing other devices' deletes — in a database with
+  // no auth the pruner is the most dangerous code in the feature. The nightly
+  // Action is a single writer once a day, so it does the trimming instead.
+}
+// The Action stamps startedAt before its first item and finishedAt at the end.
+// A run killed by the 55-minute workflow timeout writes no summary at all, so
+// startedAt newer than finishedAt is the only evidence it began and died.
+let _aiPulse = null, _aiPulseAt = 0;
+async function aiPulse(force) {
+  if (_aiPulse && !force && Date.now() - _aiPulseAt < 60000) return _aiPulse;
+  if (!db) return _aiPulse || {};
+  try {
+    const d = await db.collection('meta').doc('aiPulse').get();
+    _aiPulse = d.exists ? d.data() : {};
+  } catch (e) { _aiPulse = _aiPulse || {}; }
+  _aiPulseAt = Date.now();
+  return _aiPulse;
+}
+async function aiLog(force) {
+  if (_aiLog && !force && Date.now() - _aiLogAt < 60000) return _aiLog;
+  if (!db) return _aiLog || [];
+  try {
+    const snap = await db.collection('ai_log').orderBy('at', 'desc').limit(AI_LOG_KEEP).get();
+    _aiLog = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    _aiLogAt = Date.now();
+  } catch (e) { _aiLog = _aiLog || []; }
+  return _aiLog;
+}
+
+// One plain-English verdict on whether the machine is alive, and why not.
+// The hard case is a run that NEVER FIRED: it writes nothing anywhere, so the
+// only evidence is the absence of a recent row. That is what staleH covers.
+function aiHealth(log, st, pending, pulse) {
+  const now = Date.now();
+  const runs = (log || []).filter(r => r.src === 'action');
+  const last = runs[0] || null;
+  const lastAny = (log || [])[0] || null;
+  const staleH = last ? (now - last.at) / 3600000 : null;
+  // Throughput over the last week of runs — the number that tells the truth
+  // about a 1,600-item backlog.
+  const week = (log || []).filter(r => r.at > now - 7 * 86400000);
+  const answered7 = week.reduce((n, r) => n + (r.answered || 0), 0);
+  const days = Math.max(1, Math.min(7, week.length ? Math.ceil((now - week[week.length - 1].at) / 86400000) : 1));
+  const perDay = answered7 / days;
+  const deadKeys = [];
+  for (let ki = 0; ki < AI_KEYS.length; ki++) if (st['keyDead' + ki]) deadKeys.push(ki);
+  let cls = 'good', head = '', why = '';
+  if (st.userPaused) { cls = 'warn'; head = 'Paused by you'; why = 'Nothing is being asked until you tap Resume.'; }
+  else if (deadKeys.length >= AI_KEYS.length) {
+    cls = 'bad'; head = 'Stopped — no working API key';
+    why = 'Every key has been rejected by Google. Nothing can be answered until one is replaced.';
+  } else if (last === null) {
+    cls = 'warn'; head = 'No nightly run on record yet';
+    why = 'The first run after this update will appear here.';
+  } else if (pulse && pulse.startedAt && pulse.startedAt > (pulse.finishedAt || 0) + 3600000
+             && pulse.startedAt > now - 36 * 3600000) {
+    cls = 'warn'; head = 'Last night\'s run started but never finished';
+    why = 'It began ' + aiAgo(pulse.startedAt) + ' and stopped without reporting — usually the 55-minute limit on the nightly job. Whatever it answered was still saved.';
+  } else if (staleH > 36) {
+    cls = 'bad'; head = 'The nightly run has not reported in ' + Math.round(staleH / 24) + ' days';
+    why = 'It should run every morning. Check the Action on GitHub — a repository with no activity for 60 days has its schedules disabled automatically.';
+  } else if (perDay > 0 && pending > 0 && perDay < 20) {
+    cls = 'warn'; head = 'Running, but slowly';
+    why = 'About ' + (perDay < 1 ? 'less than 1' : Math.round(perDay)) + ' answer' + (Math.round(perDay) === 1 ? '' : 's') + ' a day at the moment.';
+  } else { cls = 'good'; head = 'Working'; why = ''; }
+  // How long the backlog takes at the observed rate. Honest, not encouraging.
+  let eta = null;
+  if (pending > 0 && perDay >= 0.2) {
+    const d = Math.ceil(pending / perDay);
+    eta = d <= 1 ? 'about a day' : d < 14 ? 'about ' + d + ' days'
+      : d < 60 ? 'about ' + Math.round(d / 7) + ' weeks'
+      : d < 500 ? 'about ' + Math.round(d / 30) + ' months' : 'over a year';
+  }
+  return { cls, head, why, last, lastAny, staleH, perDay, answered7, eta, deadKeys };
+}
+
+// What work exists, at all: every (hunt x enabled question) pair, split into
+// answered / queued / failed / never asked. This is the owner's "what has been
+// and needs to be accomplished" — computed from data already in memory plus
+// the two collections the panel already reads.
+function aiCoverage(answers, queueItems) {
+  const hunts = aiAllHunts();
+  const qs = aiQuestionDefs().filter(q => !q.off);
+  const ansSet = new Set((answers || []).map(a => a.huntKey + '__' + a.qk));
+  const qMap = new Map();
+  for (const it of (queueItems || [])) {
+    let d = {}; try { d = JSON.parse(it.dest || '{}'); } catch (e) {}
+    if (d.t === 'ans') qMap.set(d.hk + '__' + d.qk, it.status === 'error' ? 'failed' : 'queued');
+  }
+  const per = qs.map(q => ({ k: q.k, label: q.label, done: 0, queued: 0, failed: 0, todo: 0 }));
+  let done = 0, queued = 0, failed = 0, todo = 0;
+  hunts.forEach((h, hk) => {
+    qs.forEach((q, qi) => {
+      const key = hk + '__' + q.k;
+      const seeded = (AI_SEED[hk] || {})[q.k];
+      if (ansSet.has(key) || seeded) { done++; per[qi].done++; return; }
+      const st = qMap.get(key);
+      if (st === 'failed') { failed++; per[qi].failed++; }
+      else if (st === 'queued') { queued++; per[qi].queued++; }
+      else { todo++; per[qi].todo++; }
+    });
+  });
+  return { hunts: hunts.size, questions: qs.length, total: hunts.size * qs.length, done, queued, failed, todo, per };
+}
+
+// ── owner-editable question set ───────────────────────────────────────────────
+// The three built-in questions were hardcoded with no way to turn one off, ask
+// something else, or stop it burning quota on web search that the free tier
+// does not actually grant. Overrides live in meta/aiQuestions so every device
+// agrees; the built-in prompt bodies stay in code (they are functions of the
+// hunt), and the owner controls the parts that matter: on/off, the label, web
+// search, and an extra instruction appended to the prompt. Fully custom
+// questions carry their own template text.
+let _aiQCfg = null, _aiQCfgAt = 0;
+const AI_Q_PLACEHOLDERS = '{hunt} {name} {unit} {species} {season}';
+async function aiQuestionCfg(force) {
+  if (_aiQCfg && !force && Date.now() - _aiQCfgAt < 300000) return _aiQCfg;
+  if (!db) return _aiQCfg || {};
+  try {
+    const d = await db.collection('meta').doc('aiQuestions').get();
+    _aiQCfg = d.exists ? JSON.parse(d.data().items || '{}') : {};
+  } catch (e) { _aiQCfg = _aiQCfg || {}; }
+  _aiQCfgAt = Date.now();
+  return _aiQCfg;
+}
+async function aiSaveQuestionCfg(cfg) {
+  if (!db) return false;
+  try {
+    await db.collection('meta').doc('aiQuestions').set({ items: JSON.stringify(cfg) }, { merge: true });
+    _aiQCfg = cfg; _aiQCfgAt = Date.now();
+    return true;
+  } catch (e) { return false; }
+}
+// The effective question list: built-ins patched by the owner's overrides,
+// then any custom questions they added. A broken override must never take the
+// queue down, so every field falls back to the built-in.
+function aiQuestionDefs() {
+  const cfg = _aiQCfg || {};
+  const out = AI_QUESTIONS.map(q => {
+    const o = cfg[q.k] || {};
+    const extra = String(o.extra || '').slice(0, 600);
+    return {
+      k: q.k,
+      label: String(o.label || q.label).slice(0, 60),
+      search: o.search === undefined ? q.search : !!o.search,
+      off: !!o.off,
+      builtin: true,
+      extra,
+      prompt: h => q.prompt(h) + (extra ? ' ' + extra : '')
+    };
+  });
+  for (const [k, o] of Object.entries(cfg)) {
+    if (!o || !o.custom || !k.startsWith('c_')) continue;
+    const tpl = String(o.prompt || '');
+    if (!tpl.trim()) continue;
+    out.push({
+      k, label: String(o.label || 'Custom question').slice(0, 60),
+      search: !!o.search, off: !!o.off, builtin: false, tpl,
+      prompt: h => aiFillTemplate(tpl, h)
+    });
+  }
+  return out;
+}
+function aiFillTemplate(tpl, h) {
+  const se = (typeof seasonAnyYear === 'function' ? seasonAnyYear(h.huntNum) : null) || {};
+  return String(tpl)
+    .replace(/\{hunt\}/g, h.huntNum)
+    .replace(/\{name\}/g, h.huntName || '')
+    .replace(/\{unit\}/g, unitNameFor(h) || h.huntName || '')
+    .replace(/\{species\}/g, h.species)
+    .replace(/\{season\}/g, se.s || 'the published season')
+    .slice(0, 4000);
+}
+
+// ── panel pieces: health, timeline, coverage, question editor ────────────────
+const aiAgo = ms => { const m = Math.round((Date.now() - ms) / 60000);
+  return m < 2 ? 'just now' : m < 90 ? m + ' min ago'
+    : m < 2880 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago'; };
+
+function aiHealthHtml(h, pending) {
+  const col = h.cls === 'bad' ? 'var(--bad)' : h.cls === 'warn' ? 'var(--warn)' : 'var(--good)';
+  const dot = h.cls === 'bad' ? '✕' : h.cls === 'warn' ? '!' : '✓';
+  let out = '<div style="border:1px solid ' + col + ';border-radius:12px;padding:11px 13px;margin-bottom:10px">' +
+    '<div style="font-weight:800;font-size:1rem;color:' + col + '">' + dot + ' ' + esc(h.head) + '</div>';
+  if (h.why) out += '<div class="help" style="margin:4px 0 0">' + esc(h.why) + '</div>';
+  if (h.last) {
+    out += '<div class="help" style="margin:6px 0 0">Last nightly run <strong>' + esc(aiAgo(h.last.at)) + '</strong> — ' +
+      fmt(h.last.answered || 0) + ' answered' +
+      ((h.last.busy || 0) ? ', ' + fmt(h.last.busy) + ' times the AI was too busy' : '') +
+      ((h.last.failed || 0) ? ', ' + fmt(h.last.failed) + ' failed' : '') + '.</div>';
+  }
+  if (pending > 0) {
+    out += '<div class="help" style="margin:4px 0 0"><strong>' + fmt(pending) + '</strong> question' + (pending === 1 ? '' : 's') + ' still waiting' +
+      (h.eta ? ' — at the current rate that is <strong>' + esc(h.eta) + '</strong> of nights.' : '.') + '</div>';
+  }
+  return out + '</div>';
+}
+
+// Every key, stated plainly. A permanently denied project is the one thing the
+// old panel could never say — it reported "running on the next key" forever.
+function aiKeysHtml(st) {
+  let out = '';
+  for (let ki = 0; ki < AI_KEYS.length; ki++) {
+    const dead = st['keyDead' + ki], off = st['keyOff' + ki] === aiToday(), goff = st['groundOff' + ki] === aiToday();
+    const nm = AI_KEY_NAMES[ki].charAt(0).toUpperCase() + AI_KEY_NAMES[ki].slice(1);
+    if (dead) out += '<div class="statusline" style="color:var(--bad)"><strong>' + esc(nm) + ' key: dead.</strong> Google says: “' +
+      esc(String(dead).slice(0, 130)) + '” This will not fix itself — create a new key in Google AI Studio and replace it.</div>';
+    else if (off) out += '<div class="statusline" style="color:var(--warn)">' + esc(nm) + ' key: out of free requests for today. It retries tomorrow.</div>';
+    else if (goff) out += '<div class="statusline">' + esc(nm) + ' key: working, but web search is not included on the free tier today — answers come from the model\'s own knowledge.</div>';
+    else out += '<div class="statusline" style="color:var(--good)">' + esc(nm) + ' key: ready ✓</div>';
+  }
+  return out;
+}
+
+function aiCoverageHtml(cov) {
+  if (!cov.total) return '<p class="help" style="margin:6px 0 0">No hunts loaded yet.</p>';
+  const pct = n => (n / cov.total * 100).toFixed(1) + '%';
+  const seg = (n, c) => n ? '<div style="width:' + pct(n) + ';background:' + c + '"></div>' : '';
+  let out = '<div class="aibar">' + seg(cov.done, 'var(--good)') + seg(cov.queued, 'var(--gold)') +
+    seg(cov.failed, 'var(--bad)') + seg(cov.todo, 'var(--line)') + '</div>' +
+    '<div class="aikey">' +
+    '<span><i style="background:var(--good)"></i>' + fmt(cov.done) + ' answered</span>' +
+    '<span><i style="background:var(--gold)"></i>' + fmt(cov.queued) + ' in line</span>' +
+    (cov.failed ? '<span><i style="background:var(--bad)"></i>' + fmt(cov.failed) + ' failed</span>' : '') +
+    (cov.todo ? '<span><i style="background:var(--line)"></i>' + fmt(cov.todo) + ' not asked</span>' : '') +
+    '</div>' +
+    '<div class="help" style="margin:6px 0 0">' + fmt(cov.done) + ' of ' + fmt(cov.total) + ' — ' +
+    fmt(cov.hunts) + ' hunts × ' + cov.questions + ' question' + (cov.questions === 1 ? '' : 's') +
+    ' (' + Math.round(cov.done / cov.total * 100) + '% done)</div>';
+  out += '<div style="margin-top:8px">' + cov.per.map(p =>
+    '<div class="statusline" style="font-size:.8rem">' + esc(p.label) + ': <strong>' + fmt(p.done) + '</strong> answered · ' +
+    fmt(p.queued) + ' in line' + (p.failed ? ' · ' + fmt(p.failed) + ' failed' : '') +
+    (p.todo ? ' · ' + fmt(p.todo) + ' not asked' : '') + '</div>').join('') + '</div>';
+  return out;
+}
+
+function aiLogHtml(log) {
+  if (!log || !log.length) return '<p class="help" style="margin:6px 0 0">Nothing logged yet. The next run — nightly or on this phone — will show up here.</p>';
+  const ENDED = { complete: 'finished the batch', quota: 'ran out of free requests', 'keys-rejected': 'no working API key',
+    overloaded: 'Gemini was too busy', network: 'could not reach Gemini', paused: 'was still in a back-off',
+    'paused-by-owner': 'you had it paused', crashed: 'crashed', 'cloud-error': 'could not reach the database' };
+  return log.map(r => {
+    const bad = ['keys-rejected', 'crashed', 'cloud-error', 'network'].indexOf(r.ended) >= 0;
+    const meh = ['quota', 'overloaded', 'paused', 'paused-by-owner'].indexOf(r.ended) >= 0;
+    const col = bad ? 'var(--bad)' : (r.answered ? 'var(--good)' : meh ? 'var(--warn)' : 'var(--dim)');
+    return '<div class="statusline" style="display:flex;gap:8px;align-items:baseline">' +
+      '<span style="flex:0 0 auto;font-size:.72rem;color:var(--dim)">' + (r.src === 'action' ? '🌙' : '📱') + '</span>' +
+      '<span style="flex:1;min-width:0">' +
+      '<span style="font-weight:600;color:' + col + '">' + fmt(r.answered || 0) + ' answered</span>' +
+      ((r.busy || 0) ? ' · ' + fmt(r.busy) + ' busy' : '') +
+      ((r.failed || 0) ? ' · <span style="color:var(--bad)">' + fmt(r.failed) + ' failed</span>' : '') +
+      '<span class="help" style="display:block;margin:0;font-size:.7rem">' +
+      esc(aiAgo(r.at)) + ' · ' + (r.src === 'action' ? 'nightly' : 'on a phone') + ' · ' +
+      esc(ENDED[r.ended] || r.ended || 'ended') +
+      (r.note ? ' — ' + esc(String(r.note).slice(0, 90)) : '') + '</span></span></div>';
+  }).join('');
+}
+
+function aiQuestionsHtml(defs) {
+  let out = '<p class="help" style="margin:6px 0 4px">These are the questions asked about every hunt. Turning one off stops it being asked and takes it out of the totals above.</p>';
+  out += defs.map(q =>
+    '<div class="statusline">' +
+    '<div style="display:flex;gap:8px;align-items:center">' +
+    '<span style="flex:1;min-width:0;font-weight:600' + (q.off ? ';opacity:.5;text-decoration:line-through' : '') + '">' + esc(q.label) + '</span>' +
+    '<button class="bmini" data-aiqedit="' + esc(q.k) + '" style="min-height:44px;padding:2px 10px;flex-shrink:0">Edit</button>' +
+    '<button class="bmini' + (q.off ? '' : ' dan') + '" data-aiqoff="' + esc(q.k) + '" style="min-height:44px;padding:2px 10px;flex-shrink:0">' +
+    (q.off ? 'Turn on' : 'Turn off') + '</button></div>' +
+    '<div class="help" style="margin:2px 0 0;font-size:.7rem">' +
+    (q.builtin ? 'Built in' : 'Your question') + (q.search ? ' · asks the web' : ' · no web search') +
+    (q.extra ? ' · with your extra instruction' : '') + '</div></div>').join('');
+  out += '<button class="bmini" id="aiQAdd" style="margin-top:8px">+ Add a question</button>';
+  return out;
+}
+
+// Edit one question. Built-ins keep their code-written prompt (it is a function
+// of the hunt) and expose the parts worth owning: the name, whether it asks the
+// web, and an extra instruction appended to the end. Custom questions are a
+// template with {hunt}/{name}/{unit}/{species}/{season} filled in per hunt.
+async function aiEditQuestion(k) {
+  const cfg = Object.assign({}, await aiQuestionCfg());
+  const defs = aiQuestionDefs();
+  const q = k ? defs.find(x => x.k === k) : null;
+  if (k && !q) return;
+  const isNew = !k;
+  const key = k || ('c_' + Date.now().toString(36));
+  const sheet = $('#promptSheet'), body = $('#promptBody'), title = $('#promptTitle');
+  if (!sheet) return;
+  title.textContent = isNew ? 'New question' : 'Edit question';
+  body.innerHTML =
+    '<label class="help" for="qLabel">Name (shown on the hunt page)</label>' +
+    '<input id="qLabel" type="text" maxlength="60" value="' + esc(q ? q.label : '') + '" placeholder="e.g. Weather and gear">' +
+    (q && q.builtin
+      ? '<p class="help" style="margin:10px 0 4px">This is a built-in question. You can add an extra instruction to the end of what it asks:</p>' +
+        '<textarea id="qExtra" rows="4" placeholder="e.g. Always mention whether ATVs are allowed.">' + esc(q.extra || '') + '</textarea>'
+      : '<label class="help" for="qPrompt" style="display:block;margin-top:10px">What to ask. Use ' + esc(AI_Q_PLACEHOLDERS) + ' and they get filled in for each hunt.</label>' +
+        '<textarea id="qPrompt" rows="7" placeholder="For Oregon hunt {hunt} ({name}) in the {unit} unit, ...">' + esc(q && q.tpl ? q.tpl : '') + '</textarea>') +
+    '<label style="display:flex;gap:10px;align-items:center;margin-top:12px;min-height:44px">' +
+    '<input type="checkbox" id="qSearch"' + ((q ? q.search : true) ? ' checked' : '') + ' style="width:22px;height:22px;flex:0 0 auto">' +
+    '<span>Let it search the web</span></label>' +
+    '<p class="help" style="margin:2px 0 0">Web search is not included on the free key most days — when it is unavailable the answer comes from the model\'s own knowledge instead.</p>' +
+    '<div style="display:flex;gap:8px;margin-top:14px">' +
+    '<button class="btn primary" id="qSave" style="flex:1">Save</button>' +
+    (isNew || (q && q.builtin) ? '' : '<button class="btn danger" id="qDel" style="flex:0 0 auto">Delete</button>') +
+    '</div>';
+  sheet.classList.add('open'); sheet.setAttribute('aria-hidden', 'false');
+  setTimeout(() => { const f = $('#qLabel'); if (f) f.focus(); }, 60);
+  $('#qSave').onclick = async () => {
+    const label = $('#qLabel').value.trim();
+    if (!label) { toast('Give it a name first', true); return; }
+    const cur = Object.assign({}, cfg[key] || {});
+    cur.label = label.slice(0, 60);
+    cur.search = $('#qSearch').checked;
+    if (q && q.builtin) cur.extra = $('#qExtra').value.trim().slice(0, 600);
+    else {
+      const tpl = $('#qPrompt').value.trim();
+      if (tpl.length < 15) { toast('Write a bit more of the question', true); return; }
+      cur.custom = true; cur.prompt = tpl.slice(0, 2000);
+    }
+    cfg[key] = cur;
+    $('#qSave').disabled = true;
+    if (await aiSaveQuestionCfg(cfg)) {
+      toast(isNew ? 'Added — tap “Reload queue” to ask it about every hunt' : 'Saved');
+      closePromptSheet();
+    } else toast('Couldn\'t save — check connection', true);
+    renderAiAdmin();
+  };
+  const del = $('#qDel');
+  if (del) del.onclick = () => confirm2('Delete “' + (q ? q.label : '') + '”? Answers already given stay.', async () => {
+    delete cfg[key];
+    if (await aiSaveQuestionCfg(cfg)) { toast('Deleted'); closePromptSheet(); }
+    renderAiAdmin();
+  });
+}
+function closePromptSheet() {
+  const sheet = $('#promptSheet');
+  if (!sheet) return;
+  sheet.classList.remove('open'); sheet.setAttribute('aria-hidden', 'true');
+  if (_lastFocus && _lastFocus.focus) try { _lastFocus.focus(); } catch (e) {}
+}
+
+let _aiQueueOpen = false, _aiLogOpen = false, _aiQCfgOpen = false;
 async function renderAiAdmin() {
   const card = $('#aiAdminCard'); if (!card) return;
   if (!db) { card.textContent = 'Cloud unreachable — AI assistant needs a connection.'; return; }
   try {
-    const [snap, st] = await Promise.all([db.collection('ai_queue').orderBy('createdAt').limit(200).get(), aiState(true)]);
+    // One read of everything the panel reports on. The queue cap is 300 so the
+    // "in line" figure stays honest against a four-figure backlog.
+    const [snap, st, log, answers] = await Promise.all([
+      db.collection('ai_queue').orderBy('createdAt').limit(300).get(),
+      aiState(true), aiLog(), aiAllAnswers()
+    ]);
+    const pulse = await aiPulse();
+    await aiQuestionCfg();
     const items = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
     const errors = items.filter(i => i.status === 'error').length;
     const pending = items.length - errors;
     const paused = (st.pausedUntil || 0) > Date.now();
-    let html = '<div class="statusline"><strong>Queue:</strong> ' + pending + ' waiting · ' + errors + ' failed</div>';
-    const today = new Date().toISOString().slice(0, 10);
-    html += '<div class="statusline"><strong>Today:</strong> ' + (st.day === today ? st.used || 0 : 0) + ' AI answers generated</div>';
-    for (let ki = 0; ki < AI_KEYS.length; ki++) {
-      const off = st['keyOff' + ki] === aiToday(), goff = st['groundOff' + ki] === aiToday();
-      if (off) html += '<div class="statusline" style="color:var(--warn)">The ' + AI_KEY_NAMES[ki] + ' key is used up (or rejected) for today — ' + (ki + 1 < AI_KEYS.length ? 'running on the next key.' : 'it re-tries tomorrow.') + '</div>';
-      else if (goff) html += '<div class="statusline" style="color:var(--warn)">The ' + AI_KEY_NAMES[ki] + ' key has no web-search quota today — its answers come from the AI\'s own knowledge. Re-checked daily.</div>';
-    }
-    if (st.userPaused) html += '<div class="statusline" style="color:var(--warn)">⏸ Paused by you — nothing will be asked until you tap Resume.</div>';
-    else if (paused) html += '<div class="statusline" style="color:var(--warn)">Paused until ' + new Date(st.pausedUntil).toLocaleTimeString() + ' (' + (st.pauseWhy === 'key' ? 'API key problem' : 'free daily limit reached') + ') — resumes by itself.</div>';
-    else if (pending) html += '<div class="statusline" style="color:var(--good)">Working through the queue while the app is open.</div>';
-    else html += '<div class="statusline" style="color:var(--good)">All caught up ✓</div>';
+    const cov = aiCoverage(answers, items);
+    // Queue reads cap at 300, so prefer the coverage figure for the backlog.
+    const backlog = Math.max(pending, cov.queued);
+    const health = aiHealth(log, st, backlog, pulse);
+
+    let html = aiHealthHtml(health, backlog);
+    html += aiKeysHtml(st);
+    if (paused && !st.userPaused)
+      html += '<div class="statusline" style="color:var(--warn)">Backing off until ' + new Date(st.pausedUntil).toLocaleTimeString() +
+        ' (' + (st.pauseWhy === 'key' ? 'API key problem' : 'hit the free limit') + ') — it resumes by itself.</div>';
+    if (errors) html += '<div class="statusline" style="color:var(--bad)">' + fmt(errors) + ' question' + (errors === 1 ? '' : 's') + ' gave up after 3 tries.</div>';
+
+    // ── what has been and still needs to be done ──
+    html += '<div class="sechead" style="margin-top:14px">Progress</div>' + aiCoverageHtml(cov);
+
+    // ── the log the owner could never see ──
+    html += '<button class="linkbtn" id="aiLogToggle" style="padding-left:0;font-size:.85rem;display:block;margin-top:10px">' +
+      (_aiLogOpen ? 'Hide the activity log ▴' : 'Show the activity log (' + (log ? log.length : 0) + ' runs) ▾') + '</button>';
+    if (_aiLogOpen) html += '<div id="aiLogList">' + aiLogHtml(log) + '</div>';
+
+    // ── what it asks ──
+    html += '<button class="linkbtn" id="aiQCfgToggle" style="padding-left:0;font-size:.85rem;display:block">' +
+      (_aiQCfgOpen ? 'Hide the questions ▴' : 'Change what it asks (' + cov.questions + ' on) ▾') + '</button>';
+    if (_aiQCfgOpen) html += '<div id="aiQCfgList">' + aiQuestionsHtml(aiQuestionDefs()) + '</div>';
+
     const pb = $('#btnAiPause');
     if (pb) pb.textContent = st.userPaused ? '▶ Resume queue' : '⏸ Pause queue';
     const auditYear = S.pendingYear || S.selectedYear;
@@ -2673,7 +3153,6 @@ async function renderAiAdmin() {
       if (errors) html += '<button class="bmini" id="aiRetryFailed" style="margin-top:8px">↻ Retry all failed (' + errors + ')</button>';
     }
     // everything answered so far, expandable
-    const answers = await aiAllAnswers();
     const nAns = answers ? answers.length : 0;
     html += '<button class="linkbtn" id="aiAnsToggle" style="padding-left:0;font-size:.85rem;display:block">' +
       (_aiAnsOpen ? 'Hide answered questions ▴' : 'Show answered questions (' + nAns + ') ▾') + '</button>';
@@ -2702,6 +3181,23 @@ async function renderAiAdmin() {
         renderAiAdmin();
       });
     });
+    const lt = $('#aiLogToggle');
+    if (lt) lt.onclick = () => { _aiLogOpen = !_aiLogOpen; renderAiAdmin(); };
+    const qc = $('#aiQCfgToggle');
+    if (qc) qc.onclick = () => { _aiQCfgOpen = !_aiQCfgOpen; renderAiAdmin(); };
+    card.querySelectorAll('[data-aiqoff]').forEach(b2 => b2.onclick = async () => {
+      const k = b2.dataset.aiqoff, cfg = Object.assign({}, await aiQuestionCfg());
+      const cur = Object.assign({}, cfg[k] || {});
+      cur.off = !cur.off; cfg[k] = cur;
+      b2.disabled = true;
+      toast(await aiSaveQuestionCfg(cfg)
+        ? (cur.off ? 'Turned off — it won\'t be asked again' : 'Turned back on')
+        : 'Couldn\'t save — check connection', false);
+      renderAiAdmin();
+    });
+    card.querySelectorAll('[data-aiqedit]').forEach(b2 => b2.onclick = () => aiEditQuestion(b2.dataset.aiqedit));
+    const qa = $('#aiQAdd');
+    if (qa) qa.onclick = () => aiEditQuestion(null);
     const tog = $('#aiQueueToggle');
     if (tog) tog.onclick = () => { _aiQueueOpen = !_aiQueueOpen; renderAiAdmin(); };
     card.querySelectorAll('[data-aiqshow]').forEach(b => b.onclick = () => {
@@ -4323,11 +4819,13 @@ function wire(){
   $('#adminBack').onclick=()=>showPage('hunts');
   $('#shClose').onclick=closeDetail;
   $('#mapClose').onclick=closeMap;
+  $('#promptClose').onclick=closePromptSheet;
   // Escape closes the topmost layer. Previously nothing on the keyboard could
   // dismiss a sheet at all.
   document.addEventListener('keydown', e=>{
     if(e.key!=='Escape') return;
     if($('#confirmBox').classList.contains('open')){ $('#confirmNo').click(); return; }
+    if($('#promptSheet').classList.contains('open')){ closePromptSheet(); return; }
     if($('#mapSheet').classList.contains('open')){ closeMap(); return; }
     if($('#sheet').classList.contains('open')) closeDetail();
   });
@@ -4381,7 +4879,7 @@ function wire(){
   const bfBtn=$('#btnAiBackfill');
   if(bfBtn) bfBtn.onclick=()=>{
     if(!db){ toast('Cloud unreachable — can\'t build the queue', true); return; }
-    const nQ = aiAllHunts().size * AI_QUESTIONS.length;
+    const nQ = aiAllHunts().size * aiQuestionDefs().filter(q => !q.off).length;
     confirm2('Re-ask every question for every hunt (~'+nQ+' items)? Existing answers stay visible until their fresh replacement arrives. At the free tier this takes roughly '+Math.ceil(nQ/200)+' days to work through.', async ()=>{
       const label=bfBtn.textContent;
       bfBtn.disabled=true; bfBtn.textContent='Rebuilding the queue…';
@@ -4410,6 +4908,45 @@ function wire(){
       toast(next?'Queue paused — nothing will be asked until you resume':'Queue resumed ✓');
       if(!next) aiKick(0);
     }catch(e){ toast('Couldn\'t save — check connection', true); }
+    renderAiAdmin();
+  };
+  // ── jump the queue for the hunts that matter ──
+  // Queue order is createdAt ascending, and a reload stamps ~1,600 items at
+  // once. At the free tier's few answers a night, a starred hunt added late
+  // would genuinely wait the better part of a year. Re-stamping is enough to
+  // reorder — no schema change, no composite index.
+  const prioBtn=$('#btnAiPrio');
+  if(prioBtn) prioBtn.onclick=async ()=>{
+    if(!db){ toast('Cloud unreachable', true); return; }
+    const want=new Set();
+    loadFavs().forEach(f=>want.add(f.huntNum+'_'+f.species));
+    const plan=loadPlan();
+    ['deer','elk'].forEach(sp=>(plan[sp]||[]).forEach(k=>{ if(k){ const [n,s2]=k.split('|'); want.add(n+'_'+s2); } }));
+    if(!want.size){ toast('Star a few hunts in My List first', true); return; }
+    const label=prioBtn.textContent;
+    prioBtn.disabled=true; prioBtn.textContent='Reordering…';
+    try{
+      const snap=await db.collection('ai_queue').get();
+      const hit=snap.docs.filter(d=>{
+        let dd={}; try{ dd=JSON.parse(d.data().dest||'{}'); }catch(e){}
+        return dd.t==='ans' && want.has(dd.hk);
+      });
+      if(!hit.length){ toast('Those hunts are already answered ✓'); }
+      else {
+        // An hour ago, not epoch: aiClaimNext() deletes failed items older than
+        // a day, and a tiny createdAt would make a prioritised item look
+        // ancient and get swept. An hour is early enough to sort ahead of
+        // everything (reload stamps Date.now()+i) and recent enough to be safe.
+        const base=Date.now()-3600000;
+        for(let i=0;i<hit.length;i+=_AI_BATCH){
+          const batch=db.batch();
+          hit.slice(i,i+_AI_BATCH).forEach((d,j)=>batch.update(d.ref,{createdAt:base+i+j}));
+          await batch.commit();
+        }
+        toast(hit.length+' question'+(hit.length===1?'':'s')+' for '+want.size+' saved hunt'+(want.size===1?'':'s')+' moved to the front');
+      }
+    }catch(e){ toast('Couldn\'t reorder: '+e.message, true); }
+    prioBtn.disabled=false; prioBtn.textContent=label;
     renderAiAdmin();
   };
   const kickBtn=$('#btnAiKick');

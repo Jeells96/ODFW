@@ -30,9 +30,15 @@ const AI_KEYS = [
   atob('QVEuQWI4Uk42TDZJd2dEbkg1Z1ZLVFlvcWpXd2ZITHQtRE1ZR2V5X0RydEYySkdDaTV3MUE=')
 ];
 const AI_KEY_NAMES = ['primary', 'backup'];
-const AI_MODEL = 'gemini-flash-latest';
-const AI_URL = process.env.GEMINI_URL ||
-  `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent`;
+// A ladder, not one model. Measured live on this key: gemini-flash-latest
+// returned 503 "experiencing high demand" on essentially every real prompt,
+// which is why runs managed ~4 answers against a 1,600-item queue; flash-lite
+// answered 8 of 8 in about a second each. Try the best first, drop to the next
+// the moment one says it is busy, and record which one answered.
+const AI_MODELS = (process.env.GEMINI_MODELS || 'gemini-2.5-flash,gemini-flash-lite-latest,gemini-flash-latest').split(',');
+const AI_MODEL = AI_MODELS[0];
+const aiUrlFor = m => process.env.GEMINI_URL ||
+  `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`;
 
 // Thinking tokens are charged against maxOutputTokens on this model (~1-2k per
 // question), so budgets must cover thinking + answer or replies come back
@@ -101,6 +107,7 @@ async function getAiState() {
                userPaused: !!gv(f.userPaused) };
   for (let ki = 0; ki < AI_KEYS.length; ki++) {
     st['keyOff' + ki] = gv(f['keyOff' + ki]) || '';
+    st['keyDead' + ki] = gv(f['keyDead' + ki]) || '';
     st['groundOff' + ki] = gv(f['groundOff' + ki]) || '';
   }
   return st;
@@ -122,12 +129,29 @@ async function bumpUsed(state) {
 // that boundary, not UTC's (an evening-PDT 429 stamped with the UTC date
 // would bench a fully-reset key through the next morning's drain).
 const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
-async function aiMark(state, field) {
-  state[field] = today();
+// Day-markers (keyOffN / groundOffN) hold today's Pacific date and clear
+// themselves tomorrow. Permanent markers (keyDeadN) hold a reason string and
+// stay until the owner replaces the key.
+async function aiMark(state, field, permanent) {
+  state[field] = permanent === undefined ? today() : String(permanent).slice(0, 200);
   await fs_('PATCH', `meta/aiState?${mask([field])}`,
     { fields: { [field]: V.s(state[field]) } }).catch(() => {});
 }
+// One key, walking the model ladder: a 503/404 from one model drops to the next
+// rather than handing the whole item back to the queue.
 async function aiCallKey(ki, prompt, search, opts = {}) {
+  let lastBusy = null;
+  for (let mi = opts._model || 0; mi < AI_MODELS.length; mi++) {
+    try { return await aiCallModel(ki, mi, prompt, search, opts); }
+    catch (e) {
+      if (e.transient) { lastBusy = e; continue; }
+      throw e;
+    }
+  }
+  throw lastBusy || Object.assign(new Error('AI busy (every model)'), { transient: true });
+}
+async function aiCallModel(ki, mi, prompt, search, opts = {}) {
+  const model = AI_MODELS[mi];
   const body = {
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: { temperature: opts.temperature ?? 0.2, maxOutputTokens: opts.maxTokens || MAX_TOKENS }
@@ -135,7 +159,7 @@ async function aiCallKey(ki, prompt, search, opts = {}) {
   if (search) body.tools = [{ google_search: {} }];
   let res;
   try {
-    res = await fetch(AI_URL, {
+    res = await fetch(aiUrlFor(model), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-goog-api-key': AI_KEYS[ki] },
       body: JSON.stringify(body)
@@ -155,17 +179,29 @@ async function aiCallKey(ki, prompt, search, opts = {}) {
       const viol = det.filter(d => String(d['@type'] || '').includes('QuotaFailure')).flatMap(d => d.violations || []);
       daily = viol.some(v => /day|daily/i.test(String(v.quotaId || '') + ' ' + String(v.description || '')));
     } catch {}
-    if (!daily && retryMs > 5 * 60 * 1000) daily = true; // long back-off = daily in practice
-    const err = new Error(`quota (${AI_KEY_NAMES[ki]} key${daily ? ', daily' : ', per-minute'})`);
+    // Was: "no QuotaFailure detail + long RetryInfo => daily". Gemini's grounded
+    // 429 carries neither detail, so a busy minute benched the only working key
+    // for the whole day — the reason nightly runs stalled at ~4 answers. Bench
+    // for the day only when Google actually names a PerDay quota.
+    const err = new Error(`quota (${AI_KEY_NAMES[ki]} key${daily ? ', daily' : ', short-term'})`);
     err.quota = true; err.daily = daily; err.wasSearch = search; err.retryMs = Math.min(retryMs, 6 * 3600 * 1000);
     throw err;
   }
-  if (res.status === 400 && search) return aiCallKey(ki, prompt, false, opts);
+  if (res.status === 400 && search) return aiCallModel(ki, mi, prompt, false, opts);
   if (res.status === 403 || res.status === 401) {
-    const err = new Error(`key rejected (${AI_KEY_NAMES[ki]}, HTTP ${res.status})`);
-    err.auth = true; err.status = res.status; throw err;
+    // A denied project is permanent — re-probing it daily forever just burns a
+    // request and hides the fact that the key needs replacing.
+    let why = '';
+    try { why = String((await res.json())?.error?.message || ''); } catch {}
+    const dead = /denied access|has been suspended|disabled|consumer|not been used|is disabled/i.test(why);
+    const err = new Error(`key rejected (${AI_KEY_NAMES[ki]}, HTTP ${res.status})${why ? ' — ' + why.slice(0, 120) : ''}`);
+    err.auth = true; err.dead = dead; err.why = why.slice(0, 200); err.status = res.status; throw err;
   }
-  if (res.status >= 500) { const err = new Error(`AI busy (HTTP ${res.status})`); err.transient = true; throw err; }
+  // 5xx = busy, 404 = model retired. Both mean "try the next model".
+  if (res.status >= 500 || res.status === 404) {
+    const err = new Error(res.status === 404 ? `model ${model} is gone` : `AI busy (HTTP ${res.status})`);
+    err.transient = true; err.model = model; throw err;
+  }
   if (!res.ok) { const err = new Error(`AI HTTP ${res.status}`); err.status = res.status; throw err; }
   const j = await res.json();
   const cand = j.candidates && j.candidates[0];
@@ -173,7 +209,7 @@ async function aiCallKey(ki, prompt, search, opts = {}) {
   if (cand?.finishReason === 'MAX_TOKENS') {
     const budget = opts.maxTokens || MAX_TOKENS;
     if (!opts._grew && budget < 16384)
-      return aiCallKey(ki, prompt, search, { ...opts, maxTokens: Math.min(16384, Math.max(budget * 2, MAX_TOKENS * 2)), _grew: true });
+      return aiCallModel(ki, mi, prompt, search, { ...opts, maxTokens: Math.min(16384, Math.max(budget * 2, MAX_TOKENS * 2)), _grew: true });
     throw new Error('reply was cut off before it finished');
   }
   if (!text) throw new Error('empty response' + (cand?.finishReason ? ` (${cand.finishReason})` : ''));
@@ -181,13 +217,15 @@ async function aiCallKey(ki, prompt, search, opts = {}) {
   (cand.groundingMetadata?.groundingChunks || []).forEach(c => {
     if (c.web?.uri && /^https?:/.test(c.web.uri)) src.push({ t: String(c.web.title || 'source').slice(0, 80), u: c.web.uri });
   });
-  return { text, src: src.slice(0, 4), grounded: search, key: ki };
+  return { text, src: src.slice(0, 4), grounded: search, key: ki, model };
 }
 async function aiGenerate(prompt, opts = {}) {
   const st = opts.state || {};
   const t = today();
   let lastQuota = null, lastAuth = null;
+  let lastTransient = null;
   for (let ki = 0; ki < AI_KEYS.length; ki++) {
+    if (st['keyDead' + ki]) continue;                 // permanently denied — never probe again
     if (st['keyOff' + ki] === t) continue;
     const search = !!opts.search && st['groundOff' + ki] !== t;
     try {
@@ -195,6 +233,11 @@ async function aiGenerate(prompt, opts = {}) {
     } catch (eOuter) {
       let e = eOuter;
       if (e.quota && e.wasSearch) {
+        // Grounding quota is per MODEL, not per key: gemini-2.5-flash grounds
+        // fine on this key while gemini-flash-latest 429s on every grounded
+        // call. Mark the key's grounding off only once a PLAIN retry shows the
+        // key itself is healthy — otherwise one fall-through to the old model
+        // would kill web search for the rest of the day.
         // grounded 429: a plain retry on the same key decides whether it was
         // grounding quota or the key. Whatever the retry throws (429, 403 —
         // the live backup key does grounded-429 then plain-403) falls through
@@ -206,10 +249,20 @@ async function aiGenerate(prompt, opts = {}) {
         if (e.daily) await aiMark(st, 'keyOff' + ki); // day quota: bench until tomorrow
         lastQuota = e; continue;                       // minute blip: just move on, key recovers
       }
-      if (e.auth) { await aiMark(st, 'keyOff' + ki); lastAuth = e; continue; }
-      throw e; // transient / network — not a key problem
+      if (e.auth) {
+        await aiMark(st, e.dead ? 'keyDead' + ki : 'keyOff' + ki, e.dead ? (e.why || 'denied') : undefined);
+        lastAuth = e; continue;
+      }
+      // Gemini busy is not this key being spent — the other key is a different
+      // project, so try it before handing the item back to the queue.
+      if (e.transient) { lastTransient = e; continue; }
+      throw e; // network — not a key problem
     }
   }
+  // A 503 is Gemini being busy for a minute; reporting it as "every key is out"
+  // pauses every device and the nightly Action for an hour. It outranks a key
+  // already known dead, whose 403 would otherwise look like the blocking cause.
+  if (lastTransient) throw lastTransient;
   // Prefer the quota error: its retryMs is honest (a minute-class 429 pauses
   // everyone ~90s, not an hour), and 'quota' reads truer than 'key' when one
   // key merely died while the other ran dry.
@@ -295,17 +348,55 @@ async function deliver(item, res) {
   } else throw new Error('unknown destination ' + dest.t);
 }
 
+// ── run log ──────────────────────────────────────────────────────────────────
+// Everything this script does used to go to console.log, i.e. into the GitHub
+// Actions log — a surface the owner will never open on a phone. One summary doc
+// per run makes the nightly drain visible in the app itself, and a missing doc
+// is how "the Action stopped firing" becomes noticeable at all.
+// Two writes per run against a 20k/day Firestore free tier: negligible.
+const LOG_KEEP = 60;
+async function writeRunLog(row) {
+  // Doc id sorts newest-last by time, so the app can orderBy(at) and the
+  // pruner can drop from the front.
+  const id = 'r' + String(row.at) + '-' + (row.src || 'action');
+  await fs_('PATCH', `ai_log/${id}`, { fields: {
+    at: V.i(row.at), src: V.s(row.src), answered: V.i(row.answered || 0),
+    failed: V.i(row.failed || 0), busy: V.i(row.busy || 0), left: V.i(row.left || 0),
+    ended: V.s(row.ended || ''), note: V.s(String(row.note || '').slice(0, 300))
+  } }).catch(e => console.log('[ai] could not write run log: ' + e.message));
+  // This script is the only pruner: one writer, once a night, so there is no
+  // delete race and phones never pay for the trim.
+  try {
+    const j = await fs_('GET', `ai_log?pageSize=300&orderBy=at&mask.fieldPaths=at`);
+    const docs = (j && j.documents) || [];
+    for (const d of docs.slice(0, Math.max(0, docs.length - LOG_KEEP)))
+      await fs_('DELETE', d.name.split('/documents/')[1]).catch(() => {});
+  } catch (e) {}
+}
+
+// A run killed by the 55-minute Action timeout writes no summary at all, so it
+// would look exactly like a run that never fired. Stamping a heartbeat before
+// the first item means startedAt newer than the last finishedAt is positive
+// evidence that a run began and died.
+async function beat(field) {
+  await fs_('PATCH', `meta/aiPulse?${mask([field])}`, { fields: { [field]: V.i(Date.now()) } }).catch(() => {});
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────
 async function main() {
   const state = await getAiState();
   if (state.userPaused) {
     console.log('[ai] queue is paused by the owner — nothing to do');
+    await writeRunLog({ at: Date.now(), src: 'action', ended: 'paused-by-owner', note: 'You have the queue paused.' });
     return;
   }
   if (state.pausedUntil > Date.now()) {
     console.log(`[ai] paused until ${new Date(state.pausedUntil).toISOString()} — nothing to do`);
+    await writeRunLog({ at: Date.now(), src: 'action', ended: 'paused',
+      note: 'Still in the back-off from the last run, until ' + new Date(state.pausedUntil).toISOString() });
     return;
   }
+  await beat('startedAt');
   const queue = await listQueue();
   const now = Date.now();
   const runnable = queue.filter(it => it.status !== 'error' && (it.claimedAt || 0) <= now - CLAIM_MS);
@@ -318,7 +409,7 @@ async function main() {
     console.log(`[ai] expired failed item ${it.id}`);
   }
 
-  let done = 0, failed = 0;
+  let done = 0, failed = 0, busy = 0, ended = 'complete', endNote = '';
   for (const item of runnable.slice(0, MAX)) {
     // Compare-and-swap claim: the updateTime precondition makes the PATCH fail
     // if ANYTHING touched the doc since our listing — a live browser claiming
@@ -339,6 +430,7 @@ async function main() {
     } catch (e) {
       if (e.allKeys) {
         await pauseAll(e.retryMs, e.auth ? 'key' : 'quota');
+        ended = e.auth ? 'keys-rejected' : 'quota'; endNote = e.message;
         console.log(`[ai] every key is out (${e.message}) after ${done} answers — paused ${Math.round(e.retryMs / 60000)} min`);
         break;
       }
@@ -347,8 +439,13 @@ async function main() {
         // not march items toward 'error'.
         await fs_('PATCH', `ai_queue/${item.id}?${mask(['claimedAt', 'claimedBy'])}&currentDocument.exists=true`,
           { fields: { claimedAt: V.i(0), claimedBy: V.s('') } }).catch(() => {});
+        busy++;
         console.log(`[ai] ~ ${item.id}: ${e.message} (will retry)`);
-        await new Promise(r => setTimeout(r, 20000));
+        // Gemini's free tier serves a lot of 503s. A flat 20s each meant ~18
+        // busy replies could eat an entire run; back off gently and give up on
+        // the run only once it is clearly a wall, so the window buys answers.
+        if (busy >= 12 && done === 0) { ended = 'overloaded'; endNote = e.message; break; }
+        await new Promise(r => setTimeout(r, Math.min(20000, 3000 + busy * 1500)));
         continue;
       }
       if (e.network) {
@@ -356,6 +453,7 @@ async function main() {
         // doc still exists) and stop; nothing gets marked failed for our outage.
         await fs_('PATCH', `ai_queue/${item.id}?${mask(['claimedAt', 'claimedBy'])}&currentDocument.exists=true`,
           { fields: { claimedAt: V.i(0), claimedBy: V.s('') } }).catch(() => {});
+        ended = 'network'; endNote = e.message;
         console.log('[ai] network to Gemini is down — stopping this run');
         break;
       }
@@ -376,7 +474,16 @@ async function main() {
     }
     await new Promise(r => setTimeout(r, PACE_MS));
   }
-  console.log(`[ai] run complete: ${done} answered, ${failed} failed, ${Math.max(0, runnable.length - done - failed)} left in queue`);
+  const left = Math.max(0, runnable.length - done - failed);
+  console.log(`[ai] run complete: ${done} answered, ${failed} failed, ${busy} busy replies, ${left} left in queue`);
+  await writeRunLog({ at: Date.now(), src: 'action', answered: done, failed, busy, left, ended, note: endNote });
+  await beat('finishedAt');
 }
 
-main().catch(e => { console.error('[ai] fatal:', e.message); process.exit(1); });
+// A crash must leave a trace the owner can see too — otherwise a broken run and
+// a run that never fired look identical from the app.
+main().catch(async e => {
+  console.error('[ai] fatal:', e.message);
+  await writeRunLog({ at: Date.now(), src: 'action', ended: 'crashed', note: String(e.message || e) }).catch(() => {});
+  process.exit(1);
+});

@@ -10,8 +10,9 @@ on:
 jobs:
   drain:
     runs-on: ubuntu-latest
-    # 150 items × (7s pace + 3-15s of search-grounded Gemini latency) ≈ 45 min
-    # worst case — the timeout must fit the cap or big queues die mid-drain.
+    # Measured after the model-ladder fix: ~9s per item (7s pace + ~1-2s of
+    # flash-lite latency), so 250 items ≈ 38 min. The timeout must fit the cap
+    # or big queues die mid-drain with nothing written.
     timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
@@ -23,4 +24,4 @@ jobs:
       # No dependencies — the processor is plain fetch() against Firestore REST
       # and the Gemini API.
       - name: Process queued AI questions
-        run: node scripts/ai-queue.mjs --max 150
+        run: node scripts/ai-queue.mjs --max 250
