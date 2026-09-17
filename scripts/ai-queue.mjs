@@ -137,17 +137,39 @@ async function aiMark(state, field, permanent) {
   await fs_('PATCH', `meta/aiState?${mask([field])}`,
     { fields: { [field]: V.s(state[field]) } }).catch(() => {});
 }
-// One key, walking the model ladder: a 503/404 from one model drops to the next
-// rather than handing the whole item back to the queue.
+// Which (key, model) pairs refused grounding in THIS run. Grounding quota is
+// per model — gemini-2.5-flash grounds fine on the same key flash-lite refuses
+// — so it must never be persisted as a per-key day-marker.
+const _groundOut = new Set();
+
+// One key, walking the model ladder. Quota is per MODEL too: the key that
+// reported a daily limit on one model answered fine on it a minute later, and
+// on another model immediately. So a 429 moves to the next model; only when
+// EVERY model is out is the key itself spent. Anything less benches the one
+// working key for a day it could still be answering.
 async function aiCallKey(ki, prompt, search, opts = {}) {
-  let lastBusy = null;
+  let lastBusy = null, lastQuota = null;
   for (let mi = opts._model || 0; mi < AI_MODELS.length; mi++) {
-    try { return await aiCallModel(ki, mi, prompt, search, opts); }
+    const wantSearch = search && !_groundOut.has(`${ki}:${mi}`);
+    try { return await aiCallModel(ki, mi, prompt, wantSearch, opts); }
     catch (e) {
       if (e.transient) { lastBusy = e; continue; }
+      if (e.quota) {
+        if (e.wasSearch) {
+          _groundOut.add(`${ki}:${mi}`);
+          try { return await aiCallModel(ki, mi, prompt, false, opts); }
+          catch (e2) {
+            if (e2.transient) { lastBusy = e2; continue; }
+            if (e2.quota) { lastQuota = e2; continue; }
+            throw e2;
+          }
+        }
+        lastQuota = e; continue;
+      }
       throw e;
     }
   }
+  if (lastQuota) throw lastQuota;
   throw lastBusy || Object.assign(new Error('AI busy (every model)'), { transient: true });
 }
 async function aiCallModel(ki, mi, prompt, search, opts = {}) {
@@ -227,24 +249,12 @@ async function aiGenerate(prompt, opts = {}) {
   for (let ki = 0; ki < AI_KEYS.length; ki++) {
     if (st['keyDead' + ki]) continue;                 // permanently denied — never probe again
     if (st['keyOff' + ki] === t) continue;
-    const search = !!opts.search && st['groundOff' + ki] !== t;
+    const search = !!opts.search;   // per-model, decided inside aiCallKey
     try {
       return await aiCallKey(ki, prompt, search, opts);
     } catch (eOuter) {
       let e = eOuter;
-      if (e.quota && e.wasSearch) {
-        // Grounding quota is per MODEL, not per key: gemini-2.5-flash grounds
-        // fine on this key while gemini-flash-latest 429s on every grounded
-        // call. Mark the key's grounding off only once a PLAIN retry shows the
-        // key itself is healthy — otherwise one fall-through to the old model
-        // would kill web search for the rest of the day.
-        // grounded 429: a plain retry on the same key decides whether it was
-        // grounding quota or the key. Whatever the retry throws (429, 403 —
-        // the live backup key does grounded-429 then plain-403) falls through
-        // to the SAME handling below; nothing escapes the rotation bare.
-        try { const out = await aiCallKey(ki, prompt, false, opts); await aiMark(st, 'groundOff' + ki); return out; }
-        catch (e2) { e = e2; }
-      }
+      // (grounded-vs-plain and per-model quota are handled inside aiCallKey now)
       if (e.quota) {
         if (e.daily) await aiMark(st, 'keyOff' + ki); // day quota: bench until tomorrow
         lastQuota = e; continue;                       // minute blip: just move on, key recovers

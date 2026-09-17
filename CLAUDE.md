@@ -50,10 +50,21 @@ whatever is on `main` is what the family sees.
   which is why nightly runs managed ~4 answers against a 1,600-item queue.
   `gemini-2.5-flash` answers AND grounds fine on the same key. Never assume a
   429/503 means "out of quota": probe the API before concluding anything.
-- **Grounding quota is per MODEL, not per key.** `groundOffN` is only stamped
-  after a plain retry proves the key itself is healthy. Marking it straight off
-  a grounded 429 kills web search for the whole day the first time the ladder
-  falls through to an older model.
+- **Quota is per MODEL, not just per key — including "daily".** A 429 whose
+  QuotaFailure names PerDay applies to that model, not the key: the key that
+  reported a daily limit answered fine on the same model a minute later and on
+  another model immediately. So `aiCallKey` walks the ladder on 429 as well as
+  503, and only when EVERY model is out does `keyOffN` get stamped. Getting
+  this wrong benches the family's only working key for a day it could still be
+  answering — it happened twice while building this.
+- **Grounding refusal is per (key, model) and runtime-only** (`_aiGroundOut`).
+  Never persist it as a per-key day-marker: gemini-2.5-flash grounds fine on
+  the same key flash-lite refuses, and the sourced research is the point.
+- **Counts come from `:runAggregationQuery`, not from a page of docs.** The
+  queue runs to four figures; the first cut of the progress view fed a
+  `limit(300)` snapshot into the coverage maths and reported ~1,300 queued
+  questions as "not asked" with an ETA 5x too rosy. `FB_CONFIG` exists so REST
+  endpoints the compat SDK doesn't expose can reuse the project and key.
 - **`keyDeadN` is permanent, `keyOffN` clears daily.** A 403 "project has been
   denied access" never recovers; benching it as a day-marker meant re-probing a
   dead key forever while the panel claimed it was "running on the next key".

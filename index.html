@@ -230,7 +230,7 @@ footer{padding:28px 14px 20px;text-align:center;font-size:.75rem;color:var(--dim
 
 <header><div class="wrap"><div class="hrow">
   <div class="roundel">ODFW</div>
-  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.17</span></h1>
+  <div style="flex:1;min-width:0"><h1 class="serif">Oregon Hunt Planner <span class="ver">v7.18</span></h1>
   <div class="hsub">Deer &amp; Elk · Draw Odds &amp; Harvest</div></div>
   <button id="gearBtn" aria-label="Settings" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:46px;height:46px;color:var(--dim);font-size:1.4rem;flex-shrink:0;line-height:1">⚙</button>
 </div></div></header>
@@ -516,15 +516,19 @@ async function needPDF() {
 
 // ─── FIREBASE ─────────────────────────────────────────────────────────────────
 let db = null;
+// Named, because the REST endpoints the compat SDK doesn't expose (the count
+// aggregation behind the AI progress view) need the same project and key.
+// Reading them back out of firebase.apps[0] works until it doesn't.
+const FB_CONFIG = {
+  apiKey:            'AIzaSyCqbU875vWyWS0dQWr0hoqVRscH2AtU_v4',
+  authDomain:        'oregon-hunting.firebaseapp.com',
+  projectId:         'oregon-hunting',
+  storageBucket:     'oregon-hunting.firebasestorage.app',
+  messagingSenderId: '84034970737',
+  appId:             '1:84034970737:web:d470b1daca7b56ce6227d0'
+};
 try {
-  firebase.initializeApp({
-    apiKey:            'AIzaSyCqbU875vWyWS0dQWr0hoqVRscH2AtU_v4',
-    authDomain:        'oregon-hunting.firebaseapp.com',
-    projectId:         'oregon-hunting',
-    storageBucket:     'oregon-hunting.firebasestorage.app',
-    messagingSenderId: '84034970737',
-    appId:             '1:84034970737:web:d470b1daca7b56ce6227d0'
-  });
+  firebase.initializeApp(FB_CONFIG);
   db = firebase.firestore();
 } catch(e) { console.warn('[FB] Init failed:', e); }
 
@@ -1554,18 +1558,44 @@ const AI_CLIENT   = Math.random().toString(36).slice(2, 10);
 const aiToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
 
 // One HTTP round-trip on one specific key. Throws typed errors; never rotates.
-// One key, walking the model ladder: a 503/404 from one model drops straight to
-// the next rather than giving the whole item back to the queue.
+// Which (key, model) pairs have refused grounding in THIS process. Grounding
+// quota is per model — gemini-2.5-flash grounds fine on the same key that
+// flash-lite refuses — so this must never be persisted as a per-key day-marker.
+// Runtime-only: it costs one wasted ~200ms round-trip after a reload, and
+// cannot wrongly disable web search tomorrow.
+const _aiGroundOut = new Set();
+
+// One key, walking the model ladder. Quota is per MODEL as well: the key that
+// reported a daily limit on one model answered fine on it a minute later and
+// on another model immediately. So a 429 moves to the next model, and only
+// when EVERY model is out does the key itself count as spent — anything less
+// benches the family's only working key for a day it could still be working.
 async function aiCallKey(ki, prompt, search, opts) {
-  let lastBusy = null;
+  let lastBusy = null, lastQuota = null;
   for (let mi = opts._model || 0; mi < AI_MODELS.length; mi++) {
+    const wantSearch = search && !_aiGroundOut.has(ki + ':' + mi);
     try {
-      return await aiCallModel(ki, mi, prompt, search, opts);
+      return await aiCallModel(ki, mi, prompt, wantSearch, opts);
     } catch (e) {
       if (e.transient) { lastBusy = e; continue; }   // busy or gone: next model
+      if (e.quota) {
+        if (e.wasSearch) {
+          // Grounding refused on THIS model. Remember it, then ask the same
+          // model without the web before writing the model off.
+          _aiGroundOut.add(ki + ':' + mi);
+          try { return await aiCallModel(ki, mi, prompt, false, opts); }
+          catch (e2) {
+            if (e2.transient) { lastBusy = e2; continue; }
+            if (e2.quota) { lastQuota = e2; continue; }
+            throw e2;
+          }
+        }
+        lastQuota = e; continue;
+      }
       throw e;
     }
   }
+  if (lastQuota) throw lastQuota;
   throw lastBusy || Object.assign(new Error('AI busy (every model)'), { transient: true });
 }
 async function aiCallModel(ki, mi, prompt, search, opts) {
@@ -1675,26 +1705,12 @@ async function aiGenerate(prompt, opts) {
   for (let ki = 0; ki < AI_KEYS.length; ki++) {
     if (st['keyDead' + ki]) continue;                 // permanently denied — never probe again
     if (st['keyOff' + ki] === today) continue;
-    const search = !!opts.search && st['groundOff' + ki] !== today;
+    const search = !!opts.search;   // per-model, decided inside aiCallKey
     try {
       return await aiCallKey(ki, prompt, search, opts);
     } catch (eOuter) {
       let e = eOuter;
-      if (e.quota && e.wasSearch) {
-        // Grounding quota is per MODEL, not per key: gemini-2.5-flash grounds
-        // fine on this key (verified — real answers carrying 4 sources each)
-        // while gemini-flash-latest 429s on every grounded call. So the
-        // day-marker below is set only once a PLAIN retry proves the key itself
-        // is healthy. Marking it on the 429 alone would silently kill web
-        // search for the whole day the first time the ladder fell through to
-        // the older model — and the sourced research is the point of this.
-        // grounded 429: a plain retry on the same key decides whether it was
-        // grounding quota or the key. Whatever the retry throws (429, 403 —
-        // the live backup key does grounded-429 then plain-403) falls through
-        // to the SAME handling below; nothing escapes the rotation bare.
-        try { const out = await aiCallKey(ki, prompt, false, opts); await aiMark('groundOff' + ki); return out; }
-        catch (e2) { e = e2; }
-      }
+      // (grounded-vs-plain and per-model quota are handled inside aiCallKey now)
       if (e.quota) {
         if (e.daily) await aiMark('keyOff' + ki); // day quota: bench until tomorrow
         lastQuota = e; continue;                   // minute blip: just move on, key recovers
@@ -2823,33 +2839,62 @@ function aiHealth(log, st, pending, pulse) {
   return { cls, head, why, last, lastAny, staleH, perDay, answered7, eta, deadKeys };
 }
 
+// Exact collection counts in one round-trip. The panel cannot page 1,600 queue
+// docs on a phone, and the first cut of this feature fed a limit(300) snapshot
+// into the coverage maths — which quietly reported ~1,300 genuinely-queued
+// questions as "not asked" and produced an ETA five times too optimistic. A
+// progress view that lies is worse than none, so the counts come from
+// :runAggregationQuery (one POST, works with the page's own apiKey).
+async function aiCounts() {
+  const key = FB_CONFIG.apiKey, proj = FB_CONFIG.projectId;
+  if (!db || !key || !proj) return null;
+  const url = 'https://firestore.googleapis.com/v1/projects/' + proj +
+    '/databases/(default)/documents:runAggregationQuery?key=' + encodeURIComponent(key);
+  const ask = async where => {
+    const q = { from: [{ collectionId: 'ai_queue' }] };
+    if (where) q.where = where;
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ structuredAggregationQuery: { structuredQuery: q, aggregations: [{ alias: 'n', count: {} }] } }) });
+    if (!res.ok) throw new Error('count ' + res.status);
+    const j = await res.json();
+    return Number((((j[0] || {}).result || {}).aggregateFields || {}).n?.integerValue || 0);
+  };
+  try {
+    const [total, failed] = await Promise.all([
+      ask(null),
+      ask({ fieldFilter: { field: { fieldPath: 'status' }, op: 'EQUAL', value: { stringValue: 'error' } } })
+    ]);
+    return { total, failed, pending: Math.max(0, total - failed) };
+  } catch (e) { return null; }
+}
+
 // What work exists, at all: every (hunt x enabled question) pair, split into
 // answered / queued / failed / never asked. This is the owner's "what has been
-// and needs to be accomplished" — computed from data already in memory plus
-// the two collections the panel already reads.
-function aiCoverage(answers, queueItems) {
+// and needs to be accomplished".
+// answers is the FULL ai_answers set (a few hundred docs — cheap and exact).
+// counts is the exact queue tally from aiCounts(). Only "done" can be attributed
+// to a specific question, so that is the only per-question figure shown; the
+// rest are collection-wide and reported as such rather than guessed per row.
+function aiCoverage(answers, counts) {
   const hunts = aiAllHunts();
   const qs = aiQuestionDefs().filter(q => !q.off);
   const ansSet = new Set((answers || []).map(a => a.huntKey + '__' + a.qk));
-  const qMap = new Map();
-  for (const it of (queueItems || [])) {
-    let d = {}; try { d = JSON.parse(it.dest || '{}'); } catch (e) {}
-    if (d.t === 'ans') qMap.set(d.hk + '__' + d.qk, it.status === 'error' ? 'failed' : 'queued');
-  }
-  const per = qs.map(q => ({ k: q.k, label: q.label, done: 0, queued: 0, failed: 0, todo: 0 }));
-  let done = 0, queued = 0, failed = 0, todo = 0;
+  const per = qs.map(q => ({ k: q.k, label: q.label, done: 0, todo: 0 }));
+  let done = 0;
   hunts.forEach((h, hk) => {
     qs.forEach((q, qi) => {
-      const key = hk + '__' + q.k;
-      const seeded = (AI_SEED[hk] || {})[q.k];
-      if (ansSet.has(key) || seeded) { done++; per[qi].done++; return; }
-      const st = qMap.get(key);
-      if (st === 'failed') { failed++; per[qi].failed++; }
-      else if (st === 'queued') { queued++; per[qi].queued++; }
-      else { todo++; per[qi].todo++; }
+      if (ansSet.has(hk + '__' + q.k) || (AI_SEED[hk] || {})[q.k]) { done++; per[qi].done++; }
+      else per[qi].todo++;
     });
   });
-  return { hunts: hunts.size, questions: qs.length, total: hunts.size * qs.length, done, queued, failed, todo, per };
+  const total = hunts.size * qs.length;
+  const failed = counts ? counts.failed : 0;
+  // Queue items can outnumber the remaining pairs (stale entries for hunts or
+  // questions that no longer exist), so clamp rather than print a negative.
+  const queued = counts ? Math.min(counts.pending, Math.max(0, total - done)) : 0;
+  const todo = Math.max(0, total - done - queued - failed);
+  return { hunts: hunts.size, questions: qs.length, total, done, queued, failed, todo, per,
+           exact: !!counts, queueTotal: counts ? counts.total : null };
 }
 
 // ── owner-editable question set ───────────────────────────────────────────────
@@ -2978,8 +3023,8 @@ function aiCoverageHtml(cov) {
     ' (' + Math.round(cov.done / cov.total * 100) + '% done)</div>';
   out += '<div style="margin-top:8px">' + cov.per.map(p =>
     '<div class="statusline" style="font-size:.8rem">' + esc(p.label) + ': <strong>' + fmt(p.done) + '</strong> answered · ' +
-    fmt(p.queued) + ' in line' + (p.failed ? ' · ' + fmt(p.failed) + ' failed' : '') +
-    (p.todo ? ' · ' + fmt(p.todo) + ' not asked' : '') + '</div>').join('') + '</div>';
+    fmt(p.todo) + ' to go</div>').join('') + '</div>';
+  if (!cov.exact) out += '<p class="help" style="margin:6px 0 0;color:var(--warn)">Couldn\'t reach the counter — the split above is approximate.</p>';
   return out;
 }
 
@@ -3098,15 +3143,19 @@ async function renderAiAdmin() {
       db.collection('ai_queue').orderBy('createdAt').limit(300).get(),
       aiState(true), aiLog(), aiAllAnswers()
     ]);
-    const pulse = await aiPulse();
+    const [pulse, counts] = await Promise.all([aiPulse(), aiCounts()]);
     await aiQuestionCfg();
     const items = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
     const errors = items.filter(i => i.status === 'error').length;
     const pending = items.length - errors;
     const paused = (st.pausedUntil || 0) > Date.now();
-    const cov = aiCoverage(answers, items);
-    // Queue reads cap at 300, so prefer the coverage figure for the backlog.
-    const backlog = Math.max(pending, cov.queued);
+    const cov = aiCoverage(answers, counts);
+    // The exact tally when we have it; otherwise the last run's own "left"
+    // figure, which the Action computes from the whole collection. The 300-doc
+    // page is a last resort and is never allowed to understate the backlog.
+    const lastLeft = (log || []).find(r => r.src === 'action' && r.left) || null;
+    const backlog = counts ? counts.pending : Math.max(pending, lastLeft ? lastLeft.left : 0);
+    const errors2 = counts ? counts.failed : errors;
     const health = aiHealth(log, st, backlog, pulse);
 
     let html = aiHealthHtml(health, backlog);
@@ -3114,7 +3163,7 @@ async function renderAiAdmin() {
     if (paused && !st.userPaused)
       html += '<div class="statusline" style="color:var(--warn)">Backing off until ' + new Date(st.pausedUntil).toLocaleTimeString() +
         ' (' + (st.pauseWhy === 'key' ? 'API key problem' : 'hit the free limit') + ') — it resumes by itself.</div>';
-    if (errors) html += '<div class="statusline" style="color:var(--bad)">' + fmt(errors) + ' question' + (errors === 1 ? '' : 's') + ' gave up after 3 tries.</div>';
+    if (errors2) html += '<div class="statusline" style="color:var(--bad)">' + fmt(errors2) + ' question' + (errors2 === 1 ? '' : 's') + ' gave up after 3 tries.</div>';
 
     // ── what has been and still needs to be done ──
     html += '<div class="sechead" style="margin-top:14px">Progress</div>' + aiCoverageHtml(cov);
@@ -3147,9 +3196,11 @@ async function renderAiAdmin() {
     }
     // the queue itself, expandable
     html += '<button class="linkbtn" id="aiQueueToggle" style="padding-left:0;font-size:.85rem;display:block">' +
-      (_aiQueueOpen ? 'Hide the queue ▴' : 'Show the queue (' + items.length + ') ▾') + '</button>';
+      (_aiQueueOpen ? 'Hide the queue ▴' : 'Show the queue (' + fmt(counts ? counts.total : items.length) + ') ▾') + '</button>';
     if (_aiQueueOpen) {
       html += '<div id="aiQueueList">' + aiQueueRowsHtml(items) + '</div>';
+      if (counts && counts.total > items.length)
+        html += '<p class="help" style="margin:6px 0 0">Showing the next ' + fmt(items.length) + ' of ' + fmt(counts.total) + ' — they are answered in this order.</p>';
       if (errors) html += '<button class="bmini" id="aiRetryFailed" style="margin-top:8px">↻ Retry all failed (' + errors + ')</button>';
     }
     // everything answered so far, expandable
